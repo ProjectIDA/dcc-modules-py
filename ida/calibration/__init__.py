@@ -19,4 +19,11 @@
 # If you use this software in a product, an explicit acknowledgment in the product documentation of the contribution
 # by Project IDA, Institute of Geophysics and Planetary Physics, UCSD would be appreciated but is not required.
 #######################################################################################################################
+import os
 
+IDA_CAL_RAW_DIR = os.environ.get('IDA_CAL_RAW_DIR')
+IDA_CAL_ANALYSIS_DIR = os.environ.get('IDA_CAL_ANALYSIS_DIR')
+IDA_RESPONSES_CUR_DIR = os.environ.get('IDA_RESPONSES_CUR_DIR')
+IDA_RESPONSES_NOM_DIR = os.environ.get('IDA_RESPONSES_NOM_DIR')
+
+print('i am here')
