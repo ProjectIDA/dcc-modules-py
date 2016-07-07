@@ -1,10 +1,13 @@
 import datetime
 
+def parse_dt(dt_str):
+    return datetime.datetime.fromtimestamp(float(dt_str))
+
 STAGE_COLS = [
     
     ('sta',       0,   6),
     ('chn',       7,   8),
-    ('loc',      16,   2),
+    ('loca',      16,   2),
     ('begt',     19,  17),
     ('endt',     37,  17),
     ('stageid',  55,   8),
@@ -28,7 +31,7 @@ CHAN_COLS = [
     # name     sta wid  
     ('sta',      0,  6),
     ('chn',      7,  8),
-    ('loc',     16,  2),
+    ('loca',     16,  2),
     ('begt',    19, 17),
     ('endt',    37, 17),
     ('edepth',  55,  9),
@@ -49,5 +52,5 @@ COL_DELIM = ' '
 
 HEADER_ROW = None
 
-def parse_dt(dt_str):
-    return datetime.datetime.fromtimestamp(float(dt_str))
+DB_TABLES = ['stage', 'chan']
+

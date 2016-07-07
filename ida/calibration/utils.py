@@ -5,11 +5,15 @@ from sys import exit
 from pathlib import Path
 
 from ida.utils import pick
-from ida.calibration import IDA_CAL_RAW_DIR, IDA_RESPONSES_CUR_DIR, IDA_RESPONSES_NOM_DIR
+from ida import IDA_CAL_RAW_DIR, \
+    IDA_RESPONSES_CUR_DIR, \
+    IDA_RESPONSES_NOM_DIR, \
+    IDA_DATASCOPEDB_DIR
 
-def get_rb_cal_raw_dirs(station):
+def select_raw_cal_sensor(station):
 
     station = station.lower()
+    loc, sensor_model, sensor_root_dir = None, None, None
 
     sensordirlist = glob.glob(os.path.join(IDA_CAL_RAW_DIR, station + '??', '*'))
     sensordirlist = sorted(['/'.join(item.split(os.sep)[-2:]) for item in sensordirlist])
@@ -20,119 +24,84 @@ def get_rb_cal_raw_dirs(station):
                         prompt='Select # of desired SENSOR (or "q" to quit): ',
                         allow_quit_q=True, 
                         menu_on_error=True,
-                        err_message='Invalid selection. Please try again.',
-                        indent_width=8)
+                        err_message='Invalid selection. Please try again.')
 
-    if didquit: return None
+    if not didquit:
+        sensor_dir = sensordirlist[ndx]
+        loc = sensor_dir.split('/')[0][-2:]
+        sensor_model = sensor_dir.split(os.sep)[1]
+        sensor_root_dir = os.path.join(IDA_CAL_RAW_DIR, sensor_dir)
 
-    sensor_dir = sensordirlist[ndx]
-    sensor_root_dir = os.path.join(IDA_CAL_RAW_DIR, sensor_dir)
-    # select rblf date
-    datedirlist = glob.glob(os.path.join(sensor_root_dir, 'rblf', '*'))
-    datedirlist = sorted(['/'.join(item.split(os.sep)[-2:]) for item in datedirlist])
+    return not didquit, station, loc, sensor_model, sensor_root_dir
 
-    didquit, ndx = pick(datedirlist, 
+
+def select_raw_cal_date(sensor_root_dir, cal_type):
+
+    if not os.path.exists(sensor_root_dir):
+        raise ValueError('Directory does not exist: '+ sensor_root_dir)
+
+    date_dir, date_str = None, None
+
+    # get date dir list
+    datedirlist = glob.glob(os.path.join(sensor_root_dir, cal_type, '*'))
+    datedirlist = sorted([os.sep.join(item.split(os.sep)[-2:]) for item in datedirlist])
+
+    if len(datedirlist) == 0:
+        suc = False
+        date_str = 'No raw calibration dates found for this sensor.'
+
+    elif len(datedirlist) > 1:
+        didquit, ndx = pick(datedirlist, 
                         title='RBLF dates for sensor: ' + sensor_dir, 
                         prompt='Select # of desired DATE (or "q" to quit): ',
                         allow_quit_q=True, 
                         menu_on_error=True,
-                        err_message='Invalid selection. Please try again.',
-                        indent_width=8)
+                        err_message='Invalid selection. Please try again.')
+        suc = not didquit
+        if suc:
+            date_dir = datedirlist[ndx]
+        else:
+            date_str = 'User canceled.'
 
-    if didquit: 
-        return None
-    else:
-        rblf_dir = os.path.join(sensor_root_dir, datedirlist[ndx])
+    elif len(datedirlist) == 1:
+        suc = True
+        date_dir = datedirlist[0]
 
-    # select rbhf date
-    datedirlist = glob.glob(os.path.join(sensor_root_dir, 'rbhf', '*'))
-    datedirlist = sorted(['/'.join(item.split(os.sep)[-2:]) for item in datedirlist])
+    # make full path
+    if suc: 
+        date_str = date_dir.split(os.sep)[1]
+        date_dir = os.path.join(sensor_root_dir, date_dir)
 
-    didquit, ndx = pick(datedirlist, 
-                        title='RBHF dates for sensor: ' + sensor_dir, 
-                        prompt='Select # of desired DATE (or "q" to quit): ',
-                        allow_quit_q=True, 
-                        menu_on_error=True,
-                        err_message='Invalid selection. Please try again.',
-                        indent_width=8)
-
-    if didquit: 
-        return None
-    else:
-        rbhf_dir = os.path.join(sensor_root_dir, datedirlist[ndx])
-
-    return (rblf_dir, rbhf_dir)
+    return suc, date_str, date_dir
 
 
-def get_cal_raw_files(rb_dir):
+def select_raw_cal_files(rb_dir):
 
     if not os.path.exists(rb_dir):
-        return 'Directory not found: ' + rb_dir, True
+        raise ValueError('Directory does not exist: '+ rb_dir)
 
     # get ms and log files and compare lists
     ms_files = sorted(glob.glob(os.path.join(rb_dir, '*.ms')))
     log_files = sorted(glob.glob(os.path.join(rb_dir, '*.log')))
+    ms_stems = [Path(msfn).stem for msfn in ms_files]
+    log_stems = [Path(logfn).stem for logfn in log_files]
 
-    paired_cals = []
+    paired_cals = [stem for stem in ms_stems if stem in log_stems]
 
-    for ndx, msfn in enumerate(ms_files):
-        p = Path(msfn)
-        stem = p.stem
-        if log_files[ndx].startswith(stem):
-            paired_cals.append(stem)
-
+    rb_files = None
     if len(ms_files) > 1:
         didquit, ndx = pick(paired_cals, 
-                            title='Cal data found in: ' + rb_dir, 
-                            prompt='Select # of cal data to process (or "q" to quit): ',
+                            title='Miniseed files found in: ' + rb_dir, 
+                            prompt='Select # of the file to process (or "q" to quit): ',
                             allow_quit_q=True, 
                             menu_on_error=True,
-                            err_message='Invalid selection. Please try again.',
-                            indent_width=8)
-
-        if didquit: 
-            return 'User canceled.', True
-        else:
+                            err_message='Invalid selection. Please try again.')
+        suc = not didquit
+        if suc:
             rb_files = (os.path.join(rb_dir, paired_cals[ndx]+'.ms'), os.path.join(rb_dir, paired_cals[ndx]+'.log'))
 
     else:
-            rb_files = (os.path.join(rb_dir, ms_files[0]), os.path.join(rb_dir, log_files[0]))
+        suc = True
+        rb_files = (os.path.join(rb_dir, ms_files[0]), os.path.join(rb_dir, log_files[0]))
 
-    return rb_files, False
-
-
-def get_sensor_response_file(station, sensor_model=None, component=None):
-
-    station = station.lower()
-
-    resplist = glob.glob(os.path.join(IDA_RESPONSES_CUR_DIR, '*' + station + '*'))
-    resplist = sorted([resp.split(os.sep)[-1] for resp in resplist], reverse=True)
-
-    if sensor_model and isinstance(str, sensor_model):
-        # include resp only if file starts with sensor_model
-        resplist = [resp for resp in resplist if re.search('^' + sensor_model + '_', resp, flags=re.IGNORECASE)]
-
-    if component and isinstance(str, component):
-        # include only if matches compoentn or NO component indicator on file
-       include = (re.search('_' + component + '$', resp,  flags=re.IGNORECASE) != None)
-        # or 
-        #                     (re.search('_[ZEN]$', resp, flags=re.IGNORECASE) not None)
-        resplist = [resp for resp in resplist if include]
-
-
-    didquit, ndx = pick(resplist, 
-                        title='Sensor responses for: ' + station.upper(), 
-                        prompt='Select # of desired response (or "q" to quit): ',
-                        allow_quit_q=True, 
-                        menu_on_error=True,
-                        err_message='Invalid selection. Please try again.',
-                        indent_width=8)
-
-    if didquit: 
-        resp_file = None
-    else:
-        resp_file = os.path.join(IDA_RESPONSES_CUR_DIR, resplist[ndx])
-
-    return resp_file
-
-
+    return suc, rb_files
