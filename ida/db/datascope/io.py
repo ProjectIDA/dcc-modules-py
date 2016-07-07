@@ -11,7 +11,7 @@ def read(table_name):
     if table_name.upper() == 'STAGE':
         return _read_stage()
     elif table_name.upper() == 'CHAN':
-        return _read_chan
+        return _read_chan()
 
 
 def _read_stage():
