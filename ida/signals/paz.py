@@ -56,6 +56,8 @@ class PAZ(object):
         self._h0 = 1
         self._poles = npzeros(0, dtype=complex128)
         self._zeros = npzeros(0, dtype=complex128)
+        self._poles_no_fitting_count = 0
+        self._zeros_no_fitting_count = 0
 
         if mode not in PAZ.MODE_ZEROS.keys():
             raise ValueError("Invalid MODE requested: '{}'. Valid values: {}".format(mode, PAZ.MODE_ZEROS.keys()))
@@ -105,13 +107,17 @@ class PAZ(object):
 
         if ' # type ' in pzlines[0]:
 
-            # get num zeros
-            (num, _, _) = pzlines[1].partition('#')
-            z_num = int(num)
+            # get num zeros and if any to skip when fitting
+            parts = pzlines[1].split('#')
+            z_num = int(parts[0])
+            if len(parts) == 3:
+                self._zeros_no_fitting_count = int(parts[2])
 
             # get num poles
-            (num, _, _) = pzlines[2].partition('#')
-            p_num = int(num)
+            parts = pzlines[2].split('#')
+            p_num = int(parts[0])
+            if len(parts) == 3:
+                self._poles_no_fitting_count = int(parts[2])
 
             ndx = 3
             while 'zeros' not in pzlines[ndx]:
@@ -138,6 +144,9 @@ class PAZ(object):
                 logging.error(msg)
                 raise Exception(msg)
 
+        else:
+            raise Exception('Format error reading "ipaz" type paz file')
+
 
     def save(self, filename):
         """
@@ -149,8 +158,8 @@ class PAZ(object):
 
         with open(filename, 'wt') as ofl:
             ofl.write(self.PAZ_HEADER_IDA + '\n')
-            ofl.write('{:<3} # number of zeros\n'.format(self.num_zeros))
-            ofl.write('{:<3} # number of poles\n'.format(self.num_poles))
+            ofl.write('{:<3} # number of zeros # {}\n'.format(self.num_zeros, self._zeros_no_fitting_count))
+            ofl.write('{:<3} # number of poles # {}\n'.format(self.num_poles, self._poles_no_fitting_count))
             ofl.write('\n')
             ofl.write('# zeros\n')
             for zero in self._zeros:
@@ -205,7 +214,8 @@ class PAZ(object):
         self._zeros.resize((ndx + 1,))
         self._zeros[ndx] = complex128(zero)
 
-    def zeros(self, mode=None, units=None):
+    def zeros(self, mode=None, units=None, fitting_only=False):
+
         if mode:
             zero_cnt_dif = PAZ.MODE_ZEROS[mode] - PAZ.MODE_ZEROS[self.mode]
             if zero_cnt_dif > 0:
@@ -225,14 +235,27 @@ class PAZ(object):
         elif (units == 'rad') and (self.units == 'hz'):
             zeros *= 2 * pi
 
+        if fitting_only:
+            skip_cnt = self._zeros_no_fitting_count
+        else:
+            skip_cnt = 0
+        zeros = zeros[:len(zeros)-skip_cnt]
+
         return zeros
 
-    def poles(self, mode=None, units=None):
+    def poles(self, mode=None, units=None, fitting_only=False):
+
         poles = self._poles.copy()
         if (units == 'hz') and (self.units == 'rad'):
             poles /= 2 * pi
         elif (units == 'rad') and (self.units == 'hz'):
             poles *= 2 * pi
+
+        if fitting_only:
+            skip_cnt = self._poles_no_fitting_count
+        else:
+            skip_cnt = 0
+        poles = poles[:len(poles)-skip_cnt]
 
         return poles
 
@@ -268,5 +291,7 @@ class PAZ(object):
         newpaz.h0 = self.h0
         newpaz._poles = self._poles.copy()
         newpaz._zeros = self._zeros.copy()
+        newpaz._poles_no_fitting_count = self._poles_no_fitting_count
+        newpaz._zeros_no_fitting_count = self._zeros_no_fitting_count
 
         return newpaz
