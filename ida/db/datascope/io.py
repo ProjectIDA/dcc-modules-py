@@ -2,7 +2,6 @@ import os
 import pandas as pd
 from ida.db.datascope import STAGE_COLS, CHAN_COLS, DATE_CNVTRS
 
-
 def read(table_name):
 
     db_dir = os.environ.get('')
@@ -41,4 +40,5 @@ def _read_chan():
         converters=DATE_CNVTRS)
 
     return chan_df
+
 
