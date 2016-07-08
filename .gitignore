@@ -6,6 +6,10 @@ __pycache__/
 # PyCharm stuff
 .idea
 
+*.ida
+*.ms
+
+
 # vim buffers?
 *.swp
 

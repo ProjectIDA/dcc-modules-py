@@ -30,11 +30,56 @@ from scipy.signal import tukey
 from scipy.optimize import least_squares
 import ida.calibration.qcal_utils
 from ida.calibration.cross import cross_correlate
-import ida.signals.paz
+from ida.signals.paz import PAZ
 import ida.signals.utils
 from ida.instruments import *
 
 """utility functions for processing of IDA Random Binary calibration data"""
+
+def process_cal_component(sta, chancodes, loc, data_dir, lf_fnames, hf_fnames, seis_model, starting_paz_fn):
+    """Main method for analyzing random binary calibration data for Sandia/CTBTO STS2.5 (w/Q330HR digi) sensors.
+    It processes both low and high frequency frequency random binary data sets. Supplied timeseries files must
+    contain all 3 components plus input cal signal.
+
+    :param sta: Station code
+    :type sta: str
+    :param chancodes: ComponentsTpl tuple containing chan codes for each component.
+    :type chancodes: ida.instruments.ComponentsTpl
+    :param loc: Location code, 2 decimal digits or spaces
+    :type loc: str
+    :param data_dir: Directory where miniseed and qcal log files are located
+    :type data_dir: str
+    :param lf_fnames: For Low frequency: (miniseed_filename, qcal_log_filemane)
+    :type lf_fnames: (str, str)
+    :param hf_fnames: For High frequency: (miniseed_filename, qcal_log_filemane)
+    :type hf_fnames: (str, str)
+    :param seis_model: Seismometer model key
+    :type seis_model: str
+    :param starting_paz_fn: initial model PAZ response full path & filename for component
+    :type starting_paz_fn: str
+    :return: Results: (IMS2.0_msg_filename, amp_plot_filename, pha_plot_filename)
+    :rtype: (str, str, str)
+    """
+
+
+    if not isinstance(starting_paz_fn, str):
+        raise TypeError('starting_paz_fn must be a response file name with path information')
+
+    if not os.path.exists(starting_paz_fn):
+        raise ValueError('starting_paz_fn file does not exist: '+ starting_paz_fn)
+
+    logging.debug('Reading FULL response file: {}'.format(starting_paz_fn))
+
+    # read FULL resp paz
+    full_paz = PAZ('vel', 'hz', pzfilename=starting_paz_fn, fileformat='ida')
+
+    # make fitting paz response objs and reset gain to 1.0 for fitting
+    lf_fit_paz_v = full_paz.make_partial2(1.0, copy_mode=PAZ.COPY_FITTING)
+    lf_fit_paz_v.h0 = 1.0
+
+    hf_fit_paz_v = full_paz.make_partial2(1.0, copy_mode=PAZ.COPY_FITTING)
+    hf_fit_paz_v.h0 = 1.0
+
 
 def nominal_sys_sens_1hz(sens_resp_at_1hz, seis_model):
     """Compute system sensitivity in velocity units at 1hz given sensor response (in vel), sensor model and

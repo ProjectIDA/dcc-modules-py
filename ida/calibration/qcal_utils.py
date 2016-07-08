@@ -24,7 +24,8 @@ from collections import namedtuple
 import logging
 import os.path
 from numpy import float64
-from ida.ida_obspy import read_mseed
+#from ida.ida_obspy import read_mseed
+from obspy.core.stream import read
 
 """Methods, types and constants specifically for processing data produced by the IDA qcal binary application"""
 
@@ -78,8 +79,8 @@ def read_qcal_files(qcal_ms_filename, qcal_log_filename):
         logging.error(msg)
         raise Exception(msg)
 
-    # cal_strm = read(qcal_ms_filename, dtype=np.float64)
-    cal_strm = read_mseed(qcal_ms_filename, dtype=float64)
+    cal_strm = read(qcal_ms_filename, dtype=float64)
+    # cal_strm = read_mseed(qcal_ms_filename, dtype=float64)
 
     if len(cal_strm) < 4:
         msg = "Fewer than 4 traces found in qcal miniseed file '{}'".format(qcal_ms_filename)

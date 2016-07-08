@@ -26,11 +26,18 @@ from numpy import array, pi, complex128, concatenate
 import os.path
 import logging
 import ida.signals.utils
+from copy import copy, deepcopy
 
 
 class PAZ(object):
     """ Generic object represnting frequency response in
     Poles and Zeros format"""
+
+    PARTIAL_ALL = 1
+    PARTIAL_FITTING_LF = 2
+    PARTIAL_FITTING_HF = 3
+    PARTIAL_PERTURBING_LF = 4
+    PARTIAL_PERTURBING_HF = 4
 
     FILE_FORMATS = ['ida']
     MODE_ZEROS = dict(acc=0, vel=1, disp=2)
@@ -56,8 +63,11 @@ class PAZ(object):
         self._h0 = 1
         self._poles = npzeros(0, dtype=complex128)
         self._zeros = npzeros(0, dtype=complex128)
-        self._poles_no_fitting_count = 0
-        self._zeros_no_fitting_count = 0
+        self._poles_no_fitting_count = (0, 0)   # (lf, hf)
+        self._zeros_no_fitting_count = (0, 0)
+        self._poles_default_pert_ndxs = ([], [])   # (lf, hf)
+        self._zeros_default_pert_ndxs = ([], [])
+
 
         if mode not in PAZ.MODE_ZEROS.keys():
             raise ValueError("Invalid MODE requested: '{}'. Valid values: {}".format(mode, PAZ.MODE_ZEROS.keys()))
@@ -96,6 +106,7 @@ class PAZ(object):
             if self.fileformat == 'ida':
                 self._parse_ida_paz(pzlines)
 
+
     def _parse_ida_paz(self, pzlines):
         """
 
@@ -105,19 +116,109 @@ class PAZ(object):
         :rtype:
         """
 
+        #todo:  should read non-fitting counts before perturb indices to
+        #       check valid indices within fitting set of values
         if ' # type ' in pzlines[0]:
 
             # get num zeros and if any to skip when fitting
             parts = pzlines[1].split('#')
             z_num = int(parts[0])
-            if len(parts) == 3:
-                self._zeros_no_fitting_count = int(parts[2])
 
-            # get num poles
+            if len(parts) > 3:  # has extra non-fitting value counts
+                nofit_parts = parts[3].split(':')  # split for lf:hf values
+                if nofit_parts[0].strip() != '':
+                    val = int(nofit_parts[0])
+                    if (val < 0) or (val > z_num):
+                        raise ValueError('LF non-fitting count out of range on zeros line":'+ pzlines[1])
+                    else:
+                        self._zeros_no_fitting_count = (val, self._zeros_no_fitting_count[1])
+                else:
+                    self._zeros_no_fitting_count = (0, self._zeros_no_fitting_count[1])
+                if nofit_parts[1].strip() != '':
+                    val = int(nofit_parts[1])
+                    if (val < 0) or (val > z_num):
+                        raise ValueError('HF non-fitting count out of range on zeros line":'+ pzlines[1])
+                    else:
+                        self._zeros_no_fitting_count = (self._zeros_no_fitting_count[0], val)
+                else:
+                    self._zeros_no_fitting_count = (self._zeros_no_fitting_count[0], 0)
+            else:
+                self._zeros_no_fitting_count = (0, 0)
+
+
+            if len(parts) > 2:  # has perturbed indice info
+                pert_parts = parts[2].split(':')  # split for lf:hf values
+                if pert_parts[0].strip() != '':  # process lf piece
+                    ndxs = pert_parts[0].strip().split(',')
+                    lst = [int(ndx)-1 for ndx in ndxs]  # make sure valid index
+                    if (min(lst) < 0) or (max(lst) > (z_num-self._zeros_no_fitting_count[0]-1)):
+                        raise ValueError('LF Pert index out of range on "# of zeros line":'+ pzlines[1])
+                    else:
+                        self._zeros_default_pert_ndxs = (lst, self._zeros_default_pert_ndxs[1])
+                else:
+                    self._zeros_default_pert_ndxs = ([], self._zeros_default_pert_ndxs[1])
+                if pert_parts[1].strip() != '':  # process hf piece
+                    ndxs = pert_parts[1].strip().split(',')
+                    lst = [int(ndx)-1 for ndx in ndxs]  # make sure valid index
+                    if (min(lst) < 0) or (max(lst) > (z_num-self._zeros_no_fitting_count[1]-1)):
+                        raise ValueError('HF Pert index out of range on "# of zeros line":'+ pzlines[1])
+                    else:
+                        self._zeros_default_pert_ndxs = (self._zeros_default_pert_ndxs[0], lst)
+                else:
+                    self._zeros_default_pert_ndxs = (self._zeros_default_pert_ndxs[0], [])
+            else:
+                self._zeros_default_pert_ndxs = ([], [])
+                self._zeros_no_fitting_count = (0, 0)
+
+            # get num poles; perturbed indices (lf:hf); cnts to exclude when fitting (lf:hf)
             parts = pzlines[2].split('#')
             p_num = int(parts[0])
-            if len(parts) == 3:
-                self._poles_no_fitting_count = int(parts[2])
+
+            if len(parts) > 3:  # has extra non-fitting value counts
+                nofit_parts = parts[3].split(':')  # split for lf:hf values
+                if nofit_parts[0].strip() != '':
+                    val = int(nofit_parts[0])
+                    if (val < 0) or (val > p_num):
+                        raise ValueError('LF non-fitting count out of range on poles line":'+ pzlines[2])
+                    else:
+                        self._poles_no_fitting_count = (val, self._poles_no_fitting_count[1])
+                else:
+                    self._poles_no_fitting_count = (0, self._poles_no_fitting_count[1])
+                if nofit_parts[1].strip() != '':
+                    val = int(nofit_parts[1])
+                    if (val < 0) or (val > p_num):
+                        raise ValueError('HF non-fitting count out of range on poles line":'+ pzlines[2])
+                    else:
+                        self._poles_no_fitting_count = (self._poles_no_fitting_count[0], val)
+                else:
+                    self._poles_no_fitting_count = (self._poles_no_fitting_count[0], 0)
+            else:
+                self._poles_no_fitting_count = (0, 0)
+
+            if len(parts) > 2:  # has perturbed indice info
+                pert_parts = parts[2].split(':')  # split for lf:hf values
+                if pert_parts[0].strip() != '':  # process lf piece
+                    ndxs = pert_parts[0].strip().split(',')
+                    lst = [int(ndx)-1 for ndx in ndxs]
+                    if (min(lst) < 0) or (max(lst) > (p_num-self._poles_no_fitting_count[0]-1)):
+                        raise ValueError('LF Pert index out of range on poles line":'+ pzlines[2])
+                    else:
+                        self._poles_default_pert_ndxs = (lst, self._poles_default_pert_ndxs[1])
+                else:
+                    self._poles_default_pert_ndxs = ([], self._poles_default_pert_ndxs[1])
+                if pert_parts[1].strip() != '':  # process hf piece
+                    ndxs = pert_parts[1].strip().split(',')
+                    lst = [int(ndx)-1 for ndx in ndxs]
+                    if (min(lst) < 0) or (max(lst) > (p_num-self._poles_no_fitting_count[1]-1)):
+                        raise ValueError('HF Pert index out of range on poles line":'+ pzlines[2])
+                    else:
+                        self._poles_default_pert_ndxs = (self._poles_default_pert_ndxs[0], lst)
+                else:
+                    self._poles_default_pert_ndxs = (self._poles_default_pert_ndxs[0], [])
+            else:
+                self._zeros_default_pert_ndxs = ([], [])
+                self._zeros_no_fitting_count = (0, 0)
+
 
             ndx = 3
             while 'zeros' not in pzlines[ndx]:
@@ -214,7 +315,7 @@ class PAZ(object):
         self._zeros.resize((ndx + 1,))
         self._zeros[ndx] = complex128(zero)
 
-    def zeros(self, mode=None, units=None, fitting_only=False):
+    def zeros(self, mode=None, units=None):
 
         if mode:
             zero_cnt_dif = PAZ.MODE_ZEROS[mode] - PAZ.MODE_ZEROS[self.mode]
@@ -235,15 +336,9 @@ class PAZ(object):
         elif (units == 'rad') and (self.units == 'hz'):
             zeros *= 2 * pi
 
-        if fitting_only:
-            skip_cnt = self._zeros_no_fitting_count
-        else:
-            skip_cnt = 0
-        zeros = zeros[:len(zeros)-skip_cnt]
-
         return zeros
 
-    def poles(self, mode=None, units=None, fitting_only=False):
+    def poles(self, mode=None, units=None):
 
         poles = self._poles.copy()
         if (units == 'hz') and (self.units == 'rad'):
@@ -251,14 +346,15 @@ class PAZ(object):
         elif (units == 'rad') and (self.units == 'hz'):
             poles *= 2 * pi
 
-        if fitting_only:
-            skip_cnt = self._poles_no_fitting_count
-        else:
-            skip_cnt = 0
-        poles = poles[:len(poles)-skip_cnt]
-
         return poles
 
+
+    def perturb_defaults(self):
+
+        poleperdef = deepcopy(self._poles_default_pert_ndxs)
+        zeroperdef = deepcopy(self._zeros_default_pert_ndxs)
+
+        return poleperdef, zeroperdef
 
     def merge_paz_partial(self, paz_partial, paz_map, norm_freq):
 
@@ -285,13 +381,68 @@ class PAZ(object):
         return newpaz
 
 
+    def make_partial2(self, norm_freq, partial_mode=PARTIAL_ALL):
+
+        newpaz = PAZ(mode=self.mode, units=self.units, fileformat=self.fileformat)
+
+        if partial_mode == self.PARTIAL_ALL:
+            newpaz._poles = copy(self._poles)
+            newpaz._zeros = copy(self._zeros)
+            newpaz._poles_no_fitting_count = self._poles_no_fitting_count
+            newpaz._zeros_no_fitting_count = self._zeros_no_fitting_count
+            newpaz._poles_default_pert_ndxs = deepcopy(self._poles_default_pert_ndxs)
+            newpaz._zeros_default_pert_ndxs = deepcopy(self._zeros_default_pert_ndxs)
+            newpaz.h0 = self.h0
+        elif partial_mode == self.PARTIAL_FITTING_LF:
+            newpaz._poles = copy(self._poles)[:self.num_poles - self._poles_no_fitting_count[0]]
+            newpaz._zeros = copy(self._zeros)[:self.num_zeros - self._zeros_no_fitting_count[0]]
+            newpaz._poles_no_fitting_count = (0, 0)
+            newpaz._zeros_no_fitting_count = (0, 0)
+            newpaz._poles_default_pert_ndxs = deepcopy(self._poles_default_pert_ndxs)
+            newpaz._zeros_default_pert_ndxs = deepcopy(self._zeros_default_pert_ndxs)
+            resp = ida.signals.utils.compute_response(array([norm_freq]), newpaz, mode=self.mode)
+            newpaz.h0 = 1.0 / abs(resp)
+        elif partial_mode == self.PARTIAL_FITTING_HF:
+            newpaz._poles = copy(self._poles)[:self.num_poles - self._poles_no_fitting_count[1]]
+            newpaz._zeros = copy(self._zeros)[:self.num_zeros - self._zeros_no_fitting_count[1]]
+            newpaz._poles_no_fitting_count = (0, 0)
+            newpaz._zeros_no_fitting_count = (0, 0)
+            newpaz._poles_default_pert_ndxs = deepcopy(self._poles_default_pert_ndxs)
+            newpaz._zeros_default_pert_ndxs = deepcopy(self._zeros_default_pert_ndxs)
+            resp = ida.signals.utils.compute_response(array([norm_freq]), newpaz, mode=self.mode)
+            newpaz.h0 = 1.0 / abs(resp)
+        elif partial_mode == self.PARTIAL_PERTURBING_LF:
+            newpaz._poles = self._poles[self._poles_default_pert_ndxs[0]]
+            newpaz._zeros = self._zeros[self._zeros_default_pert_ndxs[0]]
+            newpaz._poles_no_fitting_count = (0, 0)
+            newpaz._zeros_no_fitting_count = (0, 0)
+            newpaz._poles_default_pert_ndxs = ([], [])
+            newpaz._zeros_default_pert_ndxs = ([], [])
+            resp = ida.signals.utils.compute_response(array([norm_freq]), newpaz, mode=self.mode)
+            newpaz.h0 = 1.0 / abs(resp)
+        elif partial_mode == self.PARTIAL_PERTURBING_HF:
+            newpaz._poles = self._poles[self._poles_default_pert_ndxs[1]]
+            newpaz._zeros = self._zeros[self._zeros_default_pert_ndxs[1]]
+            newpaz._poles_no_fitting_count = (0, 0)
+            newpaz._zeros_no_fitting_count = (0, 0)
+            newpaz._poles_default_pert_ndxs = ([], [])
+            newpaz._zeros_default_pert_ndxs = ([], [])
+            resp = ida.signals.utils.compute_response(array([norm_freq]), newpaz, mode=self.mode)
+            newpaz.h0 = 1.0 / abs(resp)
+
+        return newpaz
+
+
     def copy(self):
 
         newpaz = PAZ(mode=self.mode, units=self.units, fileformat=self.fileformat)
-        newpaz.h0 = self.h0
+
         newpaz._poles = self._poles.copy()
         newpaz._zeros = self._zeros.copy()
-        newpaz._poles_no_fitting_count = self._poles_no_fitting_count
-        newpaz._zeros_no_fitting_count = self._zeros_no_fitting_count
+        newpaz._poles_no_fitting_count =  copy(self._poles_no_fitting_count)
+        newpaz._zeros_no_fitting_count =  copy(self._zeros_no_fitting_count)
+        newpaz._poles_default_pert_ndxs = copy(self._poles_default_pert_ndxs)
+        newpaz._zeros_default_pert_ndxs = copy(self._zeros_default_pert_ndxs)
+        newpaz.h0 = self.h0
 
         return newpaz

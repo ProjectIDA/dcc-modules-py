@@ -52,7 +52,7 @@ def select_raw_cal_date(sensor_root_dir, cal_type):
 
     elif len(datedirlist) > 1:
         didquit, ndx = pick(datedirlist, 
-                        title='RBLF dates for sensor: ' + sensor_dir, 
+                        title='RBLF dates for sensor: ' + os.sep.join(sensor_root_dir.split(os.sep)[-2:]),
                         prompt='Select # of desired DATE (or "q" to quit): ',
                         allow_quit_q=True, 
                         menu_on_error=True,
@@ -89,9 +89,18 @@ def select_raw_cal_files(rb_dir):
     paired_cals = [stem for stem in ms_stems if stem in log_stems]
 
     rb_files = None
-    if len(ms_files) > 1:
+
+    if len(ms_files) == 0:
+        rb_files = (None, None)
+        suc = True
+
+    elif len(ms_files) == 1:
+        suc = True
+        rb_files = (os.path.join(rb_dir, ms_files[0]), os.path.join(rb_dir, log_files[0]))
+
+    else:  # need to pick
         didquit, ndx = pick(paired_cals, 
-                            title='Miniseed files found in: ' + rb_dir, 
+                            title='Miniseed files found in: ' + os.sep.join(rb_dir.split(os.sep)[-2:]),
                             prompt='Select # of the file to process (or "q" to quit): ',
                             allow_quit_q=True, 
                             menu_on_error=True,
@@ -100,8 +109,5 @@ def select_raw_cal_files(rb_dir):
         if suc:
             rb_files = (os.path.join(rb_dir, paired_cals[ndx]+'.ms'), os.path.join(rb_dir, paired_cals[ndx]+'.log'))
 
-    else:
-        suc = True
-        rb_files = (os.path.join(rb_dir, ms_files[0]), os.path.join(rb_dir, log_files[0]))
 
     return suc, rb_files
