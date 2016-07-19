@@ -39,7 +39,7 @@ def select_raw_cal_sensor(station):
     sensordirlist = sorted(['/'.join(item.split(os.sep)[-2:]) for item in sensordirlist])
     # rawdirlist.append('Quit')
 
-    if sensordirlist > 0:
+    if sensordirlist:
         success, ndx = pick(sensordirlist,
                             title='Sensor List for ' + station.upper(),
                             prompt='Select # of desired SENSOR (or "q" to quit): ',
@@ -60,6 +60,9 @@ def select_raw_cal_sensor(station):
 
 def select_raw_cal_date(sensor_root_dir, cal_type):
 
+    title_dict = { 'rblf': 'Low Freq',
+                   'rbhf': 'High Freq'
+                   }
     if not os.path.exists(sensor_root_dir):
         raise ValueError('Directory does not exist: '+ sensor_root_dir)
 
@@ -74,13 +77,12 @@ def select_raw_cal_date(sensor_root_dir, cal_type):
         date_str = 'No raw calibration dates found for this sensor.'
 
     elif len(datedirlist) > 1:
-        didquit, ndx = pick(datedirlist, 
-                        title='RBLF dates for sensor: ' + os.sep.join(sensor_root_dir.split(os.sep)[-2:]),
+        suc, ndx = pick(datedirlist,
+                        title=title_dict[cal_type] + ' dates for sensor: ' + os.sep.join(sensor_root_dir.split(os.sep)[-2:]),
                         prompt='Select # of desired DATE (or "q" to quit): ',
                         allow_quit_q=True, 
                         menu_on_error=True,
                         err_message='Invalid selection. Please try again.')
-        suc = not didquit
         if suc:
             date_dir = datedirlist[ndx]
         else:
@@ -122,13 +124,12 @@ def select_raw_cal_files(rb_dir):
         rb_files = (os.path.join(rb_dir, ms_files[0]), os.path.join(rb_dir, log_files[0]))
 
     else:  # need to pick
-        didquit, ndx = pick(paired_cals, 
+        suc, ndx = pick(paired_cals,
                             title='Miniseed files found in: ' + os.sep.join(rb_dir.split(os.sep)[-2:]),
                             prompt='Select # of the file to process (or "q" to quit): ',
                             allow_quit_q=True, 
                             menu_on_error=True,
                             err_message='Invalid selection. Please try again.')
-        suc = not didquit
         if suc:
             rb_files = (os.path.join(rb_dir, paired_cals[ndx]+'.ms'), os.path.join(rb_dir, paired_cals[ndx]+'.log'))
 

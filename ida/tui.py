@@ -21,11 +21,13 @@
 #######################################################################################################################
 from functools import reduce
 
+from fabulous.color import bold, blue, red
+
 
 def pick(picklist, title=None, prompt=None, allow_quit_q=False, menu_on_error=False, err_message=None, indent_width=4):
 
-    indent = indent_width*' '
-    list_item_fmt = '{:>'+str(indent_width+1)+'}) {}'
+    indent = (indent_width+1)*' '
+    list_item_fmt = indent + '{} {}'
     ndxlist = list(range(1, len(picklist)+1))
 
     quit = False
@@ -41,17 +43,17 @@ def pick(picklist, title=None, prompt=None, allow_quit_q=False, menu_on_error=Fa
 
         print('\n')
         if title:
-            print(indent + title)
-            print(indent + len(title)*'-', '\n')
+            print(indent + bold(blue(title)))
+            print(indent + blue(len(title)*'-'), '\n')
         else:
             print()
 
         if display_list:
             for ndx, opt in enumerate(picklist):
-                print(list_item_fmt.format(ndx + 1, opt))
+                print(list_item_fmt.format(str(blue(bold(str(ndx + 1))+')')), str(bold(opt))))
         print()
 
-        choice = input(prompt)
+        choice = input(bold(blue(prompt)))
 
         if allow_quit_q and (choice in ['q', 'Q']):
             quit = True
@@ -59,13 +61,13 @@ def pick(picklist, title=None, prompt=None, allow_quit_q=False, menu_on_error=Fa
             break
         elif choice not in choice_list:
             if err_message:
-                print('ERROR\nERROR: ', err_message, '\nERROR')
+                print('\n' + indent + red(bold(err_message)))
             display_list = menu_on_error
         else:
             ndx = int(choice)
             break
 
-    return quit, ndx-1
+    return not quit, ndx-1
 
 
 def pick2(picklistgroups, title=None, group_titles=None, prompt=None, multiple_choice=False,
@@ -75,6 +77,8 @@ def pick2(picklistgroups, title=None, group_titles=None, prompt=None, multiple_c
 
     indent = indent_width*' '
     list_item_fmt = '{:>'+str(indent_width+1)+'}) {}'
+    indent = (indent_width+1)*' '
+    list_item_fmt = indent + '{} {}'
 
     display_groups = []
     valid_ndx_tpls = {}
@@ -112,8 +116,8 @@ def pick2(picklistgroups, title=None, group_titles=None, prompt=None, multiple_c
 
         print('\n')
         if title:
-            print(indent + title)
-            print(indent + len(title)*'-')
+            print(indent + bold(blue(title)))
+            print(indent + blue(len(title)*'-'), '\n')
         else:
             print()
 
@@ -126,13 +130,14 @@ def pick2(picklistgroups, title=None, group_titles=None, prompt=None, multiple_c
                         print(indent + group_titles[gndx])
                 if len(glist) > 0:
                     for choice in glist:
-                        print(list_item_fmt.format(choice[0], choice[1]))
+                        # print(list_item_fmt.format(choice[0], choice[1]))
+                        print(list_item_fmt.format(str(blue(bold(choice[0])) + ')'), str(bold(choice[1]))))
                 else:
                     print(indent + '(none)')
 
         print()
 
-        choice = input(prompt).upper().strip()
+        choice = input(bold(blue(prompt))).upper().strip()
         user_choices = [chc.strip() for chc in choice.split(',')]
         user_quit = ('Q' in user_choices) and implicit_quit_q
 
@@ -150,7 +155,7 @@ def pick2(picklistgroups, title=None, group_titles=None, prompt=None, multiple_c
             break
         elif (not user_quit):
             if err_message:
-                print('\nERROR\nERROR: ', err_message, '\nERROR')
+                print('\n' + indent + red(bold(err_message)))
             display_list = menu_on_error
         else:  # user_quit must == True
             break
