@@ -19,13 +19,13 @@
 # If you use this software in a product, an explicit acknowledgment in the product documentation of the contribution
 # by Project IDA, Institute of Geophysics and Planetary Physics, UCSD would be appreciated but is not required.
 #######################################################################################################################
-
 from collections import namedtuple
 import logging
 import os.path
+
 from numpy import float64
-#from ida.ida_obspy import read_mseed
 from obspy.core.stream import read
+# from ida.ida_obspy import read_mseed
 
 """Methods, types and constants specifically for processing data produced by the IDA qcal binary application"""
 
@@ -114,7 +114,7 @@ def read_qcal_log(logfilename):
     """
 
     # for now, only
-    LOG_KEY_INFO = [
+    log_key_info = [
         ('settling time', 'settling_time', 3),
         ('trailer time', 'trailing_time', 3)
         ]
@@ -130,15 +130,15 @@ def read_qcal_log(logfilename):
     with open(logfilename, 'rt') as logfl:
         lines = logfl.readlines()
 
-        for file_key, dict_key, val_pos in LOG_KEY_INFO:
+        for file_key, dict_key, val_pos in log_key_info:
             matches = [line.strip() for line in lines if line.find(file_key + ' =') > -1]
             if len(matches) != 1:
                 raise Exception("Zero or multiple '{}' lines in qcal log file '{}'".format(file_key, logfilename))
             val = matches[0].split()[val_pos]
             cal_log[dict_key] = float(val)
 
-    if len(cal_log) != len(LOG_KEY_INFO):
-        raise Exception("Error parsing file: '{}'. Expected {} keys to be found".format(logfilename, len(LOG_KEY_INFO)))
+    if len(cal_log) != len(log_key_info):
+        raise Exception("Error parsing file: '{}'. Expected {} keys to be found".format(logfilename, len(log_key_info)))
 
     return cal_log
 
@@ -159,13 +159,13 @@ def split_qcal_traces(cal_strm):
     for tr in cal_strm:
         comp = tr.channel[2]
         if comp in ['S', 'F']:
-            tr_input = tr  #.copy()
+            tr_input = tr
         elif comp in ['N', '1']:
-            tr_n = tr  #.copy()
+            tr_n = tr
         elif comp in ['E', '2']:
-            tr_e = tr  #.copy()
+            tr_e = tr
         elif comp in ['Z']:
-            tr_z = tr  #.copy()
+            tr_z = tr
 
     if not tr_e:
         msg = 'Calibration stream missing east/west channel. Contains {}'.format([tr.channel for tr in cal_strm])
@@ -187,5 +187,3 @@ def split_qcal_traces(cal_strm):
     cal_traces = QCalData(east=tr_e, north=tr_n, vertical=tr_z, input=tr_input)
 
     return cal_traces
-
-

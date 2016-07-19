@@ -19,14 +19,14 @@
 # If you use this software in a product, an explicit acknowledgment in the product documentation of the contribution
 # by Project IDA, Institute of Geophysics and Planetary Physics, UCSD would be appreciated but is not required.
 #######################################################################################################################
+import os.path
+import logging
+from copy import copy, deepcopy
 
 from numpy import zeros as npzeros
 from numpy import array, pi, complex128, concatenate
 
-import os.path
-import logging
 import ida.signals.utils
-from copy import copy, deepcopy
 
 
 class PAZ(object):
@@ -68,7 +68,6 @@ class PAZ(object):
         self._poles_default_pert_ndxs = ([], [])   # (lf, hf)
         self._zeros_default_pert_ndxs = ([], [])
 
-
         if mode not in PAZ.MODE_ZEROS.keys():
             raise ValueError("Invalid MODE requested: '{}'. Valid values: {}".format(mode, PAZ.MODE_ZEROS.keys()))
 
@@ -92,7 +91,6 @@ class PAZ(object):
 
             self._load_paz_file()
 
-
     def _load_paz_file(self):
         """
         Load me a file...
@@ -105,7 +103,6 @@ class PAZ(object):
             pzlines = pzfl.readlines()
             if self.fileformat == 'ida':
                 self._parse_ida_paz(pzlines)
-
 
     def _parse_ida_paz(self, pzlines):
         """
@@ -144,7 +141,6 @@ class PAZ(object):
                     self._zeros_no_fitting_count = (self._zeros_no_fitting_count[0], 0)
             else:
                 self._zeros_no_fitting_count = (0, 0)
-
 
             if len(parts) > 2:  # has perturbed indice info
                 pert_parts = parts[2].split(':')  # split for lf:hf values
@@ -219,7 +215,6 @@ class PAZ(object):
                 self._zeros_default_pert_ndxs = ([], [])
                 self._zeros_no_fitting_count = (0, 0)
 
-
             ndx = 3
             while 'zeros' not in pzlines[ndx]:
                 ndx += 1
@@ -248,7 +243,6 @@ class PAZ(object):
         else:
             raise Exception('Format error reading "ipaz" type paz file')
 
-
     def save(self, filename):
         """
         Save me a pizza!
@@ -271,7 +265,6 @@ class PAZ(object):
                 ofl.write('{:>12.5E}, {:>12.5E}\n'.format(pole.real, pole.imag))
 
         return
-
 
     @property
     def h0(self):
@@ -348,7 +341,6 @@ class PAZ(object):
 
         return poles
 
-
     def perturb_defaults(self):
 
         poleperdef = deepcopy(self._poles_default_pert_ndxs)
@@ -367,7 +359,6 @@ class PAZ(object):
         resp = ida.signals.utils.compute_response(array([norm_freq]), self, mode=self.mode)
         self.h0 = 1.0 / abs(resp)
 
-
     def make_partial(self, paz_map, norm_freq):
 
         newpaz = PAZ(mode=self.mode, units=self.units, fileformat=self.fileformat)
@@ -379,7 +370,6 @@ class PAZ(object):
         newpaz.h0 = 1.0 / abs(resp)
 
         return newpaz
-
 
     def make_partial2(self, norm_freq, partial_mode=PARTIAL_ALL):
 
@@ -431,7 +421,6 @@ class PAZ(object):
             newpaz.h0 = 1.0 / abs(resp)
 
         return newpaz
-
 
     def copy(self):
 

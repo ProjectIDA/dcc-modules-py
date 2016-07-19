@@ -19,22 +19,24 @@
 # If you use this software in a product, an explicit acknowledgment in the product documentation of the contribution
 # by Project IDA, Institute of Geophysics and Planetary Physics, UCSD would be appreciated but is not required.
 #######################################################################################################################
-
 import logging
 import copy
-from ida.signals.trace import IDATrace
+
 from scipy.signal import freqs
 from scipy.signal.ltisys import zpk2tf
 from numpy import array, ndarray, isclose, abs, divide, multiply, pi
 from numpy.fft import rfft
+
+import ida.signals.paz
+from ida.signals.trace import IDATrace
 import ida.calibration.qcal_utils
 from ida.instruments import SEIS_INVERT_CAL_CHAN, SEIS_INVERT_NORTH_CHAN, SEIS_INVERT_EAST_CHAN
-import ida.signals.paz
 
 
 TAPER_TYPES = [
     'tukey'
 ]
+
 
 def check_and_fix_polarities(strm, seis_model):
 
@@ -152,7 +154,7 @@ def channel_xform(trace_tpl, xfrm):
     tr_E = IDATrace(copy.deepcopy(header), data=(multiply(trace_tpl[0].data, xfrm[0][0]) +
                                                  multiply(trace_tpl[1].data, xfrm[0][1]) +
                                                  multiply(trace_tpl[2].data, xfrm[0][2]))
-    )
+                   )
     tr_E.channel = header['channel'][0:2] + '2'
 
     tr_N = IDATrace(copy.deepcopy(header), data=(multiply(trace_tpl[0].data, xfrm[1][0]) +
@@ -187,12 +189,11 @@ def unpack_paz(paz, paz_map):
     flags = ([],[])
 
     prev = ''
-    cur = ''
     for ndx in range(0, nump):
         if isclose(abs(poles[ndx]), 0):  # check for 0+0j
             cur = 'zero'
         elif not isclose(poles[ndx].imag, 0):  # check for complex value
-            if (prev == 'complex'):
+            if prev == 'complex':
                 if isclose(poles[ndx].imag, -poles[ndx-1].imag):
                     cur = 'conjugate'
                 else:
@@ -212,12 +213,11 @@ def unpack_paz(paz, paz_map):
         prev = cur
 
     prev = ''
-    cur = ''
     for ndx in range(0, numz):
         if isclose(abs(zeros[ndx]), 0):  # check for 0+0j
             cur = 'zero'
         elif not isclose(zeros[ndx].imag, 0):  # check for complex value
-            if (prev == 'complex'):
+            if prev == 'complex':
                 if isclose(zeros[ndx].imag, zeros[ndx-1].imag):
                     cur = 'conjugate'
                 else:

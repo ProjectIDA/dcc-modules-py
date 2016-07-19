@@ -19,10 +19,11 @@
 # If you use this software in a product, an explicit acknowledgment in the product documentation of the contribution
 # by Project IDA, Institute of Geophysics and Planetary Physics, UCSD would be appreciated but is not required.
 #######################################################################################################################
-
 import glob
 import os.path
-from ida import IDA_RESPONSES_CUR_DIR, IDA_RESPONSES_NOM_DIR
+
+from ida import IDA_RESPONSES_NOM_DIR
+
 
 def nom_resp_for_model(seis_model):
 
