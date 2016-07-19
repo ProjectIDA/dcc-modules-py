@@ -19,3 +19,22 @@
 # If you use this software in a product, an explicit acknowledgment in the product documentation of the contribution
 # by Project IDA, Institute of Geophysics and Planetary Physics, UCSD would be appreciated but is not required.
 #######################################################################################################################
+
+import glob
+import os.path
+from ida import IDA_RESPONSES_CUR_DIR, IDA_RESPONSES_NOM_DIR
+
+def nom_resp_for_model(seis_model):
+
+    nom_resps = glob.glob(os.path.join(IDA_RESPONSES_NOM_DIR, (seis_model+'_*').lower()))
+    nom_resps.extend(glob.glob(os.path.join(IDA_RESPONSES_NOM_DIR, (seis_model+'.*').lower())))
+
+    return nom_resps
+
+
+def local_resp_files():
+
+    resps = glob.glob(os.path.join('.', '*.ipaz'))
+    # extend with other *.??? formats as supported
+
+    return resps

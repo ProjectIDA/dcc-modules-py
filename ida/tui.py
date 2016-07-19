@@ -1,5 +1,5 @@
 from functools import reduce
-from ida.signals.paz import PAZ
+
 
 def pick(picklist, title=None, prompt=None, allow_quit_q=False, menu_on_error=False, err_message=None, indent_width=4):
 
@@ -134,85 +134,3 @@ def pick2(picklistgroups, title=None, group_titles=None, prompt=None, multiple_c
             break
 
     return (not user_quit), user_choices, user_choice_groups
-
-
-def select_perturb_map(paz):
-
-    if not isinstance(paz, PAZ):
-        raise TypeError('paz must be a populated PAZ object')
-
-    paz_fit_lf = paz.make_partial2(norm_freq=1.0, partial_mode=paz.PARTIAL_FITTING_LF)
-    paz_fit_hf = paz.make_partial2(norm_freq=1.0, partial_mode=paz.PARTIAL_FITTING_HF)
-
-    poles_pert_def, zeros_pert_def = paz.perturb_defaults()
-    defchoice = [('D', 'Use Defaults (indicated by "<=="')]
-
-    # make list of LF p/z to user perturbing choices
-    # Do LOW FREQ FIRST
-    zero_pert_choices = []
-    pole_pert_choices = []
-    for ndx, val in enumerate(paz_fit_lf.zeros()):
-        if ndx in zeros_pert_def[0]:
-            zero_pert_choices.append(str(val) + ' <==')
-        else:
-            zero_pert_choices.append(str(val))
-    for ndx, val in enumerate(paz_fit_lf.poles()):
-        if ndx in poles_pert_def[0]:
-            pole_pert_choices.append(str(val) + ' <==')
-        else:
-            pole_pert_choices.append(str(val))
-
-    pert_choices = [defchoice, zero_pert_choices, pole_pert_choices]
-    success, choices, pert_choice_groups = pick2(pert_choices, 'Select LOW Freq zeros & poles to perturb',
-                                                 prompt='Enter selection (or "q" to quit): ',
-                                                 group_titles=['',
-                                                               'LOW Freq Zeros',
-                                                               'LOW Freq Poles'],
-                                                 multiple_choice=True,
-                                                 implicit_quit_q=True, menu_on_error=True)
-
-    # print(success, pert_choice_groups)
-    if not success:
-        return False, None, None
-
-    if choices[0].upper() == 'D':  # using defaults
-        lf_map = (poles_pert_def[0], zeros_pert_def[0])  # beware, put poles then zeros in this map tuple
-    else:
-        lf_map = (pert_choice_groups[2], pert_choice_groups[1])
-
-
-    # NOW HIGH FREQ
-    zero_pert_choices = []
-    pole_pert_choices = []
-    for ndx, val in enumerate(paz_fit_hf.zeros()):
-        if ndx in zeros_pert_def[1]:
-            zero_pert_choices.append(str(val) + ' <==')
-        else:
-            zero_pert_choices.append(str(val))
-    for ndx, val in enumerate(paz_fit_hf.poles()):
-        if ndx in poles_pert_def[1]:
-            pole_pert_choices.append(str(val) + ' <==')
-        else:
-            pole_pert_choices.append(str(val))
-
-    pert_choices = [defchoice, zero_pert_choices, pole_pert_choices]
-    success, choices, pert_choice_groups = pick2(pert_choices, 'Select HIGH Freq zeros & poles to perturb',
-                                                 prompt='Enter selection (or "q" to quit): ',
-                                                 group_titles=['',
-                                                               'HIGH Freq Zeros',
-                                                               'HIGH Freq Poles'],
-                                                 multiple_choice=True,
-                                                 implicit_quit_q=True, menu_on_error=True)
-
-    # print(success, pert_choice_groups)
-
-    if not success:
-        return False, None, None
-
-    if choices[0].upper() == 'D':  # using defaults
-        hf_map = (poles_pert_def[1], zeros_pert_def[1])  # beware, put poles then zeros in this map tuple
-    else:
-        hf_map = (pert_choice_groups[2], pert_choice_groups[1])
-
-
-    return success, lf_map, hf_map  # each in (poles, zeros) order
