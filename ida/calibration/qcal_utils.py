@@ -157,7 +157,7 @@ def split_qcal_traces(cal_strm):
     tr_e, tr_n, tr_z, tr_input = None, None, None, None
 
     for tr in cal_strm:
-        comp = tr.channel[2]
+        comp = tr.stats.channel[2]
         if comp in ['S', 'F']:
             tr_input = tr
         elif comp in ['N', '1']:
@@ -168,19 +168,19 @@ def split_qcal_traces(cal_strm):
             tr_z = tr
 
     if not tr_e:
-        msg = 'Calibration stream missing east/west channel. Contains {}'.format([tr.channel for tr in cal_strm])
+        msg = 'Calibration stream missing east/west channel. Contains {}'.format([tr.stats.channel for tr in cal_strm])
         logging.error(msg)
         raise Exception(msg)
     if not tr_n:
-        msg = 'Calibration stream missing north/south channel. Contains {}'.format([tr.channel for tr in cal_strm])
+        msg = 'Calibration stream missing north/south channel. Contains {}'.format([tr.stats.channel for tr in cal_strm])
         logging.error(msg)
         raise Exception(msg)
     if not tr_z:
-        msg = 'Calibration stream missing vertical channel. Contains {}'.format([tr.channel for tr in cal_strm])
+        msg = 'Calibration stream missing vertical channel. Contains {}'.format([tr.stats.channel for tr in cal_strm])
         logging.error(msg)
         raise Exception(msg)
     if not tr_input:
-        msg = 'Calibration stream missing cal input channel. Contains {}'.format([tr.channel for tr in cal_strm])
+        msg = 'Calibration stream missing cal input channel. Contains {}'.format([tr.stats.channel for tr in cal_strm])
         logging.error(msg)
         raise Exception(msg)
 

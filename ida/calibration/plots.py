@@ -21,11 +21,14 @@
 #######################################################################################################################
 
 from numpy import angle, pi, abs
-import matplotlib
-matplotlib.use('agg')
+
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
+import matplotlib.gridspec as gridspec
+
 from numpy import linspace, ceil
+
+from ida.instruments import CALTYPE_RBLF, CALTYPE_RBHF
 
 """Convenience methods for plotting response and calibration results."""
 
@@ -79,7 +82,6 @@ def save_response_comparison_plots(sta, chancodes, loc, amp_fn, pha_fn, seis_mod
     freqs = linspace(0, operating_sample_rate/2, num_freqs)  # must start with 0hz
     nyquist = operating_sample_rate / 2.0
     nyq_90pct_freqndx = int(ceil(0.9 * len(freqs)))
-
 
     datestr = timestamp.strftime('%Y-%m-%d %H:%M UTC')
 
@@ -215,3 +217,82 @@ def apc_plot(sampling_freq, freqs, amp, pha, coh):
     plt.ylim(0.95, 1.05)
     plt.show()
 
+def cross_tf_plot(sta, loc, chn, sensor, ondate, cal_type,
+                  samp_rate, freqs, cr_amp, cr_pha, cr_coh, tolerance_limits=None):
+    '''Python port of go_parker.m plots of cross.f output'''
+
+    band_limit = 0.9  # plot to 70% of nyquist
+    nyq = samp_rate * 0.5
+    freq_limit = nyq * band_limit
+
+    freq_plt = [f for f in freqs if f <= freq_limit]
+    amp_plt = cr_amp[:len(freq_plt)]
+    pha_plt = cr_pha[:len(freq_plt)]
+    coh_plt = cr_coh[:len(freq_plt)]
+
+    fig = plt.figure(figsize=(8.5,11))
+
+    gspec = gridspec.GridSpec(3,1, hspace=.5)
+    title_substr = 'LOW' if cal_type == CALTYPE_RBLF else 'HIGH'
+    # subp = plt.subplot(3,1,1)
+    subp = plt.subplot(gspec[0])
+    plt.title('{} TF on {}\n{} {}-{} ({})'.format(
+        title_substr + ' Freq', ondate, sta.upper(), loc, chn.upper(), sensor.upper()
+    ))
+    plt.xlabel('Frequency')
+    plt.ylabel('TF Amp')
+    plt.grid(which='both')
+    plt.semilogx(freq_plt, amp_plt)
+    plt.xlim(freq_plt[0], freq_limit)
+    plt.axis([samp_rate / 1e4, nyq, .95, 1.05])
+    if tolerance_limits:
+        ax = plt.axis()
+        within_tolerance_verts = [(ax[0], 1.0-(tolerance_limits[0]/100.0)),
+                                  (ax[0], 1.0+(tolerance_limits[0]/100.0)),
+                                  (ax[1], 1.0+(tolerance_limits[0]/100.0)),
+                                  (ax[1], 1.0-(tolerance_limits[0]/100.0))]
+        poly = Polygon(within_tolerance_verts, facecolor='#D8FFD8', edgecolor='0.9', label='Acceptable Tolerance Band')
+        subp.add_patch(poly)
+
+    # subp = plt.subplot(3,1,2)
+    subp = plt.subplot(gspec[1])
+    plt.title('{} TF on {}\n{} {}-{} ({})'.format(
+        title_substr + ' Freq', ondate, sta.upper(), loc, chn.upper(), sensor.upper()
+    ))
+    plt.xlabel('Frequency')
+    plt.ylabel('TF Pha')
+    plt.grid(which='both')
+    plt.semilogx(freq_plt, pha_plt)
+    plt.xlim(freq_plt[0], freq_limit)
+    ax = plt.axis()
+    plt.axis([samp_rate / 1e4, nyq, min(ax[2] - 1, -tolerance_limits[1] - 1), max(ax[3] + 1, tolerance_limits[1] + 1)])
+    if tolerance_limits:
+        ax = plt.axis()
+        within_tolerance_verts = [(ax[0], -tolerance_limits[1]),
+                                  (ax[0], tolerance_limits[1]),
+                                  (ax[1], tolerance_limits[1]),
+                                  (ax[1], -tolerance_limits[1])]
+        poly = Polygon(within_tolerance_verts, facecolor='#D8FFD8', edgecolor='0.9', label='Acceptable Tolerance Band')
+        subp.add_patch(poly)
+
+    # subp = plt.subplot(3,1,3)
+    subp = plt.subplot(gspec[2])
+    plt.title('{} TF on {}\n{} {}-{} ({})'.format(
+        title_substr + ' Freq', ondate, sta.upper(), loc, chn.upper(), sensor.upper()
+    ))
+    plt.xlabel('Frequency')
+    plt.ylabel('TF COH')
+    plt.grid(which='both')
+    plt.semilogx(freq_plt, coh_plt)
+    plt.xlim(freq_plt[0], freq_limit)
+    plt.axis([samp_rate / 1e4, nyq, 0.95, 1.01])
+    if tolerance_limits:
+        ax = plt.axis()
+        within_tolerance_verts = [(ax[0], 1.0-(tolerance_limits[2]/100.0)),
+                                  (ax[0], 1.0),
+                                  (ax[1], 1.0),
+                                  (ax[1], 1.0-(tolerance_limits[2]/100.0))]
+        poly = Polygon(within_tolerance_verts, facecolor='#D8FFD8', edgecolor='0.9', label='Acceptable Tolerance Band')
+        subp.add_patch(poly)
+
+    return fig

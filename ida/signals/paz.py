@@ -215,6 +215,9 @@ class PAZ(object):
                 self._zeros_default_pert_ndxs = ([], [])
                 self._zeros_no_fitting_count = (0, 0)
 
+            print(self._zeros_default_pert_ndxs)
+            print(self._poles_default_pert_ndxs)
+
             ndx = 3
             while 'zeros' not in pzlines[ndx]:
                 ndx += 1
@@ -253,8 +256,27 @@ class PAZ(object):
 
         with open(filename, 'wt') as ofl:
             ofl.write(self.PAZ_HEADER_IDA + '\n')
-            ofl.write('{:<3} # number of zeros # {}\n'.format(self.num_zeros, self._zeros_no_fitting_count))
-            ofl.write('{:<3} # number of poles # {}\n'.format(self.num_poles, self._poles_no_fitting_count))
+                                                                          # add 1 to indices to make 1-based for humans.
+            ofl.write('{:<3} # number of zeros # {}:{} # {}:{} \n'.format(self.num_zeros,
+                                                                          ','.join(
+                                                                              [str(v+1) for v in self._zeros_default_pert_ndxs[0]]
+                                                                          ),
+                                                                          ','.join(
+                                                                              [str(v+1) for v in self._zeros_default_pert_ndxs[1]]
+                                                                          ),
+                                                                          self._zeros_no_fitting_count[0],
+                                                                          self._zeros_no_fitting_count[1]
+                                                                          ))
+            ofl.write('{:<3} # number of poles # {}:{} # {}:{} \n'.format(self.num_poles,
+                                                                          ','.join(
+                                                                              [str(v+1) for v in self._poles_default_pert_ndxs[0]]
+                                                                          ),
+                                                                          ','.join(
+                                                                              [str(v+1) for v in self._poles_default_pert_ndxs[1]]
+                                                                          ),
+                                                                          self._poles_no_fitting_count[0],
+                                                                          self._poles_no_fitting_count[1]
+                                                                ))
             ofl.write('\n')
             ofl.write('# zeros\n')
             for zero in self._zeros:

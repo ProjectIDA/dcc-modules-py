@@ -20,8 +20,16 @@
 # by Project IDA, Institute of Geophysics and Planetary Physics, UCSD would be appreciated but is not required.
 #######################################################################################################################
 from functools import reduce
+from enum import Enum
 
-from fabulous.color import bold, blue, red
+from fabulous.color import bold, underline, blue, red
+
+class PickResult(Enum):
+    collect_noop = 0
+    collect_ok = 1
+    collect_back = 2
+    collect_error = 3
+    collect_quit = 4
 
 
 def pick(picklist, title=None, prompt=None, allow_quit_q=False, menu_on_error=False, err_message=None, indent_width=4):
@@ -43,11 +51,10 @@ def pick(picklist, title=None, prompt=None, allow_quit_q=False, menu_on_error=Fa
 
         print('\n')
         if title:
-            print(indent + bold(blue(title)))
-            print(indent + blue(len(title)*'-'), '\n')
-        else:
-            print()
+            print(indent + underline(bold(blue(title))))
+            # print(indent + blue(len(title)*'-'), '\n')
 
+        print()
         if display_list:
             for ndx, opt in enumerate(picklist):
                 print(list_item_fmt.format(str(blue(bold(str(ndx + 1))+')')), str(bold(opt))))
@@ -71,23 +78,22 @@ def pick(picklist, title=None, prompt=None, allow_quit_q=False, menu_on_error=Fa
 
 
 def pick2(picklistgroups, title=None, group_titles=None, prompt=None, multiple_choice=False,
-          implicit_quit_q=False, menu_on_error=False, err_message=None, indent_width=4):
+          implicit_quit_q=False, implicit_back_b=False, menu_on_error=False, err_message=None, indent_width=4):
 
-    # print('Pick list groups supplied:', picklistgroups)
-
-    indent = indent_width*' '
-    list_item_fmt = '{:>'+str(indent_width+1)+'}) {}'
     indent = (indent_width+1)*' '
     list_item_fmt = indent + '{} {}'
+    no_entry_message = 'No selection was entered. Please try again.'
 
     display_groups = []
     valid_ndx_tpls = {}
     user_choices = []
-    user_choice_groups = {}  # dict to hold lists of index choices within each group; keyed by group index (int)
+    user_choice_groups = []  # list to hold lists of index choices within each group; same seq as suuplied picklistgroup
+    user_choice_tuples = []  # list to hold tuples of (grpndx, iindx) for each choice made by user;
 
     choice_ndx = 1  # starting choice index for group lsits without user supplied choice keys
     for gndx, picklist in enumerate(picklistgroups):
-        user_choice_groups[gndx] = []  # initialize user choices to empty ndx list for each group
+        # user_choice_groups[gndx] = []  # initialize user choices to empty ndx list for each group
+        user_choice_groups.append([])  # initialize user choices to empty ndx list for each group
         agroup = []
         for iindx, item in enumerate(picklist):
             if isinstance(item, str):
@@ -100,7 +106,7 @@ def pick2(picklistgroups, title=None, group_titles=None, prompt=None, multiple_c
                 agroup.append((item[0], item[1]))
                 valid_ndx_tpls[item[0].upper()] = (gndx, iindx)
             else:
-                print('uh oh:', iindx, item)
+                print('Error processing picklist:', iindx, item)
 
         display_groups.append(agroup)
 
@@ -108,56 +114,56 @@ def pick2(picklistgroups, title=None, group_titles=None, prompt=None, multiple_c
         prompt = 'Enter selection: '
     prompt = indent + prompt
 
-    user_quit = False
-    is_valid = False
+    invalid = True
     display_list = True
 
-    while (not user_quit) and (not is_valid):
+    result = PickResult.collect_noop
+    while (result not in [PickResult.collect_ok, PickResult.collect_back, PickResult.collect_quit]) and (invalid):
 
         print('\n')
         if title:
-            print(indent + bold(blue(title)))
-            print(indent + blue(len(title)*'-'), '\n')
-        else:
-            print()
+            print(indent + underline(bold(blue(title))))
 
+        print()
         if display_list:
-
             for gndx, glist in enumerate(display_groups):
                 if group_titles:
-                    print()
+                    if gndx > 0:    # add blank line after previous group of choices
+                        print()
                     if len(group_titles[gndx].strip()) > 0:
-                        print(indent + group_titles[gndx])
+                        print(indent + underline(group_titles[gndx]))
                 if len(glist) > 0:
                     for choice in glist:
                         # print(list_item_fmt.format(choice[0], choice[1]))
                         print(list_item_fmt.format(str(blue(bold(choice[0])) + ')'), str(bold(choice[1]))))
                 else:
                     print(indent + '(none)')
-
         print()
 
         choice = input(bold(blue(prompt))).upper().strip()
         user_choices = [chc.strip() for chc in choice.split(',')]
-        user_quit = ('Q' in user_choices) and implicit_quit_q
 
-        # print('pick2: choice:', choice)
-        # print('pick2: user_choices:', user_choices)
-        if multiple_choice:
-            is_valid = reduce(lambda x, y: x and (y in valid_ndx_tpls.keys()), user_choices, True)
+        if user_choices and ('Q' == user_choices[0]) and implicit_quit_q:
+            result = PickResult.collect_quit
+        elif user_choices and ('B' in user_choices) and implicit_back_b:
+            result = PickResult.collect_back
+        elif not user_choices:
+            print('\n' + indent + red(bold(no_entry_message)))
         else:
-            is_valid = (len(user_choices) > 0) and (user_choices[0] in valid_ndx_tpls.keys())
+            if multiple_choice:
+                invalid = not reduce(lambda x, y: x and (y in valid_ndx_tpls.keys()), user_choices, True)
+            else:
+                invalid = ((len(user_choices) != 1) or (user_choices[0] not in valid_ndx_tpls.keys()))
 
-        if is_valid:
-            user_quit = False   # 'Q' must be a valid option, so override possible implicit_quit
-            for chc in user_choices:
-                user_choice_groups[valid_ndx_tpls[chc][0]].append(valid_ndx_tpls[chc][1])
-            break
-        elif (not user_quit):
-            if err_message:
-                print('\n' + indent + red(bold(err_message)))
-            display_list = menu_on_error
-        else:  # user_quit must == True
-            break
+            if not invalid:
+                result = PickResult.collect_ok
+                for chc in user_choices:
+                    user_choice_groups[valid_ndx_tpls[chc][0]].append(valid_ndx_tpls[chc][1])
+                    user_choice_tuples.append(valid_ndx_tpls[chc])
 
-    return (not user_quit), user_choices, user_choice_groups
+            else:
+                if err_message:
+                    print('\n' + indent + red(bold(err_message)))
+                display_list = menu_on_error
+
+    return result, user_choices, user_choice_groups, user_choice_tuples

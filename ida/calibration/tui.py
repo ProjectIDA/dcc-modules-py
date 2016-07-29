@@ -23,11 +23,33 @@ import glob
 import os
 from pathlib import Path
 
-from ida.tui import pick
-from ida import IDA_CAL_RAW_DIR, \
-    IDA_RESPONSES_CUR_DIR, \
-    IDA_RESPONSES_NOM_DIR, \
-    IDA_DATASCOPEDB_DIR
+from ida.tui import pick, pick2
+from ida import IDA_CAL_RAW_DIR
+from ida.signals.paz import PAZ
+
+
+def select_raw_cal_staloc(staloc_stub):
+
+    staloc_stub = staloc_stub.lower()
+    staloc, staloc_full_path = None, None
+
+    stalocdirlist = glob.glob(os.path.join(IDA_CAL_RAW_DIR, staloc_stub + '*[01][01]'))
+    stalocdirlist = sorted([Path(item).stem for item in stalocdirlist])
+
+    if stalocdirlist:
+        success, ndx = pick(stalocdirlist,
+                            title='Select Raw Cal Sta+Loc',
+                            prompt='Select # of desired StaLoc (or "q" to quit): ',
+                            allow_quit_q=True,
+                            menu_on_error=True,
+                            err_message='Invalid selection. Please try again.')
+        if success:
+            staloc = stalocdirlist[ndx]
+            staloc_full_path = os.path.join(IDA_CAL_RAW_DIR, staloc)
+    else:
+        success = False
+
+    return success, staloc, staloc_full_path
 
 
 def select_raw_cal_sensor(station):
@@ -46,25 +68,24 @@ def select_raw_cal_sensor(station):
                             allow_quit_q=True,
                             menu_on_error=True,
                             err_message='Invalid selection. Please try again.')
+        if success:
+            sensor_dir = sensordirlist[ndx]
+            loc = sensor_dir.split('/')[0][-2:]
+            sensor_model = sensor_dir.split(os.sep)[1]
+            sensor_root_dir = os.path.join(IDA_CAL_RAW_DIR, sensor_dir)
     else:
         success = False
-
-    if success:
-        sensor_dir = sensordirlist[ndx]
-        loc = sensor_dir.split('/')[0][-2:]
-        sensor_model = sensor_dir.split(os.sep)[1]
-        sensor_root_dir = os.path.join(IDA_CAL_RAW_DIR, sensor_dir)
 
     return success, station, loc, sensor_model, sensor_root_dir
 
 
 def select_raw_cal_date(sensor_root_dir, cal_type):
 
-    title_dict = { 'rblf': 'Low Freq',
-                   'rbhf': 'High Freq'
-                   }
+    title_dict = {'rblf': 'Low Freq',
+                  'rbhf': 'High Freq'
+                 }
     if not os.path.exists(sensor_root_dir):
-        raise ValueError('Directory does not exist: '+ sensor_root_dir)
+        raise ValueError('Directory does not exist: ' + sensor_root_dir)
 
     date_dir, date_str = None, None
 
@@ -72,15 +93,17 @@ def select_raw_cal_date(sensor_root_dir, cal_type):
     datedirlist = glob.glob(os.path.join(sensor_root_dir, cal_type, '*'))
     datedirlist = sorted([os.sep.join(item.split(os.sep)[-2:]) for item in datedirlist])
 
+    suc = False
     if len(datedirlist) == 0:
         suc = False
         date_str = 'No raw calibration dates found for this sensor.'
 
     elif len(datedirlist) > 1:
         suc, ndx = pick(datedirlist,
-                        title=title_dict[cal_type] + ' dates for sensor: ' + os.sep.join(sensor_root_dir.split(os.sep)[-2:]),
+                        title=title_dict[cal_type] + ' dates for sensor: ' +
+                              os.sep.join(sensor_root_dir.split(os.sep)[-2:]),
                         prompt='Select # of desired DATE (or "q" to quit): ',
-                        allow_quit_q=True, 
+                        allow_quit_q=True,
                         menu_on_error=True,
                         err_message='Invalid selection. Please try again.')
         if suc:
@@ -93,7 +116,7 @@ def select_raw_cal_date(sensor_root_dir, cal_type):
         date_dir = datedirlist[0]
 
     # make full path
-    if suc: 
+    if suc:
         date_str = date_dir.split(os.sep)[1]
         date_dir = os.path.join(sensor_root_dir, date_dir)
 
@@ -103,7 +126,7 @@ def select_raw_cal_date(sensor_root_dir, cal_type):
 def select_raw_cal_files(rb_dir):
 
     if not os.path.exists(rb_dir):
-        raise ValueError('Directory does not exist: '+ rb_dir)
+        raise ValueError('Directory does not exist: ' + rb_dir)
 
     # get ms and log files and compare lists
     ms_files = sorted(glob.glob(os.path.join(rb_dir, '*.ms')))
@@ -125,19 +148,24 @@ def select_raw_cal_files(rb_dir):
 
     else:  # need to pick
         suc, ndx = pick(paired_cals,
-                            title='Miniseed files found in: ' + os.sep.join(rb_dir.split(os.sep)[-2:]),
-                            prompt='Select # of the file to process (or "q" to quit): ',
-                            allow_quit_q=True, 
-                            menu_on_error=True,
-                            err_message='Invalid selection. Please try again.')
+                        title='Miniseed files found in: ' + os.sep.join(rb_dir.split(os.sep)[-2:]),
+                        prompt='Select # of the file to process (or "q" to quit): ',
+                        allow_quit_q=True,
+                        menu_on_error=True,
+                        err_message='Invalid selection. Please try again.')
         if suc:
-            rb_files = (os.path.join(rb_dir, paired_cals[ndx]+'.ms'), os.path.join(rb_dir, paired_cals[ndx]+'.log'))
-
+            rb_files = (os.path.join(rb_dir,
+                                     paired_cals[ndx]+'.ms'),
+                        os.path.join(rb_dir,
+                                     paired_cals[ndx]+'.log'))
 
     return suc, rb_files
 
 
 def select_perturb_map(paz):
+
+    grp_titles = ['', 'Zeros', 'Poles']
+    prompt = 'Enter comma separated list (or "q" to quit): '
 
     if not isinstance(paz, PAZ):
         raise TypeError('paz must be a populated PAZ object')
@@ -164,11 +192,10 @@ def select_perturb_map(paz):
             pole_pert_choices.append(str(val))
 
     pert_choices = [defchoice, zero_pert_choices, pole_pert_choices]
-    success, choices, pert_choice_groups = pick2(pert_choices, 'Select LOW Freq zeros & poles to perturb',
-                                                 prompt='Enter selection (or "q" to quit): ',
-                                                 group_titles=['',
-                                                               'LOW Freq Zeros',
-                                                               'LOW Freq Poles'],
+    success, choices, pert_choice_groups = pick2(pert_choices,
+                                                 'Select LOW FREQ zeros & poles to perturb',
+                                                 prompt=prompt,
+                                                 group_titles=grp_titles,
                                                  multiple_choice=True,
                                                  implicit_quit_q=True, menu_on_error=True)
 
@@ -180,7 +207,6 @@ def select_perturb_map(paz):
         lf_map = (poles_pert_def[0], zeros_pert_def[0])  # beware, put poles then zeros in this map tuple
     else:
         lf_map = (pert_choice_groups[2], pert_choice_groups[1])
-
 
     # NOW HIGH FREQ
     zero_pert_choices = []
@@ -197,16 +223,13 @@ def select_perturb_map(paz):
             pole_pert_choices.append(str(val))
 
     pert_choices = [defchoice, zero_pert_choices, pole_pert_choices]
-    success, choices, pert_choice_groups = pick2(pert_choices, 'Select HIGH Freq zeros & poles to perturb',
-                                                 prompt='Enter selection (or "q" to quit): ',
-                                                 group_titles=['',
-                                                               'HIGH Freq Zeros',
-                                                               'HIGH Freq Poles'],
+    success, choices, pert_choice_groups = pick2(pert_choices,
+                                                 'Select HIGH FREQ zeros & poles to perturb',
+                                                 prompt=prompt,
+                                                 group_titles=grp_titles,
                                                  multiple_choice=True,
                                                  implicit_quit_q=True, menu_on_error=True)
-
     # print(success, pert_choice_groups)
-
     if not success:
         return False, None, None
 
@@ -214,6 +237,5 @@ def select_perturb_map(paz):
         hf_map = (poles_pert_def[1], zeros_pert_def[1])  # beware, put poles then zeros in this map tuple
     else:
         hf_map = (pert_choice_groups[2], pert_choice_groups[1])
-
 
     return success, lf_map, hf_map  # each in (poles, zeros) order

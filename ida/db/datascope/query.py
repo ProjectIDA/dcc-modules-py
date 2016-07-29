@@ -1,7 +1,11 @@
 import datetime
 
+from pandas.core.frame import DataFrame
+
 def find_sensor_file(df, station, loca, comp, date_8601_str):
 
+    if not isinstance(df, DataFrame):
+        raise ValueError('df is not Pandas Data Frame')
     if not isinstance(station, str) or len(station) < 1:
         raise ValueError('Invalid station value: {}\nShould be the alphanumeric STATION code.'.format(station))
     if not isinstance(loca, str) or len(loca) != 2:
@@ -26,3 +30,26 @@ def find_sensor_file(df, station, loca, comp, date_8601_str):
 
     return list(file_df)
 
+def get_stages(df, station, loc, chn, date_8601_str):
+    '''Query db and return 0 or more stage records for given channel & date'''
+
+
+    if not isinstance(df, DataFrame):
+        raise ValueError('df is not Pandas Data Frame')
+
+    try:
+        dt = datetime.datetime.strptime(date_8601_str, '%Y-%m-%dT%H:%M:%S')
+    except:
+        try:
+            dt = datetime.datetime.strptime(date_8601_str, '%Y-%m-%dT%H:%M')
+        except:
+            # last chance
+            dt = datetime.datetime.strptime(date_8601_str, '%Y-%m-%d')
+
+
+    condition = (df.sta == station.upper()) & (df.loca == loc) & \
+                (df.chn == chn.lower()) & (df.begt <= dt) & (df.endt >= dt)
+
+    stage_list = df[condition].sort_values('stageid', ascending=True)
+
+    return stage_list

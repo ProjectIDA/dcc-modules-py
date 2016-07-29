@@ -22,13 +22,14 @@
 import logging
 import copy
 
+from obspy.core.trace import Trace
 from scipy.signal import freqs
 from scipy.signal.ltisys import zpk2tf
 from numpy import array, ndarray, isclose, abs, divide, multiply, pi
 from numpy.fft import rfft
 
 import ida.signals.paz
-from ida.signals.trace import IDATrace
+# from ida.signals.trace import IDATrace
 import ida.calibration.qcal_utils
 from ida.instruments import SEIS_INVERT_CAL_CHAN, SEIS_INVERT_NORTH_CHAN, SEIS_INVERT_EAST_CHAN
 
@@ -41,7 +42,7 @@ TAPER_TYPES = [
 def check_and_fix_polarities(strm, seis_model):
 
     for tr in strm:
-        if invert_signal(tr.channel, seis_model):
+        if invert_signal(tr.stats.channel, seis_model):
             tr.data *= -1.0
 
 
@@ -96,7 +97,7 @@ def invert_signal(channel, seis_model):
 def trim_stream(src_stream, left=0, right=0):
 
     for trace in src_stream:
-        trace.trim(trace.starttime + left, trace.endtime - right)
+        trace.trim(trace.stats.starttime + left, trace.stats.endtime - right)
 
 
 def ntrim_stream(traces, left=0, right=0):
@@ -149,30 +150,30 @@ def normalize_response(freq_resp, freqlist, norm_freq):
 def channel_xform(trace_tpl, xfrm):
 
     #  traces and xfrms assumed to be ENZ (aka 21Z and XYZ for triaxial seis output) order
-    header = trace_tpl[0].header
+    chn_2chrs = trace_tpl[0].stats.channel[:2]
 
-    tr_E = IDATrace(copy.deepcopy(header), data=(multiply(trace_tpl[0].data, xfrm[0][0]) +
-                                                 multiply(trace_tpl[1].data, xfrm[0][1]) +
-                                                 multiply(trace_tpl[2].data, xfrm[0][2]))
+    tr_e = Trace(header=trace_tpl[0].stats.copy(), data=(multiply(trace_tpl[0].data, xfrm[0][0]) +
+                                                         multiply(trace_tpl[1].data, xfrm[0][1]) +
+                                                         multiply(trace_tpl[2].data, xfrm[0][2]))
                    )
-    tr_E.channel = header['channel'][0:2] + '2'
+    tr_e.stats.channel = chn_2chrs + '2'
 
-    tr_N = IDATrace(copy.deepcopy(header), data=(multiply(trace_tpl[0].data, xfrm[1][0]) +
-                                                 multiply(trace_tpl[1].data, xfrm[1][1]) +
-                                                 multiply(trace_tpl[2].data, xfrm[1][2]))
+    tr_n = Trace(header=trace_tpl[0].stats.copy(), data=(multiply(trace_tpl[0].data, xfrm[1][0]) +
+                                                         multiply(trace_tpl[1].data, xfrm[1][1]) +
+                                                         multiply(trace_tpl[2].data, xfrm[1][2]))
     )
-    tr_N.channel = header['channel'][0:2] + '1'
+    tr_n.stats.channel = chn_2chrs + '1'
 
-    tr_Z = IDATrace(copy.deepcopy(header), data=(multiply(trace_tpl[0].data, xfrm[2][0]) +
-                                                 multiply(trace_tpl[1].data, xfrm[2][1]) +
-                                                 multiply(trace_tpl[2].data, xfrm[2][2]))
+    tr_z = Trace(header=trace_tpl[0].stats.copy(), data=(multiply(trace_tpl[0].data, xfrm[2][0]) +
+                                                         multiply(trace_tpl[1].data, xfrm[2][1]) +
+                                                         multiply(trace_tpl[2].data, xfrm[2][2]))
     )
-    tr_Z.channel = header['channel'][0:2] + 'Z'
+    tr_z.stats.channel = chn_2chrs + 'Z'
 
     # if isinstance(trace_tpl, ida.calibration.qcal_utils.QCalData):
     #     output_trace_tpl = ida.calibration.qcal_utils.QCalData(east=tr_E, north=tr_N, vertical=tr_Z, input=trace_tpl.input.copy())
     # else:
-    output_trace_tpl = (tr_E, tr_N, tr_Z)
+    output_trace_tpl = (tr_e, tr_n, tr_z)
 
     return output_trace_tpl
 
