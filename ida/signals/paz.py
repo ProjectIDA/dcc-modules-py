@@ -215,9 +215,6 @@ class PAZ(object):
                 self._zeros_default_pert_ndxs = ([], [])
                 self._zeros_no_fitting_count = (0, 0)
 
-            print(self._zeros_default_pert_ndxs)
-            print(self._poles_default_pert_ndxs)
-
             ndx = 3
             while 'zeros' not in pzlines[ndx]:
                 ndx += 1

@@ -62,6 +62,7 @@ class CalInfo():
             'hfpath': None,
             'respfn': None,
             'fullpaz': None,
+            'newpaz': None,
             'lfpert': None,
             'hfpert': None,
         }
@@ -348,6 +349,19 @@ class CalInfo():
             self._info['fullpaz'] = None
 
     @property
+    def newpaz(self):
+        return self._info['newpaz']
+
+    @newpaz.setter
+    def newpaz(self, value):
+
+        if value:
+            self.check_type(value, PAZ, 'Poles and Zeros response object')
+            self._info['newpaz'] = value
+        else:
+            self._info['newpaz'] = None
+
+    @property
     def lfpert(self):
         return self._info['lfpert']
 
@@ -598,7 +612,13 @@ class CalInfo():
                                                          indent_width=self.tui_indent)
 
             if result == PickResult.collect_ok:
+                print(choice_tpls[0][0])
+                print(choice_tpls[0][1])
+                print(pick_groups)
+                print(pick_groups[0][0])
+                print('pickresouiht: ', PickResult.collect_ok)
                 fn = pick_groups[choice_tpls[0][0]][choice_tpls[0][1]]
+                print('got fn:', fn)
                 if choice_tpls[0][0] == 0:     #  first group is single current resp file as in DB
                     self.respfn = join(self.resp_cur_dir, fn)
                 elif choice_tpls[0][0] == 1:   #  second group are files from nominal response dir
@@ -606,6 +626,9 @@ class CalInfo():
                 elif choice_tpls[0][0] == 2:   #  third group are respo files found in cwd
                     self.respfn = join(getcwd(), fn)
 
+
+                print('READING RESP FILE:', self.respfn)
+                print(exists(self.respfn))
                 # read in resp data and make sure file is valid (will raise an eception if not)
                 self.fullpaz = PAZ(pzfilename=self.respfn, fileformat='ida', mode='vel', units='hz')
 

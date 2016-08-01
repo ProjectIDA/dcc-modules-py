@@ -49,13 +49,10 @@ SEISTYPE_STS1E3 = 'STS1E3'
 SEISTYPE_STS1HB = 'STS1HB'
 SEISTYPE_STS1VB = 'STS1VB'
 SEISTYPE_STS2 = 'STS2'
-SEISTYPE_STS2_6 = 'sts2-6'
-SEISTYPE_STS2_12 = 'sts2-12'
-SEISTYPE_STS2_18 = 'sts2-18'
 SEISTYPE_STS25 = 'STS2_5'
 SEISTYPE_STS25F = 'STS2_5_FAST'
 SEISTYPE_STS5A = 'STS-5A'
-SEISTYPE_TRILL = 'TRI_PH'
+SEISTYPE_TR120PH = 'TRI_PH'
 SEISTYPE_TR240 = 'TR240'
 SEISTYPE_TR360 = 'TR360'
 SEISTYPE_GS13 = 'GS13'
@@ -74,13 +71,10 @@ SEISMOMETER_MODELS = [
     SEISTYPE_STS1HB,
     SEISTYPE_STS1VB,
     SEISTYPE_STS2,
-    SEISTYPE_STS2_6,
-    SEISTYPE_STS2_12,
-    SEISTYPE_STS2_18,
     SEISTYPE_STS25,
     SEISTYPE_STS25F,
     SEISTYPE_STS5A,
-    SEISTYPE_TRILL,
+    SEISTYPE_TR120PH,
     SEISTYPE_TR240,
     SEISTYPE_TR360,
     SEISTYPE_GS13,
@@ -98,35 +92,82 @@ SEISMOMETER_MODELS = [
 # as done with STS 2.5 below before adding addl seismometers
 TRIAXIAL_SEIS_MODELS = [
     SEISTYPE_STS2,
-    SEISTYPE_STS2_6,
-    SEISTYPE_STS2_12,
-    SEISTYPE_STS2_18,
     SEISTYPE_STS25,
     SEISTYPE_STS25F,
-    # SEISTYPE_STS5A,
-    # SEISTYPE_STS1HB,
-    # SEISTYPE_TRILL,
-    # SEISTYPE_TR240,
-    # SEISTYPE_TR360
+    SEISTYPE_STS5A,
+    SEISTYPE_TR120PH,
+    SEISTYPE_TR240,
+    SEISTYPE_TR360
 ]
 
 # need set of these transform for each supported triaxial sensor
+STS2_XYZ2UVW = [
+    [-sqrt(6)/3,  sqrt(6)/6,   sqrt(6)/6],
+    [         0,  sqrt(2)/2,  -sqrt(2)/2],
+    [ sqrt(3)/3,  sqrt(3)/3,  sqrt(3)/3]
+]
+# from UVW back to ENZ, but ABS values, so all going in same direction at same time to maximize signal
+STS2_UVW2ENZ_ABS = [
+    [ sqrt(2/3), sqrt(1/6), sqrt(1/6)],
+    [         0, sqrt(1/2), sqrt(1/2)],
+    [ sqrt(1/3), sqrt(1/3), sqrt(1/3)]
+]
 STS2_5_XYZ2UVW = [
     [0,             -sqrt(6)/6,  sqrt(3)/6],
     [-sqrt(2)/4,  sqrt(6)/12, sqrt(3)/6],
     [ sqrt(2)/4,  sqrt(6)/12, sqrt(3)/6]
 ]
-# from UVW back to ENZ, but ABS values, so all going in same direction at same time
+# from UVW back to ENZ, but ABS values, so all going in same direction at same time to maximize signal
 STS2_5_UVW2ENZ_ABS = [
-    [0,            sqrt(2)/2, sqrt(2)/2],
-    [sqrt(6)/3, sqrt(6)/6, sqrt(6)/6],
-    [sqrt(3)/3, sqrt(3)/3, sqrt(3)/3]
+    [0,           sqrt(2),     sqrt(2)],
+    [2*sqrt(6)/3, sqrt(6)/3,   sqrt(6)/3],
+    [2*sqrt(3)/3, 2*sqrt(3)/3, 2*sqrt(3)/3]
 ]
+
+STS5A_XYZ2UVW = [
+    [0,             -sqrt(6)/6,  sqrt(3)/6],
+    [-sqrt(2)/4,  sqrt(6)/12, sqrt(3)/6],
+    [ sqrt(2)/4,  sqrt(6)/12, sqrt(3)/6]
+]
+# from UVW back to ENZ, but ABS values, so all going in same direction at same time to maximize signal
+STS5A_UVW2ENZ_ABS = [
+    [0,           sqrt(2),     sqrt(2)],
+    [2*sqrt(6)/3, sqrt(6)/3,   sqrt(6)/3],
+    [2*sqrt(3)/3, 2*sqrt(3)/3, 2*sqrt(3)/3]
+]
+
+# TRILLIUM TRIAXIAL TRANSFORMS
+TR120PH_XYZ2UVW = [
+    [ sqrt(6) / 3,  0,           sqrt(3) / 3],
+    [-sqrt(6) / 6,  sqrt(2) / 2, sqrt(3) / 3],
+    [-sqrt(6) / 6, -sqrt(2) / 2, sqrt(3) / 3]
+]
+# from UVW back to ENZ, but ABS values, so all going in same direction at same time to maximize signal
+TR120PH_UVW2ENZ_ABS = [
+    [sqrt(6) / 3, sqrt(6) / 6, sqrt(6) / 6],
+    [          0, sqrt(2) / 2, sqrt(2) / 2],
+    [sqrt(3) / 3, sqrt(3) / 3, sqrt(3) / 3]
+]
+
+TR240_XYZ2UVW = [
+    [ sqrt(6) / 3,  0,           sqrt(3) / 3],
+    [-sqrt(6) / 6,  sqrt(2) / 2, sqrt(3) / 3],
+    [-sqrt(6) / 6, -sqrt(2) / 2, sqrt(3) / 3]
+]
+# from UVW back to ENZ, but ABS values, so all going in same direction at same time to maximize signal
+TR240_UVW2ENZ_ABS = [
+    [sqrt(6) / 3, sqrt(6) / 6, sqrt(6) / 6],
+    [          0, sqrt(2) / 2, sqrt(2) / 2],
+    [sqrt(3) / 3, sqrt(3) / 3, sqrt(3) / 3]
+]
+
 
 # paz maps for seismometer response fitting by model
 # indices are for python ZERO-based arrays
 # 'fit' indices are into FULL response PAZ
 # 'perturb' indices are into FULL response PAZ
+
+# ONLY USED FOR PyCal CTBTO. Need to get rid of this code, is DEAD CODE for internal IDA Cals
 SEISMOMETER_RESPONSES = {
     SEISTYPE_STS25 : {
         'full_resp_file': SEISTYPE_STS25 + "_full.ida",
@@ -164,6 +205,10 @@ XFRM_TYPE_XYZ2UVW = 'XYZ2UVW'
 XFRM_TYPE_UVW2ENZ_ABS = 'UVW2ENZ_ABS'
 
 TRIAXIAL_TRANSFORMS = {
+    SEISTYPE_STS2: {
+        XFRM_TYPE_XYZ2UVW: STS2_XYZ2UVW,
+        XFRM_TYPE_UVW2ENZ_ABS : STS2_UVW2ENZ_ABS
+    },
     SEISTYPE_STS25: {
         XFRM_TYPE_XYZ2UVW: STS2_5_XYZ2UVW,
         XFRM_TYPE_UVW2ENZ_ABS : STS2_5_UVW2ENZ_ABS
@@ -172,6 +217,18 @@ TRIAXIAL_TRANSFORMS = {
         XFRM_TYPE_XYZ2UVW: STS2_5_XYZ2UVW,
         XFRM_TYPE_UVW2ENZ_ABS : STS2_5_UVW2ENZ_ABS
     },
+    SEISTYPE_STS5A: {
+        XFRM_TYPE_XYZ2UVW: STS5A_XYZ2UVW,
+        XFRM_TYPE_UVW2ENZ_ABS: STS5A_UVW2ENZ_ABS
+    },
+    SEISTYPE_TR120PH: {
+        XFRM_TYPE_XYZ2UVW: TR120PH_XYZ2UVW,
+        XFRM_TYPE_UVW2ENZ_ABS: TR120PH_UVW2ENZ_ABS
+    },
+    SEISTYPE_TR240: {
+        XFRM_TYPE_XYZ2UVW: TR240_XYZ2UVW,
+        XFRM_TYPE_UVW2ENZ_ABS: TR240_UVW2ENZ_ABS
+    },
 }
 
 CTBTO_SEIS_MODELS = [
@@ -179,7 +236,7 @@ CTBTO_SEIS_MODELS = [
     SEISTYPE_STS25F
 ]
 
-SEIS_INVERT_CAL_CHAN = [SEISTYPE_GS13, SEISTYPE_TRILL]
+SEIS_INVERT_CAL_CHAN = [SEISTYPE_GS13, SEISTYPE_TR120PH]
 SEIS_INVERT_NORTH_CHAN = [SEISTYPE_STS1E3, SEISTYPE_STS1HB]
 SEIS_INVERT_EAST_CHAN = [SEISTYPE_STS1E3, SEISTYPE_STS1HB]
 
@@ -188,9 +245,17 @@ CALTYPE_RBLF = 'rblf'
 CALIBRATION_TYPES = [CALTYPE_RBHF, CALTYPE_RBLF]
 
 INSTRUMENT_NOMINAL_GAINS = {
+    SEISTYPE_KS54000: 2400,
+
+    SEISTYPE_STS2: 1500,
     SEISTYPE_STS25: 1500,
     SEISTYPE_STS25F: 1500,
-    DIGITYPE_Q330: 1.67e6
+    SEISTYPE_STS5A: 1500,
+
+    SEISTYPE_TR120PH: 1200,
+    SEISTYPE_TR240: 1200,
+    SEISTYPE_TR360: 1200,
+
 }
 
 # obtained from IDA filter file q330.40 May 2016
@@ -208,8 +273,12 @@ Q330_40_FIR_FILTER_DELAY = 17.218
 # obtained from IDA database. This value is specific to each Q330-Seis_Model combination
 # and is in the IDA database as gcalib
 Q330_GCALIB_FOR_SEIS = {
+    SEISTYPE_KS54000: .9953,
+
     SEISTYPE_STS25: .9911,  # value for Q330/STS2.5 combination
     SEISTYPE_STS25F: .9911,  # value for Q330/STS2.5 combination
+
+    SEISTYPE_TR120PH: 1.0011
 }
 
 
@@ -220,7 +289,16 @@ Q330_GCALIB_FOR_SEIS = {
 #   1) taking FFT of coefficients ==> Freq Resp
 #   2) normalize on bin 0 (0 hz) value
 #   3) Below is response amplitude value at 1Hz
+#   OR
+#   4) Run evalresp for stage 4 only
 Q330_40HZ_NOMINAL_FIR_GAIN_1HZ = 1.00666915769
-Q330_NOMINAL_GAIN = INSTRUMENT_NOMINAL_GAINS[DIGITYPE_Q330]
+Q330_20HZ_NOMINAL_FIR_GAIN_1HZ = 1.006939
+
+Q330_FIR_GAIN_1HZ = {
+    40: 1.00666915769,
+    20: 1.006939
+}
+
+Q330_NOMINAL_GAIN = 1.67e6 # todo get from stages rec 3 gnom # INSTRUMENT_NOMINAL_GAINS[DIGITYPE_Q330]
 
 ComponentsTpl = namedtuple('Components', ['north', 'east', 'vertical'])

@@ -39,43 +39,39 @@ from ida.calibration.cal_info import CalInfo
 
 """utility functions for processing of IDA Random Binary calibration data"""
 
-def process_cal_component(cal_info):
-
-    logging.debug('Reading FULL response file: {}'.format(cal_info.respfn))
-
-    # read FULL resp paz
-    full_paz = cal_info.fullpaz.copy()
-
-    samp_rate_lf, lf_start_time, lfinput, lfmeas, \
-    samp_rate_hf, hf_start_time, hfinput, hfmeas, \
-    freqs_lf, freqs_hf = prepare_cal_data(cal_info)
-
-
-    return samp_rate_lf, lf_start_time, lfinput, lfmeas, \
-    samp_rate_hf, hf_start_time, hfinput, hfmeas, \
-    freqs_lf, freqs_hf
-
-    # perturbed paz must not be in both lf anf hf sets
-    # lf_paz_pert_map = (SEISMOMETER_RESPONSES[seis_model]['perturb']['lf_poles'],
-    #                    SEISMOMETER_RESPONSES[seis_model]['perturb']['lf_zeros'])
-    # hf_paz_pert_map = (SEISMOMETER_RESPONSES[seis_model]['perturb']['hf_poles'],
-    #                    SEISMOMETER_RESPONSES[seis_model]['perturb']['hf_zeros'])
-    #
-    # logging.debug('Analyzing cal data and calculating new VERTICAL response...')
-    #
-    # #todo: need to get operating_sample_rate from IDA.stage stage 3/srate and add to cal_info
-    # operating_sample_rate = 40.0
-    #
-    # new_full_paz = analyze_cal_component(full_paz, cal_info.lfpert, cal_info.hfpert,
-    #                                        samp_rate_lf, samp_rate_hf, operating_sample_rate,
-    #                                        lfinput, hfinput, lfmeas, hfmeas)
-    # print(new_full_paz.poles(units='vel'))
-    # print(new_full_paz.zeros(units='vel'))
-    #
-    #
-    # logging.debug('Analyzing cal data and calculating new VERTICAL response complete.')
-
-
+# def process_cal_component(cal_info):
+#
+#     samp_rate_lf, lf_start_time, lfinput, lfmeas, \
+#     samp_rate_hf, hf_start_time, hfinput, hfmeas, \
+#     freqs_lf, freqs_hf = prepare_cal_data(ci.lfpath, ci.lffile, ci.hfpath, ci.hffile,
+#                                           ci.sensor, ci.comp, ci.fullpaz)
+#
+#
+#     return samp_rate_lf, lf_start_time, lfinput, lfmeas, \
+#     samp_rate_hf, hf_start_time, hfinput, hfmeas, \
+#     freqs_lf, freqs_hf
+#
+#     # perturbed paz must not be in both lf anf hf sets
+#     # lf_paz_pert_map = (SEISMOMETER_RESPONSES[seis_model]['perturb']['lf_poles'],
+#     #                    SEISMOMETER_RESPONSES[seis_model]['perturb']['lf_zeros'])
+#     # hf_paz_pert_map = (SEISMOMETER_RESPONSES[seis_model]['perturb']['hf_poles'],
+#     #                    SEISMOMETER_RESPONSES[seis_model]['perturb']['hf_zeros'])
+#     #
+#     # logging.debug('Analyzing cal data and calculating new VERTICAL response...')
+#     #
+#     # #todo: need to get operating_sample_rate from IDA.stage stage 3/srate and add to cal_info
+#     # operating_sample_rate = 40.0
+#     #
+#     # new_full_paz = analyze_cal_component(full_paz, lfpert, hfpert,
+#     #                                        samp_rate_lf, samp_rate_hf, operating_sample_rate,
+#     #                                        lfinput, hfinput, lfmeas, hfmeas)
+#     # print(new_full_paz.poles(units='vel'))
+#     # print(new_full_paz.zeros(units='vel'))
+#     #
+#     #
+#     # logging.debug('Analyzing cal data and calculating new VERTICAL response complete.')
+#
+#
 def nominal_sys_sens_1hz(sens_resp_at_1hz, seis_model):
     """Compute system sensitivity in velocity units at 1hz given sensor response (in vel), sensor model and
     assuming a Q330 digitizer. This calculation DOES NOT include absolute gcalib adjustment for sensor,
@@ -166,7 +162,7 @@ def compare_component_response(freqs, paz1, paz2, norm_freq=0.05, mode='vel', ph
     return resp1_norm, resp2_norm, resp2_a_dev, resp2_p_dev, resp2_a_dev_max, resp2_p_dev_max
 
 
-def analyze_cal_component(ci, lftf_f, lf_tf, hftf_f, hf_tf, lf_sr, lfinput, lfmeas, hf_sr, hfinput, hfmeas):
+def analyze_cal_component(fullpaz, lfpertndxs, hfpertndxs, opsr, lftf_f, lf_tf, hftf_f, hf_tf, lf_sr, lfinput, lfmeas, hf_sr, hfinput, hfmeas):
     """Analyze both high and low frequency calibration component timeseries output with calibration input
     using starting paz fitting_paz.
 
@@ -202,7 +198,7 @@ def analyze_cal_component(ci, lftf_f, lf_tf, hftf_f, hf_tf, lf_sr, lfinput, lfme
     lflo = 1e-04
     lfhi = 0.3
     hflo = 0.3
-    hfhi = ci.opsr * 0.45  # e.g. 18hz for 40hz channels
+    hfhi = opsr * 0.45  # e.g. 18hz for 40hz channels
     lf_norm_freq = 0.05
     hf_norm_freq = 1.0
 
@@ -219,8 +215,8 @@ def analyze_cal_component(ci, lftf_f, lf_tf, hftf_f, hf_tf, lf_sr, lfinput, lfme
     #TODO need to move this to be sensor dependent in instruments.py
     # for sts2.5 ONLY
     logging.debug('Setting paz perturbation map and splitting...')
-    hf_paz_pert = ci.fullpaz.make_partial(ci.hfpert, hf_norm_freq)
-    lf_paz_pert = ci.fullpaz.make_partial(ci.lfpert, lf_norm_freq)
+    hf_paz_pert = fullpaz.make_partial(hfpertndxs, hf_norm_freq)
+    lf_paz_pert = fullpaz.make_partial(lfpertndxs, lf_norm_freq)
 
     logging.debug('Computing response of perturbed paz...')
     # initial response of paz_pert over freq_band of interest
@@ -308,14 +304,14 @@ def analyze_cal_component(ci, lftf_f, lf_tf, hftf_f, hf_tf, lf_sr, lfinput, lfme
 
     new_hf_paz_pert = ida.signals.utils.pack_paz(hf_res.x, hf_paz_pert_flags)
     new_lf_paz_pert = ida.signals.utils.pack_paz(lf_res.x, lf_paz_pert_flags)
-    new_paz = ci.fullpaz.copy()
-    new_paz.merge_paz_partial(new_hf_paz_pert, ci.hfpert, hf_norm_freq)
-    new_paz.merge_paz_partial(new_lf_paz_pert, ci.lfpert, hf_norm_freq)
+    new_paz = fullpaz.copy()
+    new_paz.merge_paz_partial(new_hf_paz_pert, hfpertndxs, hf_norm_freq)
+    new_paz.merge_paz_partial(new_lf_paz_pert, lfpertndxs, hf_norm_freq)
 
     return new_paz
 
 
-def prepare_cal_data(cal_info):
+def prepare_cal_data(lfpath, lffile, hfpath, hffile, sensor, comp, fullpaz):
     """Prepare low and high frequency miniseed files produced by qcal for analysis.
     It assumes all three observed Z12 coponents plus input signal will exist in each miniseed file.
     Each components is:
@@ -368,10 +364,10 @@ def prepare_cal_data(cal_info):
             ComponentTpl, ndarray, ComponentTpl, ndarray
     """
 
-    ms_fpath_lf = join(cal_info.lfpath, cal_info.lffile + '.ms')
-    log_fpath_lf = join(cal_info.lfpath, cal_info.lffile + '.log')
-    ms_fpath_hf = join(cal_info.hfpath, cal_info.hffile + '.ms')
-    log_fpath_hf = join(cal_info.hfpath, cal_info.hffile + '.log')
+    ms_fpath_lf = join(lfpath, lffile + '.ms')
+    log_fpath_lf = join(lfpath, lffile + '.log')
+    ms_fpath_hf = join(hfpath, hffile + '.ms')
+    log_fpath_hf = join(hfpath, hffile + '.log')
 
     logging.debug('Reading HF cal data...')
 
@@ -388,23 +384,23 @@ def prepare_cal_data(cal_info):
     logging.debug('Trimming and checking polarity of LF data...')
     ida.signals.utils.trim_stream(strm_lf, left=log_lf['settling_time'], right=log_lf['trailing_time'])
     # for those seismometers that are funky...
-    ida.signals.utils.check_and_fix_polarities(strm_lf, cal_info.sensor.upper())
+    ida.signals.utils.check_and_fix_polarities(strm_lf, sensor.upper())
     logging.debug('Trimming and checking polarity of LF data complete.')
 
 
     logging.debug('Trimming and checking polarity of HF data...')
     ida.signals.utils.trim_stream(strm_hf, left=log_hf['settling_time'], right=log_hf['trailing_time'])
     # for those seismometers that are funky...
-    ida.signals.utils.check_and_fix_polarities(strm_hf, cal_info.sensor.upper())
+    ida.signals.utils.check_and_fix_polarities(strm_hf, sensor.upper())
     logging.debug('Trimming and checking polarity of HF data complete.')
 
     # split cal data into enzi, 21zi (east, north, vert, input)
     cal_lf = ida.calibration.qcal_utils.split_qcal_traces(strm_lf)
     cal_hf = ida.calibration.qcal_utils.split_qcal_traces(strm_hf)
 
-    if cal_info.sensor.upper() in TRIAXIAL_SEIS_MODELS:
-        cal_lf_tpl = triaxial_horizontal_magnitudes(cal_lf, cal_info.sensor.upper())
-        cal_hf_tpl = triaxial_horizontal_magnitudes(cal_hf, cal_info.sensor.upper())
+    if sensor.upper() in TRIAXIAL_SEIS_MODELS:
+        cal_lf_tpl = triaxial_horizontal_magnitudes(cal_lf, sensor.upper())
+        cal_hf_tpl = triaxial_horizontal_magnitudes(cal_hf, sensor.upper())
     else:
         cal_lf_tpl = cal_lf
         cal_hf_tpl = cal_hf
@@ -426,9 +422,9 @@ def prepare_cal_data(cal_info):
 
     logging.debug('Generating starting LF (mode=acc) response...')
     # make fitting paz response objs and reset gain to 1.0 for fitting
-    lf_fit_paz = cal_info.fullpaz.make_partial2(1.0, partial_mode=PAZ.PARTIAL_FITTING_LF)
+    lf_fit_paz = fullpaz.make_partial2(1.0, partial_mode=PAZ.PARTIAL_FITTING_LF)
     lf_fit_paz.h0 = 1.0
-    hf_fit_paz = cal_info.fullpaz.make_partial2(1.0, partial_mode=PAZ.PARTIAL_FITTING_HF)
+    hf_fit_paz = fullpaz.make_partial2(1.0, partial_mode=PAZ.PARTIAL_FITTING_HF)
     hf_fit_paz.h0 = 1.0
 
     freqs_lf = linspace(0, samp_rate_lf/2, npts_lf//2 + 1)  # count is to match behavior of np.fft.rfft below
@@ -465,17 +461,17 @@ def prepare_cal_data(cal_info):
 
     # prep output channels
     logging.debug('Preparing output for coherence analysis...')
-    if cal_info.comp == 'Z':
+    if comp == 'Z':
         lf_out = cal_lf_tpl.vertical.data.copy()[taper_bin_cnt_lf:-taper_bin_cnt_lf]
         hf_out = cal_hf_tpl.vertical.data.copy()[taper_bin_cnt_hf:-taper_bin_cnt_hf]
-    elif cal_info.comp == 'N':
+    elif comp == 'N':
         lf_out = cal_lf_tpl.north.data.copy()[taper_bin_cnt_lf:-taper_bin_cnt_lf]
         hf_out = cal_hf_tpl.north.data.copy()[taper_bin_cnt_hf:-taper_bin_cnt_hf]
-    elif cal_info.comp == 'E':
+    elif comp == 'E':
         lf_out = cal_lf_tpl.east.data.copy()[taper_bin_cnt_lf:-taper_bin_cnt_lf]
         hf_out = cal_hf_tpl.east.data.copy()[taper_bin_cnt_hf:-taper_bin_cnt_hf]
     else:
-        raise ValueError('Invalid component: ' + cal_info.comp)
+        raise ValueError('Invalid component: ' + comp)
 
     lf_out.__itruediv__(lf_out.std())
     lf_out.__isub__(lf_out.mean())
