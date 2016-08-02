@@ -98,6 +98,10 @@ def read_qcal_files(qcal_ms_filename, qcal_log_filename):
         logging.error(msg)
         raise Exception(msg)
 
+    # trim to same end time to account for qcal 'watchdog exit'
+    end_time_min = min([tr.stats.endtime for tr in cal_strm])
+    cal_strm = cal_strm.slice(endtime=end_time_min)
+
     log_info = read_qcal_log(qcal_log_filename)
 
     return cal_strm, log_info

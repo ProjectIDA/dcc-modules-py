@@ -32,7 +32,7 @@ from ida.instruments import CALTYPE_RBLF, CALTYPE_RBHF
 
 """Convenience methods for plotting response and calibration results."""
 
-def save_comp_response_comparison_plot(sta, chan, loc, amp_fn, pha_fn, seis_model, timestamp,
+def save_comp_response_comparison_plot(sta, chan, loc, resp1_fn, resp2_fn, seis_model, timestamp,
                                    operating_sample_rate, num_freqs, norm_freq, resp1,
                                    resp2, adev, pdev):
     """Generate plots of measured response deviations between two respoonses for
@@ -72,36 +72,36 @@ def save_comp_response_comparison_plot(sta, chan, loc, amp_fn, pha_fn, seis_mode
 
     datestr = timestamp.strftime('%Y-%m-%d %H:%M UTC')
 
-    f100 = plt.figure(100, figsize=(15, 20))
-    ax = plt.subplot(211)
+    f100 = plt.figure(100, figsize=(14, 18))
+    gspec = gridspec.GridSpec(2,1, hspace=.3)
+
+    ax = plt.subplot(gspec[0])
     plt.tick_params(labelsize=13)
-    plt.title('Amplitude Responses - ({:<} - {:<} - {:<} - {:<})\n(sampling rate: {} hz)'.format(sta, loc, chan,
-                                                                                                 seis_model,
-                                                                                                 datestr,
-                                                                                                 int(round(operating_sample_rate, 0))),
+    title_fmt = 'Amplitude Response Comparison\n' +  \
+                '{:<}-{:<}-{:<} ({:<} @ {}hz)\n' + \
+                '{} / {}\n(Calibration Date: {})'
+    plt.title(title_fmt.format(sta, loc, chan,
+                               seis_model, int(round(operating_sample_rate, 0)),
+                               resp1_fn, resp2_fn, datestr),
               fontsize=14,
               fontweight='bold')
 
     plt.ylabel('Amplitude (Normalized @ {} hz, V/m/s)'.format(norm_freq), fontsize=12, fontweight='bold')
     plt.xlabel('Frequency (hz)', fontsize=12, fontweight='bold')
     ax.grid(which='both')
-    line2, = plt.loglog(freqs, abs(resp2), 'b:', linewidth=1.0)
+    line2, = plt.loglog(freqs, abs(resp2), 'r:', linewidth=1.5)
     line1, = plt.loglog(freqs, abs(resp1), 'k', linewidth=0.5)
-    plt.legend((line2, line1), (chan + ' New Response', chan + ' Starting Response'), loc=0, handlelength=5, fontsize=12)
+    plt.legend((line2, line1), (resp2_fn, resp1_fn), loc=0, handlelength=5, fontsize=12)
     #
     axlim = plt.axis()
     plt.axis([1e-3, nyquist, axlim[2], axlim[3]])
     #
-    ax = plt.subplot(212)
+    ax = plt.subplot(gspec[1])
     plt.tick_params(labelsize=13)
-    if loc.strip() != '':
-        plt.title('Amplitude Deviations from Nominal - ({:<} - {:<} - {:<} - {:<})'.format(sta, loc, seis_model, datestr), fontsize=14, fontweight='bold')
-    else:
-        plt.title('Amplitude Deviations from Nominal - ({:<} - {:<} - {:<})'.format(sta, seis_model, datestr), fontsize=14, fontweight='bold')
     plt.ylabel('Amplitude Deviation (%)\n(up to 90% of Nyquist)', fontsize=12, fontweight='bold')
     plt.xlabel('Frequency (hz)', fontsize=12, fontweight='bold')
     ax.grid(which='both')
-    line2, = plt.semilogx(freqs[1:nyq_90pct_freqndx], adev[:nyq_90pct_freqndx-1], 'r', linewidth=0.75)
+    plt.semilogx(freqs[1:nyq_90pct_freqndx], adev[:nyq_90pct_freqndx-1], 'r', linewidth=0.75)
     amp_toler_pcnt = 5.0
     plt.axis([1e-3, nyquist, -amp_toler_pcnt * 2, amp_toler_pcnt * 2])
     axlim = plt.axis()
@@ -114,31 +114,28 @@ def save_comp_response_comparison_plot(sta, chan, loc, amp_fn, pha_fn, seis_mode
     # plt.clf()
 
     # Now plot for Phase
-    f101 = plt.figure(101, figsize=(15, 20))
+    f101 = plt.figure(101, figsize=(14, 18))
     ax = plt.subplot(211)
     plt.tick_params(labelsize=13)
-    plt.title('Phase Responses - ({:<} - {:<} - {:<} - {:<})\n(sampling rate: {} hz)'.format(sta, loc, chan,
-                                                                                             seis_model,
-                                                                                             datestr,
-                                                                                             int(round(operating_sample_rate, 0))),
+    title_fmt = 'Phase Response Comparison\n' +  \
+                '{:<}-{:<}-{:<} ({:<} @ {}hz)\n' + \
+                '{} / {}\n(Calibration Date: {})'
+    plt.title(title_fmt.format(sta, loc, chan,
+                               seis_model, int(round(operating_sample_rate, 0)),
+                               resp1_fn, resp2_fn, datestr),
               fontsize=14,
               fontweight='bold')
-
     plt.ylabel('Phase (deg)', fontsize=12, fontweight='bold')
     plt.xlabel('Frequency (hz)', fontsize=12, fontweight='bold')
     ax.grid(which='both')
-    line2, = plt.semilogx(freqs, angle(resp2) * 180 / pi, 'b:', linewidth=1.0)
+    line2, = plt.semilogx(freqs, angle(resp2) * 180 / pi, 'r:', linewidth=1.5)
     line1, = plt.semilogx(freqs, angle(resp1) * 180 / pi, 'k', linewidth=0.5)
-    plt.legend((line2, line1), (chan + ' New Response', chan + ' Starting Response'), loc=0, handlelength=5, fontsize=12)
+    plt.legend((line2, line1), (resp2_fn, resp1_fn), loc=0, handlelength=5, fontsize=12)
     axlim = plt.axis()
     plt.axis([1e-3, nyquist, axlim[2], axlim[3]])
 
     ax = plt.subplot(212)
     plt.tick_params(labelsize=13)
-    if loc.strip() != '':
-        plt.title('Phase Deviations from Nominal - ({:<} - {:<} - {:<} - {:<})'.format(sta, loc, seis_model, datestr), fontsize=14, fontweight='bold')
-    else:
-        plt.title('Phase Deviations from Nominal - ({:<} - {:<} - {:<})'.format(sta, seis_model, datestr), fontsize=14, fontweight='bold')
     plt.ylabel('Phase Deviation (deg)\n(up to 90% of Nyquist)', fontsize=12, fontweight='bold')
     plt.xlabel('Frequency (hz)', fontsize=12, fontweight='bold')
     ax.grid(which='both')
@@ -336,7 +333,7 @@ def apc_plot(sampling_freq, freqs, amp, pha, coh):
     plt.show()
 
 def cross_tf_plot(sta, loc, chn, sensor, ondate, cal_type,
-                  samp_rate, freqs, cr_amp, cr_pha, cr_coh, tolerance_limits=None):
+                  samp_rate, freqs, cr_amp, cr_pha, cr_coh, green_tol_lims=None, grey_tol_lims=None):
     '''Python port of go_parker.m plots of cross.f output'''
 
     band_limit = 0.9  # plot to 70% of nyquist
@@ -362,17 +359,24 @@ def cross_tf_plot(sta, loc, chn, sensor, ondate, cal_type,
     plt.grid(which='both')
     plt.semilogx(freq_plt, amp_plt)
     plt.xlim(freq_plt[0], freq_limit)
-    plt.axis([samp_rate / 1e4, nyq, .95, 1.05])
-    if tolerance_limits:
-        ax = plt.axis()
-        within_tolerance_verts = [(ax[0], 1.0-(tolerance_limits[0]/100.0)),
-                                  (ax[0], 1.0+(tolerance_limits[0]/100.0)),
-                                  (ax[1], 1.0+(tolerance_limits[0]/100.0)),
-                                  (ax[1], 1.0-(tolerance_limits[0]/100.0))]
-        poly = Polygon(within_tolerance_verts, facecolor='#D8FFD8', edgecolor='0.9', label='Acceptable Tolerance Band')
+    plt.axis([samp_rate / 1e4, nyq, .94, 1.06])
+    ax = plt.axis()
+    if grey_tol_lims:
+        tol_verts = [(ax[0], 1.0-(grey_tol_lims[0]/100.0)),
+                     (ax[0], 1.0+(grey_tol_lims[0]/100.0)),
+                     (ax[1], 1.0+(grey_tol_lims[0]/100.0)),
+                     (ax[1], 1.0-(grey_tol_lims[0]/100.0))]
+        poly = Polygon(tol_verts, facecolor='#E6E6E6', edgecolor='0.9', label='Grey Acceptable Tolerance Band')
+        subp.add_patch(poly)
+    if green_tol_lims:
+        tol_verts = [(ax[0], 1.0-(green_tol_lims[0]/100.0)),
+                     (ax[0], 1.0+(green_tol_lims[0]/100.0)),
+                     (ax[1], 1.0+(green_tol_lims[0]/100.0)),
+                     (ax[1], 1.0-(green_tol_lims[0]/100.0))]
+        poly = Polygon(tol_verts, facecolor='#D8FFD8', edgecolor='0.9', label='Green Acceptable Tolerance Band')
         subp.add_patch(poly)
 
-    # subp = plt.subplot(3,1,2)
+
     subp = plt.subplot(gspec[1])
     plt.title('{} TF on {}\n{} {}-{} ({})'.format(
         title_substr + ' Freq', ondate, sta.upper(), loc, chn.upper(), sensor.upper()
@@ -383,14 +387,21 @@ def cross_tf_plot(sta, loc, chn, sensor, ondate, cal_type,
     plt.semilogx(freq_plt, pha_plt)
     plt.xlim(freq_plt[0], freq_limit)
     ax = plt.axis()
-    plt.axis([samp_rate / 1e4, nyq, min(ax[2] - 1, -tolerance_limits[1] - 1), max(ax[3] + 1, tolerance_limits[1] + 1)])
-    if tolerance_limits:
-        ax = plt.axis()
-        within_tolerance_verts = [(ax[0], -tolerance_limits[1]),
-                                  (ax[0], tolerance_limits[1]),
-                                  (ax[1], tolerance_limits[1]),
-                                  (ax[1], -tolerance_limits[1])]
-        poly = Polygon(within_tolerance_verts, facecolor='#D8FFD8', edgecolor='0.9', label='Acceptable Tolerance Band')
+    plt.axis([samp_rate / 1e4, nyq, min(ax[2] - 1, -green_tol_lims[1] - 1), max(ax[3] + 1, green_tol_lims[1] + 1)])
+    ax = plt.axis()
+    if grey_tol_lims:
+        tol_verts = [(ax[0], -grey_tol_lims[1]),
+                     (ax[0], grey_tol_lims[1]),
+                     (ax[1], grey_tol_lims[1]),
+                     (ax[1], -grey_tol_lims[1])]
+        poly = Polygon(tol_verts, facecolor='#E6E6E6', edgecolor='0.9', label='Acceptable Tolerance Band')
+        subp.add_patch(poly)
+    if green_tol_lims:
+        tol_verts = [(ax[0], -green_tol_lims[1]),
+                     (ax[0], green_tol_lims[1]),
+                     (ax[1], green_tol_lims[1]),
+                     (ax[1], -green_tol_lims[1])]
+        poly = Polygon(tol_verts, facecolor='#D8FFD8', edgecolor='0.9', label='Acceptable Tolerance Band')
         subp.add_patch(poly)
 
     # subp = plt.subplot(3,1,3)
@@ -403,14 +414,21 @@ def cross_tf_plot(sta, loc, chn, sensor, ondate, cal_type,
     plt.grid(which='both')
     plt.semilogx(freq_plt, coh_plt)
     plt.xlim(freq_plt[0], freq_limit)
-    plt.axis([samp_rate / 1e4, nyq, 0.95, 1.01])
-    if tolerance_limits:
-        ax = plt.axis()
-        within_tolerance_verts = [(ax[0], 1.0-(tolerance_limits[2]/100.0)),
-                                  (ax[0], 1.0),
-                                  (ax[1], 1.0),
-                                  (ax[1], 1.0-(tolerance_limits[2]/100.0))]
-        poly = Polygon(within_tolerance_verts, facecolor='#D8FFD8', edgecolor='0.9', label='Acceptable Tolerance Band')
+    plt.axis([samp_rate / 1e4, nyq, 0.94, 1.0])
+    ax = plt.axis()
+    if grey_tol_lims:
+        tol_verts = [(ax[0], 1.0-(grey_tol_lims[2]/100.0)),
+                     (ax[0], 1.0),
+                     (ax[1], 1.0),
+                     (ax[1], 1.0-(grey_tol_lims[2]/100.0))]
+        poly = Polygon(tol_verts, facecolor='#E6E6E6', edgecolor='0.9', label='Grey Acceptable Tolerance Band')
+        subp.add_patch(poly)
+    if green_tol_lims:
+        tol_verts = [(ax[0], 1.0-(green_tol_lims[2]/100.0)),
+                     (ax[0], 1.0),
+                     (ax[1], 1.0),
+                     (ax[1], 1.0-(green_tol_lims[2]/100.0))]
+        poly = Polygon(tol_verts, facecolor='#D8FFD8', edgecolor='0.9', label='Acceptable Tolerance Band')
         subp.add_patch(poly)
 
     return fig

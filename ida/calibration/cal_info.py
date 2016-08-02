@@ -22,30 +22,38 @@ VERSION = '0.1'
 
 class CalInfo():
 
+    STARTING_GROUP = 1
+    FITTING_GROUP = 2
+
     tui_indent = 4
     tui_indent_str = ' '*tui_indent
 
-    def __init__(self, cal_raw_dir='', resp_cur_dir='', resp_nom_dir=''):
-        if cal_raw_dir:
-            if exists(abspath(cal_raw_dir)):
-                self.cal_raw_dir = cal_raw_dir
-            else:
-                self.cal_raw_dir = ''
-                raise ValueError(self.tui_indent_str + bold(red('Error: IDA Cal Raw directory [' + cal_raw_dir + '] does not exist.')))
+    def __init__(self, cal_raw_dir, resp_cur_dir, resp_nom_dir, cal_analysis_dir):
+        if exists(abspath(cal_raw_dir)):
+            self.cal_raw_dir = cal_raw_dir
+        else:
+            self.cal_raw_dir = ''
+            raise ValueError(self.tui_indent_str +
+                             bold(red('Error: IDA Cal Raw directory [' + cal_raw_dir + '] does not exist.')))
 
-        self.resp_cur_dir = ''
-        if resp_cur_dir:
-            if exists(abspath(resp_cur_dir)):
-                self.resp_cur_dir = resp_cur_dir
-            else:
-                raise ValueError(self.tui_indent_str + bold(red('Error: Current IDA Response directory [' + resp_cur_dir + '] does not exist.')))
+        if exists(abspath(resp_cur_dir)):
+            self.resp_cur_dir = resp_cur_dir
+        else:
+            raise ValueError(self.tui_indent_str +
+                             bold(red('Error: Current IDA Response directory [' + resp_cur_dir + '] does not exist.')))
 
-        self.resp_nom_dir = ''
-        if resp_nom_dir:
-            if exists(abspath(resp_nom_dir)):
-                self.resp_nom_dir = resp_nom_dir
-            else:
-                raise ValueError(self.tui_indent_str + bold(red('Error: IDA NOMINAL Response irectory [' + resp_nom_dir + '] does not exist.')))
+        if exists(abspath(resp_nom_dir)):
+            self.resp_nom_dir = resp_nom_dir
+        else:
+            raise ValueError(self.tui_indent_str +
+                             bold(red('Error: IDA NOMINAL Response irectory [' + resp_nom_dir + '] does not exist.')))
+
+        if exists(abspath(cal_analysis_dir)):
+            self.cal_analysis_dir = cal_analysis_dir
+        else:
+            self.cal_analysis_dir = ''
+            raise ValueError(self.tui_indent_str +
+                             bold(red('Error: IDA Cal Analysis directory [' + cal_analysis_dir + '] does not exist.')))
 
         self._info = {
             'staloc': None,
@@ -168,6 +176,8 @@ class CalInfo():
         else:
             self._info['ctbto'] = None
 
+    def is_ctbto(self):
+        return self.ctbto == 'Y'
 
     @property
     def chan(self):
@@ -185,7 +195,7 @@ class CalInfo():
 
     @property
     def opsr(self):
-        return self._info['opsr']
+        return self._info['opsr'] if self._info['opsr'] else ''
 
     @opsr.setter
     def opsr(self, value):
@@ -592,12 +602,12 @@ class CalInfo():
         group_titles.append('Response on Date of Calibration')
 
         nom_resps = nom_resp_for_model(self.sensor.lower())
-        nom_resps_names = [Path(respfn).name for respfn in nom_resps]
+        nom_resps_names = sorted([Path(respfn).name for respfn in nom_resps])
         pick_groups.append(nom_resps_names)
         group_titles.append('Nominal Responses for sensor: ' + self.sensor.upper())
 
         local_resp = local_resp_files()
-        local_resp_names = [Path(respfn).name for respfn in local_resp]
+        local_resp_names = sorted([Path(respfn).name for respfn in local_resp])
         pick_groups.append(local_resp_names)
         group_titles.append('Responses Found in CWD')
 
@@ -612,13 +622,7 @@ class CalInfo():
                                                          indent_width=self.tui_indent)
 
             if result == PickResult.collect_ok:
-                print(choice_tpls[0][0])
-                print(choice_tpls[0][1])
-                print(pick_groups)
-                print(pick_groups[0][0])
-                print('pickresouiht: ', PickResult.collect_ok)
                 fn = pick_groups[choice_tpls[0][0]][choice_tpls[0][1]]
-                print('got fn:', fn)
                 if choice_tpls[0][0] == 0:     #  first group is single current resp file as in DB
                     self.respfn = join(self.resp_cur_dir, fn)
                 elif choice_tpls[0][0] == 1:   #  second group are files from nominal response dir
@@ -626,9 +630,6 @@ class CalInfo():
                 elif choice_tpls[0][0] == 2:   #  third group are respo files found in cwd
                     self.respfn = join(getcwd(), fn)
 
-
-                print('READING RESP FILE:', self.respfn)
-                print(exists(self.respfn))
                 # read in resp data and make sure file is valid (will raise an eception if not)
                 self.fullpaz = PAZ(pzfilename=self.respfn, fileformat='ida', mode='vel', units='hz')
 
@@ -769,26 +770,39 @@ class CalInfo():
         return result, errmsg
 
     def new_resp_filename_stem(self):
-        if self.is_complete:
+        if self.is_complete(self.FITTING_GROUP):
             stem = self.sensor.lower() + '_' + self.staloc.lower() + '_' + self.lfdate + "_" + self.comp.upper()
         else:
             stem = 'INCOMPLETE_CAL_INFO'
 
         return stem
 
-    def is_complete(self):
-        self.opsr = 40
-        return self.staloc and self.sensor and self.opsr and \
-               self.comp and ((self.ctbto == 'N') or ((self.ctbto == 'Y') and self.chan)) and \
-               self.lfdate and self.hfdate and \
-               self.lffile and self.hffile and \
-               self.respfn and self.fullpaz and \
-               self.lfpert and self.hfpert
+    def is_complete(self, group):
+
+        if group == self.STARTING_GROUP:
+            done = self.staloc and self.sensor and self.opsr and \
+                   self.comp and self.chan and \
+                   self.lfdate and self.hfdate and \
+                   self.lffile and self.hffile and \
+                   self.respfn and self.fullpaz
+        elif group == self.FITTING_GROUP:
+            done = self.staloc and self.sensor and self.opsr and \
+                   self.comp and self.chan and \
+                   self.lfdate and self.hfdate and \
+                   self.lffile and self.hffile and \
+                   self.respfn and self.fullpaz and \
+                   self.lfpert and self.hfpert and self.ctbto
+
+        return done
 
     def collect_backup(self):
 
         # in reverse order of querying user
         done = False
+
+        if not done and self.ctbto:
+            self.ctbto = None
+            done = True
 
         if self.lfpert or self.hfpert:
             self.lfpert = None
@@ -803,10 +817,6 @@ class CalInfo():
         if not done and self.chan:
             self.chan = None
             self.chn_stages = None  # clear stages since channel changing
-            done = True
-
-        if not done and self.ctbto:
-            self.ctbto = None
             done = True
 
         if not done and self.comp:
@@ -872,12 +882,6 @@ class CalInfo():
                 self.collect_backup()
                 col_res = PickResult.collect_ok
 
-        elif not self.ctbto:
-            col_res= self.select_ctbto_flag()
-            if col_res == PickResult.collect_back:
-                self.collect_backup()
-                col_res = PickResult.collect_ok
-
         elif not self.chan:
             col_res = self.enter_chan()
             if col_res == PickResult.collect_back:
@@ -903,9 +907,16 @@ class CalInfo():
                 self.collect_backup()
                 col_res = PickResult.collect_ok
 
+        elif not self.ctbto:
+            col_res= self.select_ctbto_flag()
+            if col_res == PickResult.collect_back:
+                self.collect_backup()
+                col_res = PickResult.collect_ok
+
+
         return col_res, col_msg
 
-    def collect(self):
+    def collect(self, group):
 
         if not self.cal_raw_dir:
             return PickResult.collect_error, \
@@ -915,7 +926,7 @@ class CalInfo():
                    bold(red(self.tui_indent_str + 'Calibration raw data directory does not exist: '+self.cal_raw_dir))
 
         col_res = PickResult.collect_noop
-        while col_res != PickResult.collect_quit and not self.is_complete():
+        while col_res != PickResult.collect_quit and not self.is_complete(group):
             col_res, col_msg = self.collect_next()
             if col_res == PickResult.collect_error:
                 print(bold(red(self.tui_indent_str + col_msg)))
@@ -926,6 +937,9 @@ class CalInfo():
             return True
         else:
             print('Looser User quit.')
+
+    def log_msg(self):
+        pass
 
     def print_info(self):
 
@@ -999,4 +1013,9 @@ class CalInfo():
         print(self.tui_indent_str, lfzpertlbl, lfpert)
         print(self.tui_indent_str, hfzpertlbl, hfpert)
         print(banner)
+
+
+    def save_log(self, log_msg):
+        pass
+
 
