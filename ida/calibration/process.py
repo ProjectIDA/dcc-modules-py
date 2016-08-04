@@ -217,8 +217,6 @@ def analyze_cal_component(fullpaz, lfpertndxs, hfpertndxs, opsr, lftf_f, lf_tf, 
         # Setting paz perturbation map and splitting...
         hf_paz_pert = fullpaz.make_partial(hfpertndxs, hf_norm_freq)
 
-        print('hf_pert_paz:', hf_paz_pert)
-
         # computing response of perturbed paz...
         # initial response of paz_pert over freq_band of interest
         hf_resp0 = ida.signals.utils.compute_response(hfmeas_f_t, hf_paz_pert)

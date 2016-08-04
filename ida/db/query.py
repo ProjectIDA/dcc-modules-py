@@ -24,15 +24,6 @@ from pandas.core.frame import DataFrame
 import ida.db.datascope.query
 
 
-def find_sensor_file(df, station, loca, comp, date_8601_str):
-
-    if isinstance(df, DataFrame):
-        dfile_list = ida.db.datascope.query.find_sensor_file(df, station, loca, comp, date_8601_str)
-    else:
-        raise ValueError('df is not Pandas Data Frame')
-
-    return dfile_list
-
 def get_stages(df, station, loc, chn, date_8601_str):
     '''Query db and return 0 or more stage records for given channel & date'''
 

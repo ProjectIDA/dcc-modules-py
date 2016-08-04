@@ -109,7 +109,7 @@ def save_comp_response_comparison_plot(sta, chan, loc, resp1_fn, resp2_fn, seis_
                               (axlim[0], amp_toler_pcnt),
                               (axlim[1], amp_toler_pcnt),
                               (axlim[1], -amp_toler_pcnt)]
-    poly = Polygon(within_tolerance_verts, facecolor='#D8FFD8', edgecolor='0.9', label='Acceptable Tolerance Band')
+    poly = Polygon(within_tolerance_verts, facecolor='#E6E6E6', edgecolor='0.9', label='Acceptable Tolerance Band')
     ax.add_patch(poly)
     # plt.clf()
 
@@ -142,9 +142,8 @@ def save_comp_response_comparison_plot(sta, chan, loc, resp1_fn, resp2_fn, seis_
     line2, = plt.semilogx(freqs[1:nyq_90pct_freqndx], pdev[:nyq_90pct_freqndx-1], 'r', linewidth=0.75)
     pha_toler_degs = 5.0
     plt.axis([1e-3, nyquist, -pha_toler_degs * 2, pha_toler_degs * 2])
-    poly = Polygon(within_tolerance_verts, facecolor='#D8FFD8', edgecolor='0.9', label='Acceptable Tolerance Band')
+    poly = Polygon(within_tolerance_verts, facecolor='#E6E6E6', edgecolor='0.9', label='Acceptable Tolerance Band')
     ax.add_patch(poly)
-    # plt.clf()
 
     return f100, f101
 
@@ -304,7 +303,6 @@ def save_response_comparison_plots(sta, chancodes, loc, amp_fn, pha_fn, seis_mod
     poly = Polygon(within_tolerance_verts, facecolor='#D8FFD8', edgecolor='0.9', label='Acceptable Tolerance Band')
     ax.add_patch(poly)
     #
-    # plt.show()
     f101.savefig(pha_fn, dpi=400)
     plt.clf()
 
@@ -404,7 +402,6 @@ def cross_tf_plot(sta: object, loc: object, chn: object, sensor: object, ondate:
         poly = Polygon(tol_verts, facecolor='#D8FFD8', edgecolor='0.9', label='Acceptable Tolerance Band')
         subp.add_patch(poly)
 
-    # subp = plt.subplot(3,1,3)
     subp = plt.subplot(gspec[2])
     plt.title('{} TF on {}\n{} {}-{} ({})'.format(
         title_substr + ' Freq', ondate, sta.upper(), loc, chn.upper(), sensor.upper()
@@ -414,7 +411,6 @@ def cross_tf_plot(sta: object, loc: object, chn: object, sensor: object, ondate:
     plt.grid(which='both')
     plt.semilogx(freq_plt, coh_plt)
     plt.xlim(freq_plt[0], freq_limit)
-    ax = plt.axis()
-    plt.axis([samp_rate / 1e4, nyq, min(.99, ax[2]), 1.0])
+    plt.axis([samp_rate / 1e4, nyq, 0.95, 1.0])
 
     return fig

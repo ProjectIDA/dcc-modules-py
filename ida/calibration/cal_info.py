@@ -2,9 +2,10 @@
 
 # from time import strptime
 import glob
-from os import getcwd
+from os import getcwd, environ
 from os.path import exists, abspath, join
 from pathlib import Path
+import datetime
 
 from fabulous.color import bold, blue, red, green
 from pandas.core.frame import DataFrame
@@ -14,7 +15,7 @@ from ida.instruments import CALTYPE_RBLF, CALTYPE_RBHF
 from ida.calibration import nom_resp_for_model, local_resp_files
 from ida.signals.paz import PAZ
 from ida.db.io import read
-from ida.db.query import find_sensor_file, get_stages
+from ida.db.query import get_stages
 
 VERSION = '0.1'
 
@@ -948,13 +949,9 @@ class CalInfo():
                 self.collect_backup()
 
         if col_res != PickResult.collect_quit:
-            self.print_info()
             return True
         else:
             print('Looser User quit.')
-
-    def log_msg(self):
-        pass
 
     def print_info(self):
 
@@ -1012,9 +1009,6 @@ class CalInfo():
               chanlbl, chan,
               ctbtolbl, ctbto,
               senlbl, sen)
-        # print(self.tui_indent_str, stalbl, sta, loclbl, loc, senlbl, sen)
-        # print(self.tui_indent_str, complbl, comp, chanlbl, chan, ctbtolbl, ctbto)
-        # print(self.tui_indent_str, lfdatelbl, lfdate, hfdatelbl, hfdate)
         print(self.tui_indent_str, lfpathlbl, lfpath)
         print(self.tui_indent_str, lffilelbl, lffile)
         print(self.tui_indent_str, hfpathlbl, hfpath)
@@ -1025,7 +1019,40 @@ class CalInfo():
         print(banner)
 
 
-    def save_log(self, log_msg):
-        pass
+    def __str__(self):
 
+        staloc = '{:>8}'.format('Sta-Loc:') + '{:<8}'.format(self.sta.upper() + '-' + self.loc)
+        opsr =   '{:>3}'.format('SR:') + '{:<4}'.format(self.opsr)
+        comp =   '{:>4}'.format('Comp:') + '{:<3}'.format(self.comp)
+        chan =   '{:>4}'.format('Chan:') + '{:<6}'.format(self.chan)
+        ctbto =  '{:>5}'.format('CTBTO:') + '{:<3}'.format(self.ctbto)
+        sen =    '{:>4}'.format('Sen:') + '{:<10}'.format(self.sensor.upper())
+        lffile = '{:>8}'.format('LF File:') + '{}'.format(self.lffile)
+        hffile = '{:>8}'.format('HF File:') + '{}'.format(self.hffile)
+        lfpath = '{:>8}'.format('LF Path:') + '{}'.format(self.lfpath)
+        hfpath = '{:>8}'.format('HF Path:') + '{}'.format(self.hfpath)
+        respfn = '{:>16}'.format('Starting Resp:') + '{}'.format(self.respfn)
+        lfpert = '{:>16}'.format('LF Pert [z]/[p]:') + \
+                  '{} / {}'.format(self.fullpaz.zeros()[self.lfpert[1]] if self.fullpaz and self.lfpert else '',
+                                  self.fullpaz.poles()[self.lfpert[0]] if self.fullpaz and self.lfpert else '',)
+        hfpert = '{:>16}'.format('HF Pert [z]/[p]:') + \
+                 '{} / {}'.format(self.fullpaz.zeros()[self.hfpert[1]] if self.fullpaz and self.hfpert else '',
+                                  self.fullpaz.poles()[self.hfpert[0]] if self.fullpaz and self.hfpert else '',)
 
+        now = datetime.datetime.now(datetime.timezone(datetime.timedelta(0)))
+        banner = '=' * 70 + '\n'
+        txt = banner
+        # noinspection PyArgumentList
+        txt = txt + 'Processed on: ' + now.astimezone().strftime('%Y-%m-%d %H:%M:%S %Z') + \
+              'by user: ' + environ['USER'] + '\n'
+        txt = txt + staloc + opsr + comp + chan + ctbto + sen + '\n'
+        txt = txt + lfpath + '\n'
+        txt = txt + lffile + '\n'
+        txt = txt + hfpath + '\n'
+        txt = txt + hffile + '\n'
+        txt = txt + respfn + '\n'
+        txt = txt + lfpert + '\n'
+        txt = txt + hfpert + '\n'
+        txt = txt + banner + '\n'
+
+        return txt
