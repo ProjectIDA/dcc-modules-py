@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 # from time import strptime
-import argparse
 import glob
 from os import getcwd
 from os.path import exists, abspath, join
@@ -23,45 +22,60 @@ VERSION = '0.1'
 class CalInfo():
 
     STARTING_GROUP = 1
-    FITTING_GROUP = 2
+    LF_FITTING_GROUP = 2
+    HF_FITTING_GROUP = 3
+
+    CAL_TYPE_TITLE = {
+        CALTYPE_RBLF: 'LOW Freq',
+        CALTYPE_RBHF: 'HIGH Freq'
+    }
 
     tui_indent = 4
     tui_indent_str = ' '*tui_indent
 
     def __init__(self, cal_raw_dir, resp_cur_dir, resp_nom_dir, cal_analysis_dir):
-        if exists(abspath(cal_raw_dir)):
+        if cal_raw_dir and exists(abspath(cal_raw_dir)):
             self.cal_raw_dir = cal_raw_dir
         else:
             self.cal_raw_dir = ''
             raise ValueError(self.tui_indent_str +
-                             bold(red('Error: IDA Cal Raw directory [' + cal_raw_dir + '] does not exist.')))
+                             bold(red(
+                                 'Error: IDA Cal Raw directory [' + cal_raw_dir + '] unspecified or does not exist.'
+                             )))
 
-        if exists(abspath(resp_cur_dir)):
+        if resp_cur_dir and exists(abspath(resp_cur_dir)):
             self.resp_cur_dir = resp_cur_dir
         else:
             raise ValueError(self.tui_indent_str +
-                             bold(red('Error: Current IDA Response directory [' + resp_cur_dir + '] does not exist.')))
+                             bold(red(
+                                 'Error: IDA Response directory [' + resp_cur_dir + '] unspecified or does not exist.'
+                             )))
 
-        if exists(abspath(resp_nom_dir)):
+        if resp_nom_dir and exists(abspath(resp_nom_dir)):
             self.resp_nom_dir = resp_nom_dir
         else:
             raise ValueError(self.tui_indent_str +
-                             bold(red('Error: IDA NOMINAL Response irectory [' + resp_nom_dir + '] does not exist.')))
+                             bold(red(
+                                 'Error: IDA NOMINAL Response irectory [' + resp_nom_dir + '] unspecified or does not exist.'
+                             )))
 
-        if exists(abspath(cal_analysis_dir)):
+        if cal_analysis_dir and exists(abspath(cal_analysis_dir)):
             self.cal_analysis_dir = cal_analysis_dir
         else:
             self.cal_analysis_dir = ''
             raise ValueError(self.tui_indent_str +
-                             bold(red('Error: IDA Cal Analysis directory [' + cal_analysis_dir + '] does not exist.')))
+                             bold(red(
+                                 'Error: IDA Cal Analysis directory [' + cal_analysis_dir + '] unspecified or does not exist.'
+                             )))
 
         self._info = {
-            'staloc': None,
+            'sta': None,
+            'loc': None,
             'sensor': None,
             'comp': None,
             'ctbto': None,
             'chan': None,
-            'opsr': None, #todo: query user or DB for this
+            'opsr': None,
             'lfdate': None,
             'hfdate': None,
             'lffile': None,
@@ -75,8 +89,12 @@ class CalInfo():
             'hfpert': None,
         }
 
+        self.omit_lf = False
+        self.omit_hf = False
+
         _, self.stages_df = read('datascope', 'stage')
-        self.chn_stages = []
+        self._lf_chn_stages = None
+        self._hf_chn_stages = None
 
     def reset(self, key_list):
         for key in key_list:
@@ -96,32 +114,32 @@ class CalInfo():
             raise TypeError('Invalid type for ' + valname + '. Should be ' + str(valtype))
 
     @property
-    def staloc(self):
-        return self._info['staloc'] if self._info['staloc'] else ''
-
-    @staloc.setter
-    def staloc(self, value):
-
-        self.reset_all()
-        if value:
-            self.check_type(value, str, 'staloc')
-            self._info['staloc'] = value if exists(join(self.cal_raw_dir, value)) else None
-        else:
-            self._info['staloc'] = None
-
-    @property
     def sta(self):
-        if self.staloc and len(self.staloc) > 2:
-            return self.staloc[:-2]
+        return self._info['sta'] if self._info['sta'] else ''
+
+    @sta.setter
+    def sta(self, value):
+        if value:
+            self.check_type(value, str, 'Station code')
+            self._info['sta'] = value
         else:
-            return ''
+            self._info['sta'] = None
+
+        self.reset_all_except(['sta'])
 
     @property
     def loc(self):
-        if self.staloc and len(self.staloc) > 2:
-            return self.staloc[-2:]
+        return self._info['loc'] if self._info['loc'] else ''
+
+    @loc.setter
+    def loc(self, value):
+        if value:
+            self.check_type(value, str, 'Location code')
+            self._info['loc'] = value
         else:
-            return ''
+            self._info['loc'] = None
+
+        self.reset_all_except(['sta', 'loc'])
 
     @property
     def sensor(self):
@@ -130,16 +148,16 @@ class CalInfo():
     @sensor.setter
     def sensor(self, value):
 
-        if self._info['staloc']:
-            if value:
-                self.check_type(value, str, 'sensor')
-                self._info['sensor'] = value if exists(join(self.cal_raw_dir,
-                                                            self.staloc,
-                                                            value)) else None
-            else:
-                self._info['sensor'] = None
+        if value:
+            self.check_type(value, str, 'sensor')
+            self._info['sensor'] = value if exists(join(self.cal_raw_dir,
+                                                        self.sta,
+                                                        self.loc,
+                                                        value)) else None
+        else:
+            self._info['sensor'] = None
 
-            self.reset_all_except(['staloc', 'sensor', 'comp',' chan'])
+        self.reset_all_except(['sta', 'loc', 'sensor', 'comp',' chan'])
 
     @property
     def comp(self):
@@ -151,11 +169,10 @@ class CalInfo():
         if value:
             self.check_type(value, str, 'component')
             value = value.upper()
-            if value in ['Z', 'N', 'E']:
+            if value in ['Z', '1', '2']:
                 self._info['comp']= value
-                self.reset(['chan'])
             else:
-                raise ValueError('Invalid value for Component: ' + value + ". Should be one of ['Z', 'N', 'E']")
+                raise ValueError('Invalid value for Component: ' + value + ". Should be one of ['Z', '1', '2']")
         else:
             self._info['comp'] = None
 
@@ -200,8 +217,11 @@ class CalInfo():
     @opsr.setter
     def opsr(self, value):
 
-        self.check_type(value, (int, float), 'operating sample rate')
-        self._info['opsr'] = value
+        if value:
+            self.check_type(value, (int), 'Operating sample rate must be an integer')
+            self._info['opsr'] = value
+        else:
+            self._info['opsr'] = None
 
     @property
     def lfdate(self):
@@ -210,11 +230,12 @@ class CalInfo():
     @lfdate.setter
     def lfdate(self, value):
 
-        if self.staloc and self.sensor:
+        if self.sta and self.loc and self.sensor:
             if value:
                 self.check_type(value, str, 'low freq cal date')
                 rbpath = join(self.cal_raw_dir,
-                              self.staloc,
+                              self.sta,
+                              self.loc,
                               self.sensor,
                               CALTYPE_RBLF,
                               value)
@@ -245,15 +266,15 @@ class CalInfo():
     @hfdate.setter
     def hfdate(self, value):
 
-        self.check_type(value, str, 'high freq cal date')
-
-        if self.staloc and self.sensor:
+        if self.sta and self.loc and self.sensor:
             if value:
+                self.check_type(value, str, 'high freq cal date')
                 rbpath = join(self.cal_raw_dir,
-                                      self.staloc,
-                                      self.sensor,
-                                      CALTYPE_RBHF,
-                                      value)
+                              self.sta,
+                              self.loc,
+                              self.sensor,
+                              CALTYPE_RBHF,
+                              value)
                 if exists(rbpath):
                     if self.hfdate != value:
                         self.reset(['hffile'])
@@ -280,11 +301,11 @@ class CalInfo():
     @lffile.setter
     def lffile(self, value):
 
-        if self.staloc and self.sensor and self.lfdate:
+        if self.sta and self.loc and self.sensor and self.lfdate:
 
             if value:
                 self.check_type(value, str, 'low freq cal data filename')
-                fpath = join(self.cal_raw_dir, self.staloc, self.sensor,
+                fpath = join(self.cal_raw_dir, self.sta, self.loc, self.sensor,
                              CALTYPE_RBLF, self.lfdate)
                 if exists(join(fpath, value + '.ms')):
                     self._info['lffile'] = value
@@ -307,11 +328,10 @@ class CalInfo():
     @hffile.setter
     def hffile(self, value):
 
-        if self.staloc and self.sensor and self.hfdate:
-
+        if self.sta and self.loc and self.sensor and self.hfdate:
             if value:
                 self.check_type(value, str, 'high freq cal data filename')
-                fpath = join(self.cal_raw_dir, self.staloc, self.sensor,
+                fpath = join(self.cal_raw_dir, self.sta, self.loc, self.sensor,
                              CALTYPE_RBHF, self.hfdate)
                 if exists(join(fpath, value + '.ms')):
                     self._info['hffile'] = value
@@ -334,13 +354,11 @@ class CalInfo():
     @respfn.setter
     def respfn(self, value):
 
-        if self.staloc and self.comp and self.sensor and self.lfdate:
-
-            if value:
-                self.check_type(value, str, 'response filename')
-                self._info['respfn'] = value if exists(value) else None
-            else:
-                self._info['respfn'] = None
+        if value:
+            self.check_type(value, str, 'Response filename')
+            self._info['respfn'] = value if exists(value) else None
+        else:
+            self._info['respfn'] = None
 
     @property
     def fullpaz(self):
@@ -406,67 +424,36 @@ class CalInfo():
     def __repr__(self):
         return str(self._info)
 
-    def select_raw_cal_staloc(self, staloc_stub):
-
-        staloc_stub = staloc_stub.lower()
-        stalocdirlist = glob.glob(join(self.cal_raw_dir, staloc_stub + '*[01][01]'))
-        stalocdirlist = sorted([Path(item).stem for item in stalocdirlist])
-
-        errmsg = ''
-        if stalocdirlist:
-            self.print_info()
-            result, _, user_choice_groups, _ = pick2([stalocdirlist],
-                                                              title='Select Raw Cal Sta+Loc',
-                                                              prompt='Select # of desired StaLoc (or "q" to quit): ',
-                                                              implicit_quit_q=True, menu_on_error=True,
-                                                              err_message='Invalid selection. Please try again.',
-                                                              indent_width=self.tui_indent)
-            if result == PickResult.collect_ok:
-                ndx = user_choice_groups[0][0]
-                self.staloc = stalocdirlist[ndx]
-
-        else:
-            result = PickResult.collect_error
-            errmsg = 'No station directories found in: ' + abspath(self.cal_raw_dir)
-
-        return result, errmsg
-
     def select_raw_cal_sensor(self):
 
-        staloc = self._info['staloc']
-        sensordirlist = glob.glob(join(self.cal_raw_dir, staloc, '*'))
+        staloc_path = join(self.cal_raw_dir, self.sta, self.loc)
+        sensordirlist = glob.glob(join(staloc_path, '*'))
         sensordirlist = sorted([Path(item).stem for item in sensordirlist])
         list_len = len(sensordirlist)
 
         errmsg = ''
-        if list_len > 1:
-            self.print_info()
-            result, user_choices, user_choice_groups, _ = pick2([sensordirlist],
-                                                              title='Select Sensor',
-                                                              prompt='Select # of desired SENSOR ("q" => quit, "b" => back): ',
-                                                              implicit_quit_q=True, implicit_back_b=True,
-                                                              menu_on_error=True, err_message='Invalid selection. Please try again.',
-                                                              indent_width=self.tui_indent)
+        if list_len > 0:
+            result, _, user_choice_groups, _ = pick2([sensordirlist],
+                                                     title='Select Sensor',
+                                                     prompt='Select # of desired SENSOR ("q" => quit): ',
+                                                     implicit_quit_q=True,
+                                                     menu_on_error=True, err_message='Invalid selection. Please try again.',
+                                                     indent_width=self.tui_indent)
             if result == PickResult.collect_ok:
                 ndx = user_choice_groups[0][0]
                 self.sensor = sensordirlist[ndx]
 
-        elif list_len == 1:
-            self.sensor = sensordirlist[0]
-            result = PickResult.collect_ok
         else:
             result = PickResult.collect_error
-            errmsg = 'No sensor directories found in: ' + abspath(join(self.cal_raw_dir, staloc))
+            errmsg = 'No sensor directories found in: ' + abspath(staloc_path)
 
         return result, errmsg
 
     def select_component(self):
 
-        self.print_info()
-
         complist = [('Z', 'Vertical'),
-                    ('N', 'North/South'),
-                    ('E', 'East/West')]
+                    ('1', '1'),
+                    ('2', '2')]
         result, _, user_choice_groups, _ = pick2([complist],
                                                title='Select Component',
                                                prompt='Enter selection ("q" => quit, "b" => back): ',
@@ -482,14 +469,10 @@ class CalInfo():
 
     def select_ctbto_flag(self):
 
-        self.print_info()
+        flaglist = [('Y', 'Yes: Sensor requires a CTBTO Calibration Report'),
+                    ('N', 'No: Not a CTBTO sensor')]
 
-        ctbto_dict = {
-            'Y': 'Yes: Sensor requires a CTBTO Calibration Report',
-            'N': 'No: Not a CTBTO sensor'
-        }
-
-        flaglist = [item for item in ctbto_dict.items()]
+        # flaglist = [item for item in ctbto_dict.items()]
         result, _, user_choice_groups, _ = pick2([flaglist], 'CTBTO Status',
                                                prompt='Is this a CTBTO sensor ("q" => quit, "b" => back)? ',
                                                implicit_quit_q=True, implicit_back_b=True,
@@ -504,20 +487,15 @@ class CalInfo():
 
     def enter_chan(self):
 
-        self.print_info()
-
         result = PickResult.collect_noop
         while result not in [PickResult.collect_quit,
                              PickResult.collect_back,
                              PickResult.collect_ok]:
             print()
-            chan = input(bold(blue(self.tui_indent_str + 'Enter 3 character channel code: ')))
+            chan = input(bold(blue(self.tui_indent_str + ' Enter 3 character channel code: ')))
             chan = chan.upper()
             if (len(chan) == 3):
-                is_valid = (chan[2] == self.comp) or \
-                           (chan[2] in ['1', 'N'] and self.comp == 'N') or \
-                           (chan[2] in ['2', 'E'] and self.comp == 'E')
-                if is_valid:
+                if chan[2] in ['Z', '1', '2']:
                     self.chan = chan
                     result = PickResult.collect_ok
                 else:
@@ -534,52 +512,74 @@ class CalInfo():
             if result == PickResult.collect_error:
                 print()
                 print(self.tui_indent_str + bold(red('Invalid channel code.')))
-                print(self.tui_indent_str + bold(red('Make sure 3 characters, matches component "{}" and try again'.format(self.comp))))
+                print(self.tui_indent_str + bold(red('Make sure code is 3 characters and ends in Z, 1 or 2.')))
                 print()
+
+        return result
+
+    def enter_opsr(self):
+
+        result = PickResult.collect_noop
+        while result not in [PickResult.collect_quit,
+                             PickResult.collect_back,
+                             PickResult.collect_ok]:
+            print()
+            opsr_str = input(bold(blue(self.tui_indent_str + ' Enter sensor operating frequency [20, 40]: ')))
+
+            try:
+                opsr = round(float(opsr_str))
+                if opsr not in [20, 40]:
+                    print()
+                    print(self.tui_indent_str + bold(red(
+                        'ERROR: Unsupported frequency. 20 and 40 are the supported frrequencies.'
+                    )))
+                    print()
+                else:
+                    self.opsr = opsr
+                    result = PickResult.collect_ok
+            except:
+                if opsr_str.upper() == 'Q':
+                    result = PickResult.collect_quit
+                elif opsr_str.upper() == 'B':
+                    result = PickResult.collect_back
+                else:
+                    print()
+                    print(self.tui_indent_str + bold(red('ERROR: Invalid frequency. Please enter frequency in Hz.')))
+                    print()
 
         return result
 
     def select_raw_cal_date(self, cal_type):
 
-        title_dict = {
-            CALTYPE_RBLF: 'Low Freq',
-            CALTYPE_RBHF: 'High Freq'
-        }
-
         if cal_type not in [CALTYPE_RBLF, CALTYPE_RBHF]:
             raise ValueError('Invalid CAL TYPE supplied: ' + cal_type)
 
-        datedirlist = glob.glob(join(self.cal_raw_dir, self.staloc, self.sensor, cal_type, '*'))
+        datedirlist = glob.glob(join(self.cal_raw_dir, self.sta, self.loc, self.sensor, cal_type, '*'))
         datedirlist = sorted([Path(item).stem for item in datedirlist])
 
+        omit_option = [('S', 'Skip {} processing'.format(CalInfo.CAL_TYPE_TITLE[cal_type]))]
+
         errmsg = ''
-        if len(datedirlist) > 1:
-            self.print_info()
-            result, user_choices, user_choice_groups, _ = pick2([datedirlist],
-                                                    title=title_dict[cal_type] + ' dates for {} {}: '.format(self.staloc,
-                                                                                                            self.sensor),
-                                                    prompt='Select # of desired DATE ("q" => quit, "b" => back): ',
-                                                    implicit_quit_q=True,
-                                                    menu_on_error=True, err_message='Invalid selection. Please try again.',
-                                                    indent_width=self.tui_indent)
-            if result == PickResult.collect_ok:
-                    ndx = user_choice_groups[0][0]
-                    if cal_type == CALTYPE_RBLF:
-                        self.lfdate = datedirlist[ndx]
-                    else:
-                        self.hfdate = datedirlist[ndx]
-
-        elif len(datedirlist) == 1:
-            result = PickResult.collect_ok
+        result, choices, user_choice_groups, _ = pick2([datedirlist, omit_option],
+                                                 title=CalInfo.CAL_TYPE_TITLE[cal_type] + ' dates for {} {}: '.format(self.sta,
+                                                                                                          self.loc,
+                                                                                                          self.sensor),
+                                                 prompt='Select # of desired DATE ("q" => quit, "b" => back): ',
+                                                 implicit_quit_q=True, implicit_back_b=True,
+                                                 menu_on_error=True, err_message='Invalid selection. Please try again.',
+                                                 indent_width=self.tui_indent)
+        if result == PickResult.collect_ok:
+            choice = choices[0].upper()
             if cal_type == CALTYPE_RBLF:
-                self.lfdate = datedirlist[0]
+                if choice == 'S':
+                    self.omit_lf = True
+                else:
+                    self.lfdate = datedirlist[user_choice_groups[0][0]]
             else:
-                self.hfdate = datedirlist[0]
-
-        else:
-            result = PickResult.collect_error
-            errmsg = 'No raw {} calibration dates found for sensor {}.'.format(title_dict[cal_type].upper(),
-                                                                               self.sensor.upper())
+                if choice == 'S':
+                    self.omit_hf = True
+                else:
+                    self.hfdate = datedirlist[user_choice_groups[0][0]]
 
         return result, errmsg
 
@@ -590,7 +590,7 @@ class CalInfo():
         pick_groups = []
         group_titles = []
 
-        if isinstance(self.chn_stages, DataFrame) and not self.chn_stages.empty:
+        if isinstance(self.chn_stages, DataFrame):
             resp_file = self.chn_stages.iloc[0].dfile
             if resp_file:
                 sensor_fn_list = [resp_file]
@@ -613,14 +613,12 @@ class CalInfo():
 
         errmsg = ''
         if len(pick_groups) > 0:
-            self.print_info()
             result, user_choices, _, choice_tpls = pick2(pick_groups, 'Select Response file to use as starting model',
-                                                         prompt='Select # of desired DATE ("q" => quit, "b" => back): ',
+                                                         prompt='Select # of desired response file ("q" => quit, "b" => back): ',
                                                          group_titles=group_titles,
                                                          implicit_quit_q=True, implicit_back_b=True,
                                                          menu_on_error=True, err_message='Invalid choice. Please try again',
                                                          indent_width=self.tui_indent)
-
             if result == PickResult.collect_ok:
                 fn = pick_groups[choice_tpls[0][0]][choice_tpls[0][1]]
                 if choice_tpls[0][0] == 0:     #  first group is single current resp file as in DB
@@ -639,30 +637,42 @@ class CalInfo():
 
         return result, errmsg
 
-    def select_perturb_map(self):
+    def select_perturb_map(self, cal_type, paz=None):
+
+        if paz:
+            starting_paz = paz
+        else:
+            starting_paz = self.fullpaz
 
         grp_titles = ['', 'Zeros', 'Poles']
-        prompt = 'Enter comma separated list ("q" => quit, "b" => back): '
+        prompt = 'Enter comma separated list ("q" => quit): '
 
-        if not isinstance(self.fullpaz, PAZ):
-            raise TypeError('fullpaz must be a populated PAZ object')
-
-        paz_fit_lf = self.fullpaz.make_partial2(norm_freq=1.0, partial_mode=self.fullpaz.PARTIAL_FITTING_LF)
+        if not isinstance(starting_paz, PAZ):
+            raise TypeError('PAZ must be a populated PAZ object')
 
         poles_pert_def, zeros_pert_def = self.fullpaz.perturb_defaults()
+        if cal_type == CALTYPE_RBLF:
+            paz_fit = starting_paz.make_partial2(norm_freq=1.0, partial_mode=self.fullpaz.PARTIAL_FITTING_LF)
+            ppert_def = poles_pert_def[0]
+            zpert_def = zeros_pert_def[0]
+        else:
+            paz_fit = starting_paz.make_partial2(norm_freq=1.0, partial_mode=self.fullpaz.PARTIAL_FITTING_HF)
+            ppert_def = poles_pert_def[1]
+            zpert_def = zeros_pert_def[1]
+
         defchoice = [('D', 'Use Defaults (indicated by "<==")')]
 
         # make list of LF p/z to user perturbing choices
         # Do LOW FREQ FIRST
         zero_pert_choices = []
         pole_pert_choices = []
-        for ndx, val in enumerate(paz_fit_lf.zeros()):
-            if ndx in zeros_pert_def[0]:
+        for ndx, val in enumerate(paz_fit.zeros()):
+            if ndx in zpert_def:
                 zero_pert_choices.append(str(val) + ' <==')
             else:
                 zero_pert_choices.append(str(val))
-        for ndx, val in enumerate(paz_fit_lf.poles()):
-            if ndx in poles_pert_def[0]:
+        for ndx, val in enumerate(paz_fit.poles()):
+            if ndx in ppert_def:
                 pole_pert_choices.append(str(val) + ' <==')
             else:
                 pole_pert_choices.append(str(val))
@@ -670,57 +680,42 @@ class CalInfo():
         errmsg = ''
         pert_choices = [defchoice, zero_pert_choices, pole_pert_choices]
         result, choices, pert_choice_groups, _ = pick2(pert_choices,
-                                                        'Select LOW FREQ zeros & poles to perturb',
+                                                        'Select {} zeros & poles to perturb'.format(CalInfo.CAL_TYPE_TITLE[cal_type]),
                                                         prompt=prompt, group_titles=grp_titles,
                                                         multiple_choice=True,
-                                                        implicit_quit_q=True, implicit_back_b=True,
+                                                        implicit_quit_q=True,
                                                         menu_on_error=True, err_message='Invalid entry. Please try again',
                                                         indent_width=self.tui_indent)
 
         if result == PickResult.collect_ok:
             if choices[0].upper() == 'D':  # using defaults
-                self.lfpert = (poles_pert_def[0], zeros_pert_def[0])  # beware, put poles then zeros in this map tuple
+                pert = (ppert_def, zpert_def)  # beware, put poles then zeros in this map tuple
             else:
-                self.lfpert = (pert_choice_groups[2], pert_choice_groups[1])
+                pert = (pert_choice_groups[2], pert_choice_groups[1])
 
-            # NOW HIGH FREQ
-            paz_fit_hf = self.fullpaz.make_partial2(norm_freq=1.0, partial_mode=self.fullpaz.PARTIAL_FITTING_HF)
-
-            zero_pert_choices = []
-            pole_pert_choices = []
-            for ndx, val in enumerate(paz_fit_hf.zeros()):
-                if ndx in zeros_pert_def[1]:
-                    zero_pert_choices.append(str(val) + ' <==')
-                else:
-                    zero_pert_choices.append(str(val))
-            for ndx, val in enumerate(paz_fit_hf.poles()):
-                if ndx in poles_pert_def[1]:
-                    pole_pert_choices.append(str(val) + ' <==')
-                else:
-                    pole_pert_choices.append(str(val))
-
-            pert_choices = [defchoice, zero_pert_choices, pole_pert_choices]
-            success, choices, pert_choice_groups, _ = pick2(pert_choices,
-                                                            'Select HIGH FREQ zeros & poles to perturb',
-                                                            prompt=prompt, group_titles=grp_titles,
-                                                            multiple_choice=True,
-                                                            implicit_quit_q=True, implicit_back_b=True,
-                                                            menu_on_error=True,
-                                                            err_message='Invalid entry. Please try again',
-                                                            indent_width=self.tui_indent)
-            # print(success, pert_choice_groups)
-            if result == PickResult.collect_ok:
-                if choices[0].upper() == 'D':  # using defaults
-                    self.hfpert = (poles_pert_def[1], zeros_pert_def[1])  # beware, put poles then zeros in this map tuple
-                else:
-                    self.hfpert = (pert_choice_groups[2], pert_choice_groups[1])
+            if cal_type == CALTYPE_RBLF:
+                self.lfpert = pert
+            else:
+                self.hfpert = pert
 
         return result, errmsg
 
+    @property
+    def chn_stages(self):
+
+        if isinstance(self._lf_chn_stages, DataFrame) and not self._lf_chn_stages.empty:
+            stages_df = self._lf_chn_stages
+        elif isinstance(self._hf_chn_stages, DataFrame) and not self._hf_chn_stages.empty:
+            stages_df = self._hf_chn_stages
+        else:
+            stages_df = None
+
+        return stages_df
+
     def sensor_cnt(self):
 
-        if self.staloc:
-            return len(glob.glob(join(self.cal_raw_dir, self.staloc, '*')))
+        if self.sta and self.loc:
+            return len(glob.glob(join(self.cal_raw_dir, self.sta, self.loc, '*')))
         else:
             return 0
 
@@ -728,8 +723,8 @@ class CalInfo():
         if cal_type not in [CALTYPE_RBLF, CALTYPE_RBHF]:
             raise ValueError('Invalid CAL TYPE supplied: ' + cal_type)
 
-        if self.staloc and self.sensor:
-            return len(glob.glob(join(self.cal_raw_dir, self.staloc, self.sensor, cal_type, '*')))
+        if self.sta and self.loc and self.sensor:
+            return len(glob.glob(join(self.cal_raw_dir, self.sta, self.loc, self.sensor, cal_type, '*')))
         else:
             return 0
 
@@ -745,8 +740,8 @@ class CalInfo():
             adate = self.hfdate
 
         result = PickResult.collect_noop
-        if self.staloc and self.sensor and adate:
-            dpath = abspath(join(self.cal_raw_dir, self.staloc, self.sensor, cal_type, adate))
+        if self.sta and self.loc and self.sensor and adate:
+            dpath = abspath(join(self.cal_raw_dir, self.sta, self.loc, self.sensor, cal_type, adate))
 
             if exists(dpath):
                 msfiles = glob.glob(join(dpath, '*.ms'))
@@ -769,29 +764,21 @@ class CalInfo():
 
         return result, errmsg
 
-    def new_resp_filename_stem(self):
-        if self.is_complete(self.FITTING_GROUP):
-            stem = self.sensor.lower() + '_' + self.staloc.lower() + '_' + self.lfdate + "_" + self.comp.upper()
+    def new_filename_stem(self):
+        if self.sta and self.loc and self.sensor and self.comp and (self.lfdate or self.hfdate):
+            adate = self.lfdate if self.lfdate else self.hfdate
+            stem = self.sensor.lower() + '_' + self.sta.lower() + '_' + self.loc + '_' + adate.replace('-', '') + "_" + self.comp.upper()
         else:
             stem = 'INCOMPLETE_CAL_INFO'
 
         return stem
 
-    def is_complete(self, group):
+    def is_complete(self):  # , group):
 
-        if group == self.STARTING_GROUP:
-            done = self.staloc and self.sensor and self.opsr and \
-                   self.comp and self.chan and \
-                   self.lfdate and self.hfdate and \
-                   self.lffile and self.hffile and \
-                   self.respfn and self.fullpaz
-        elif group == self.FITTING_GROUP:
-            done = self.staloc and self.sensor and self.opsr and \
-                   self.comp and self.chan and \
-                   self.lfdate and self.hfdate and \
-                   self.lffile and self.hffile and \
-                   self.respfn and self.fullpaz and \
-                   self.lfpert and self.hfpert and self.ctbto
+        done = self.sta and self.loc and self.sensor and \
+               self.opsr and self.comp and self.chan and \
+               (self.lfdate or self.omit_lf) and (self.hfdate or self.omit_hf) and \
+               self.respfn and self.fullpaz and self.ctbto
 
         return done
 
@@ -804,78 +791,94 @@ class CalInfo():
             self.ctbto = None
             done = True
 
-        if self.lfpert or self.hfpert:
-            self.lfpert = None
-            self.hfpert = None
-            done = True
-
-        if self.respfn:
+        # if not done and self.hfpert:
+        #     self.hfpert = None
+        #     done = True
+        #
+        # if not done and self.lfpert:
+        #     self.lfpert = None
+        #     done = True
+        #
+        if not done and self.respfn:
             self.respfn = None
             self.fullpaz = None
             done = True
 
+        if not done and self.opsr:
+            self.opsr = None
+            done = True
+            if isinstance(self.chn_stages, DataFrame): # assume opsr pulled from DB, so back to chan
+                self.chan = None
+
         if not done and self.chan:
             self.chan = None
-            self.chn_stages = None  # clear stages since channel changing
+            self._lf_chn_stages = None  # clear stages since channel changing
+            self._hf_chn_stages = None  # clear stages since channel changing
             done = True
 
         if not done and self.comp:
             self.comp = None
             done = True
 
-        if not done and self.hfdate:
+        if not done and (self.hfdate or self.omit_hf):
             self.hfdate = None
             self.hffile = None
+            self.omit_hf = False
+            self._hf_chn_stages = None  # clear stages since lfdate (epoch) changing
             self._info['hfpath'] = None
-            done = self.date_cnt(CALTYPE_RBHF) > 1
+            done = True
 
-        if not done and self.lfdate:
+        if not done and (self.lfdate or self.omit_lf):
             self.lfdate = None
             self.lffile = None
+            self.omit_lf = False
+            self._lf_chn_stages = None  # clear stages since lfdate (epoch) changing
             self._info['lfpath'] = None
-            done = self.date_cnt(CALTYPE_RBLF) > 1
+            done = True
 
         if not done and self.sensor:
             self.sensor = None
             done = self.sensor_cnt() > 1
-
-        if not done:
-            self.staloc = None
-            done = True
-
 
     def collect_next(self):
 
         col_res = PickResult.collect_noop
         col_msg = ''
 
-        if not self.staloc:
-            col_res, col_msg = self.select_raw_cal_staloc('')
-
-        elif not self.sensor:
+        if not self.sensor:
             col_res, col_msg = self.select_raw_cal_sensor()
-            if col_res == PickResult.collect_back:
-                self.staloc = ''
-                col_res = PickResult.collect_ok
 
-        elif not self.lfdate:
+        elif not self.lfdate and not self.omit_lf:
             col_res, col_msg = self.select_raw_cal_date(CALTYPE_RBLF)
             if col_res == PickResult.collect_back:
                 self.collect_backup()
                 col_res = PickResult.collect_ok
+            elif col_res == PickResult.collect_ok:
+                if not self.omit_lf:
+                    col_res, col_msg = self.find_qcal_files(CALTYPE_RBLF)
 
-        elif not self.hfdate:
+        elif not self.hfdate and not self.omit_hf:
             col_res, col_msg = self.select_raw_cal_date(CALTYPE_RBHF)
             if col_res == PickResult.collect_back:
                 self.collect_backup()
                 col_res = PickResult.collect_ok
+            elif col_res == PickResult.collect_ok:
+                if not self.omit_hf:
+                    col_res, col_msg = self.find_qcal_files(CALTYPE_RBHF)
 
-        elif not self.lffile:
-            col_res, col_msg = self.find_qcal_files(CALTYPE_RBLF)
 
-        elif not self.hffile:
-            col_res, col_msg = self.find_qcal_files(CALTYPE_RBHF)
+        elif self.omit_lf and self.omit_hf:
+            print(bold(red(CalInfo.tui_indent_str + ' ERROR: You can not skip both LF and HF processing.\n')))
+            self.omit_lf = False # reset so both dates prompted for again
+            self.omit_hf = False
+            col_res = PickResult.collect_ok
 
+        # elif not self.lffile and not self.omit_lf:
+        #     col_res, col_msg = self.find_qcal_files(CALTYPE_RBLF)
+        #
+        # elif not self.hffile and not self.omit_hf:
+        #     col_res, col_msg = self.find_qcal_files(CALTYPE_RBHF)
+        #
         elif not self.comp:
             col_res = self.select_component()
             if col_res == PickResult.collect_back:
@@ -887,13 +890,27 @@ class CalInfo():
             if col_res == PickResult.collect_back:
                 self.collect_backup()
                 col_res = PickResult.collect_ok
-            else:
-                # good channel, now lets get stages info form db for later use
-                self.chn_stages = get_stages(self.stages_df, self.sta, self.loc, self.chan, self.lfdate)
-                if isinstance(self.chn_stages, DataFrame) and not self.chn_stages.empty:
-                    # get channel freq from stage 3 srate column
-                    # ToDo: bury the srate ref in public acces method to make db independent
-                    self.opsr = self.chn_stages.iloc[2].srate
+            elif col_res == PickResult.collect_ok:
+                # good channel, see if we can pull sample rate out of DB, if available
+                if isinstance(self.stages_df, DataFrame):
+                    if not self.omit_lf:
+                        self._lf_chn_stages = get_stages(self.stages_df, self.sta, self.loc, self.chan, self.lfdate)
+                    elif not self.omit_hf:
+                        self._hf_chn_stages = get_stages(self.stages_df, self.sta, self.loc, self.chan, self.hfdate)
+
+                    if isinstance(self.chn_stages, DataFrame) and not (len(self.chn_stages) < 3):
+                        # get channel freq from stage 3 srate column
+                        # ToDo: bury the srate ref in public acces method to make db independent
+                        try:
+                            self.opsr = round(float(self.chn_stages.iloc[2].srate))
+                        except:
+                            pass
+
+        elif not self.opsr:
+            col_res = self.enter_opsr()
+            if col_res == PickResult.collect_back:
+                self.collect_backup()
+                col_res = PickResult.collect_ok
 
         elif not self.respfn:
             col_res, col_msg = self.select_starting_response_file()
@@ -901,32 +918,30 @@ class CalInfo():
                 self.collect_backup()
                 col_res = PickResult.collect_ok
 
-        elif not (self.lfpert and self.hfpert):
-            col_res, col_msg = self.select_perturb_map()
-            if col_res == PickResult.collect_back:
-                self.collect_backup()
-                col_res = PickResult.collect_ok
-
+        # elif not self.lfpert:
+        #     col_res, col_msg = self.select_perturb_map(CALTYPE_RBLF)
+        #     if col_res == PickResult.collect_back:
+        #         self.collect_backup()
+        #         col_res = PickResult.collect_ok
+        #
+        # elif not self.hfpert:
+        #     col_res, col_msg = self.select_perturb_map(CALTYPE_RBHF)
+        #     if col_res == PickResult.collect_back:
+        #         self.collect_backup()
+        #         col_res = PickResult.collect_ok
+        #
         elif not self.ctbto:
             col_res= self.select_ctbto_flag()
             if col_res == PickResult.collect_back:
                 self.collect_backup()
                 col_res = PickResult.collect_ok
 
-
         return col_res, col_msg
 
-    def collect(self, group):
-
-        if not self.cal_raw_dir:
-            return PickResult.collect_error, \
-                   bold(red(self.tui_indent_str + 'Calibration raw data directory root not set.'))
-        elif not exists(self.cal_raw_dir):
-            return PickResult.collect_error, \
-                   bold(red(self.tui_indent_str + 'Calibration raw data directory does not exist: '+self.cal_raw_dir))
+    def collect_info(self):
 
         col_res = PickResult.collect_noop
-        while col_res != PickResult.collect_quit and not self.is_complete(group):
+        while col_res != PickResult.collect_quit and not self.is_complete():
             col_res, col_msg = self.collect_next()
             if col_res == PickResult.collect_error:
                 print(bold(red(self.tui_indent_str + col_msg)))
@@ -943,12 +958,7 @@ class CalInfo():
 
     def print_info(self):
 
-        if self.staloc:
-            staloc = self.staloc[:-2].upper() + '-' + self.staloc[-2:]
-        else:
-            sta, loc = '', ''
-            staloc = ''
-
+        staloc = self.sta.upper() + '-' + self.loc
         staloc = bold('{:<8}'.format(staloc))
         opsr =   bold('{:<4}'.format(self.opsr))
         comp =   bold('{:<3}'.format(self.comp))
@@ -980,7 +990,7 @@ class CalInfo():
         lfzpertlbl ='{:>16}'.format('LF Pert [z]/[p]:')
         hfzpertlbl ='{:>16}'.format('HF Pert [z]/[p]:')
 
-        stalbl =    str(bold(green(stalbl))) if self.staloc else str(bold(red(stalbl)))
+        stalbl =    str(bold(green(stalbl))) if self.sta and self.loc else str(bold(red(stalbl)))
         opsrlbl =    str(bold(green(opsrlbl))) if self.opsr else str(bold(red(opsrlbl)))
         senlbl =    str(bold(green(senlbl))) if self.sensor else str(bold(red(senlbl)))
         complbl =   str(bold(green(complbl))) if self.comp else str(bold(red(complbl)))

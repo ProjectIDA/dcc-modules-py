@@ -152,17 +152,17 @@ def channel_xform(trace_tpl, xfrm):
     #  traces and xfrms assumed to be ENZ (aka 21Z and XYZ for triaxial seis output) order
     chn_2chrs = trace_tpl[0].stats.channel[:2]
 
-    tr_e = Trace(header=trace_tpl[0].stats.copy(), data=(multiply(trace_tpl[0].data, xfrm[0][0]) +
+    tr_2 = Trace(header=trace_tpl[0].stats.copy(), data=(multiply(trace_tpl[0].data, xfrm[0][0]) +
                                                          multiply(trace_tpl[1].data, xfrm[0][1]) +
                                                          multiply(trace_tpl[2].data, xfrm[0][2]))
                    )
-    tr_e.stats.channel = chn_2chrs + '2'
+    tr_2.stats.channel = chn_2chrs + '2'
 
-    tr_n = Trace(header=trace_tpl[0].stats.copy(), data=(multiply(trace_tpl[0].data, xfrm[1][0]) +
+    tr_1 = Trace(header=trace_tpl[0].stats.copy(), data=(multiply(trace_tpl[0].data, xfrm[1][0]) +
                                                          multiply(trace_tpl[1].data, xfrm[1][1]) +
                                                          multiply(trace_tpl[2].data, xfrm[1][2]))
     )
-    tr_n.stats.channel = chn_2chrs + '1'
+    tr_1.stats.channel = chn_2chrs + '1'
 
     tr_z = Trace(header=trace_tpl[0].stats.copy(), data=(multiply(trace_tpl[0].data, xfrm[2][0]) +
                                                          multiply(trace_tpl[1].data, xfrm[2][1]) +
@@ -173,7 +173,7 @@ def channel_xform(trace_tpl, xfrm):
     # if isinstance(trace_tpl, ida.calibration.qcal_utils.QCalData):
     #     output_trace_tpl = ida.calibration.qcal_utils.QCalData(east=tr_E, north=tr_N, vertical=tr_Z, input=trace_tpl.input.copy())
     # else:
-    output_trace_tpl = (tr_e, tr_n, tr_z)
+    output_trace_tpl = (tr_2, tr_1, tr_z)
 
     return output_trace_tpl
 

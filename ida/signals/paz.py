@@ -454,3 +454,18 @@ class PAZ(object):
         newpaz.h0 = self.h0
 
         return newpaz
+
+    def __str__(self):
+        txt = 'mode: {}, units: {}, h0: {}, \n'.format(self.mode, self.units, self.h0)
+        txt = txt + 'poles: {}\nzeros: {}\n'.format(self._poles, self._zeros)
+        txt = txt + 'LF skip for fitting poles: {}\n'.format(self._poles_no_fitting_count[0])
+        txt = txt + 'HF skip for fitting poles: {}\n'.format(self._poles_no_fitting_count[1])
+        txt = txt + 'LF skip for fitting zeros: {}\n'.format(self._zeros_no_fitting_count[0])
+        txt = txt + 'HF skip for fitting zeros: {}\n'.format(self._zeros_no_fitting_count[1])
+
+        txt = txt + 'LF perturb def poles: {}\n'.format(self._poles_default_pert_ndxs[0])
+        txt = txt + 'HF perturb def poles: {}\n'.format(self._poles_default_pert_ndxs[1])
+        txt = txt + 'LF perturb def zeros: {}\n'.format(self._zeros_default_pert_ndxs[0])
+        txt = txt + 'HF perturb def zeros: {}\n'.format(self._zeros_default_pert_ndxs[1])
+
+        return txt

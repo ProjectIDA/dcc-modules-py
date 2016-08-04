@@ -332,8 +332,8 @@ def apc_plot(sampling_freq, freqs, amp, pha, coh):
     plt.ylim(0.95, 1.05)
     plt.show()
 
-def cross_tf_plot(sta, loc, chn, sensor, ondate, cal_type,
-                  samp_rate, freqs, cr_amp, cr_pha, cr_coh, green_tol_lims=None, grey_tol_lims=None):
+def cross_tf_plot(sta: object, loc: object, chn: object, sensor: object, ondate: object, cal_type: object,
+                  samp_rate: object, freqs: object, cr_amp: object, cr_pha: object, cr_coh: object, green_tol_lims: object = None, grey_tol_lims: object = None) -> object:
     '''Python port of go_parker.m plots of cross.f output'''
 
     band_limit = 0.9  # plot to 70% of nyquist
@@ -414,21 +414,7 @@ def cross_tf_plot(sta, loc, chn, sensor, ondate, cal_type,
     plt.grid(which='both')
     plt.semilogx(freq_plt, coh_plt)
     plt.xlim(freq_plt[0], freq_limit)
-    plt.axis([samp_rate / 1e4, nyq, 0.94, 1.0])
     ax = plt.axis()
-    if grey_tol_lims:
-        tol_verts = [(ax[0], 1.0-(grey_tol_lims[2]/100.0)),
-                     (ax[0], 1.0),
-                     (ax[1], 1.0),
-                     (ax[1], 1.0-(grey_tol_lims[2]/100.0))]
-        poly = Polygon(tol_verts, facecolor='#E6E6E6', edgecolor='0.9', label='Grey Acceptable Tolerance Band')
-        subp.add_patch(poly)
-    if green_tol_lims:
-        tol_verts = [(ax[0], 1.0-(green_tol_lims[2]/100.0)),
-                     (ax[0], 1.0),
-                     (ax[1], 1.0),
-                     (ax[1], 1.0-(green_tol_lims[2]/100.0))]
-        poly = Polygon(tol_verts, facecolor='#D8FFD8', edgecolor='0.9', label='Acceptable Tolerance Band')
-        subp.add_patch(poly)
+    plt.axis([samp_rate / 1e4, nyq, min(.99, ax[2]), 1.0])
 
     return fig

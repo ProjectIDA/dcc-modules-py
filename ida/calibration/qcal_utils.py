@@ -32,7 +32,7 @@ from obspy.core.stream import read
 INPUT_CHANNELS = ['CCF', 'CCS']
 INPUT_CHANNEL_WILDCARD = 'CC[FS]'
 
-QCalData = namedtuple('CalComponentsTpl', ['north', 'east', 'vertical', 'input'])
+QCalData = namedtuple('CalComponentsTpl', ['one', 'two', 'vertical', 'input'])
 QCalFiles = namedtuple('QCalFilesTpl', ['ms_filename', 'log_filename'])
 
 
@@ -158,29 +158,29 @@ def split_qcal_traces(cal_strm):
     :rtype: QCalData
     """
 
-    tr_e, tr_n, tr_z, tr_input = None, None, None, None
+    tr_2, tr_1, tr_z, tr_input = None, None, None, None
 
     for tr in cal_strm:
         comp = tr.stats.channel[2]
         if comp in ['S', 'F']:
             tr_input = tr
-        elif comp in ['N', '1']:
-            tr_n = tr
-        elif comp in ['E', '2']:
-            tr_e = tr
+        elif comp in ['1']:
+            tr_1 = tr
+        elif comp in ['2']:
+            tr_2 = tr
         elif comp in ['Z']:
             tr_z = tr
 
-    if not tr_e:
-        msg = 'Calibration stream missing east/west channel. Contains {}'.format([tr.stats.channel for tr in cal_strm])
+    if not tr_2:
+        msg = 'Calibration stream missing "2" channel. Contains {}'.format([tr.stats.channel for tr in cal_strm])
         logging.error(msg)
         raise Exception(msg)
-    if not tr_n:
-        msg = 'Calibration stream missing north/south channel. Contains {}'.format([tr.stats.channel for tr in cal_strm])
+    if not tr_1:
+        msg = 'Calibration stream missing "1" channel. Contains {}'.format([tr.stats.channel for tr in cal_strm])
         logging.error(msg)
         raise Exception(msg)
     if not tr_z:
-        msg = 'Calibration stream missing vertical channel. Contains {}'.format([tr.stats.channel for tr in cal_strm])
+        msg = 'Calibration stream missing "Z" channel. Contains {}'.format([tr.stats.channel for tr in cal_strm])
         logging.error(msg)
         raise Exception(msg)
     if not tr_input:
@@ -188,6 +188,6 @@ def split_qcal_traces(cal_strm):
         logging.error(msg)
         raise Exception(msg)
 
-    cal_traces = QCalData(east=tr_e, north=tr_n, vertical=tr_z, input=tr_input)
+    cal_traces = QCalData(vertical=tr_z, one=tr_1, two=tr_2, input=tr_input)
 
     return cal_traces

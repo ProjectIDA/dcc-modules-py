@@ -168,14 +168,18 @@ def pick2(picklistgroups, title=None, group_titles=None, prompt=None, multiple_c
 
     return result, user_choices, user_choice_groups, user_choice_tuples
 
-def input_yn(prompt, err_message=None, indent_width=4):
+def input_yn(prompt, err_message=None, indent_width=4, default=None):
 
     indent = (indent_width+1)*' '
+    if default:
+        prompt = prompt + ' [{}]'.format(default)
 
     answered = False
     while not answered:
 
         answer = input(bold(blue(prompt))).upper().strip()
+        if default and answer == '':
+            answer = default
         answered = answer.upper() in ['Y', 'N']
 
         if not answered and err_message:
