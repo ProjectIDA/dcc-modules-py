@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-
-# from time import strptime
 import glob
 from os import getcwd, environ
 from os.path import exists, abspath, join
@@ -77,8 +74,8 @@ class CalInfo():
             'ctbto': None,
             'chan': None,
             'opsr': None,
-            'lfdate': None,
-            'hfdate': None,
+            'lfdatedir': None,
+            'hfdatedir': None,
             'lffile': None,
             'hffile': None,
             'lfpath': None,
@@ -225,11 +222,15 @@ class CalInfo():
             self._info['opsr'] = None
 
     @property
-    def lfdate(self):
-        return self._info['lfdate'] if self._info['lfdate'] else ''
+    def lfdatestr(self):
+        return self.lfdatedir[:10]
 
-    @lfdate.setter
-    def lfdate(self, value):
+    @property
+    def lfdatedir(self):
+        return self._info['lfdatedir'] if self._info['lfdatedir'] else ''
+
+    @lfdatedir.setter
+    def lfdatedir(self, value):
 
         if self.sta and self.loc and self.sensor:
             if value:
@@ -241,10 +242,10 @@ class CalInfo():
                               CALTYPE_RBLF,
                               value)
                 if exists(rbpath):
-                    if self.lfdate != value:
+                    if self.lfdatedir != value:
                         self.reset(['lffile'])
 
-                    self._info['lfdate'] = value
+                    self._info['lfdatedir'] = value
                     self.reset(['lffile', 'respfn', 'fullpaz', 'lfpert', 'hfpert'])
 
                     ms_files = glob.glob(join(rbpath, '*.ms'))
@@ -256,16 +257,20 @@ class CalInfo():
                         self.lffile = paired_files[0]
 
             else:
-                self._info['lfdate'] = None
+                self._info['lfdatedir'] = None
                 self.reset(['lffile', 'respfn', 'fullpaz', 'lfpert', 'hfpert'])
 
 
     @property
-    def hfdate(self):
-        return self._info['hfdate'] if self._info['hfdate'] else ''
+    def hfdatestr(self):
+        return self.hfdatedir[:10]
 
-    @hfdate.setter
-    def hfdate(self, value):
+    @property
+    def hfdatedir(self):
+        return self._info['hfdatedir'] if self._info['hfdatedir'] else ''
+
+    @hfdatedir.setter
+    def hfdatedir(self, value):
 
         if self.sta and self.loc and self.sensor:
             if value:
@@ -277,10 +282,10 @@ class CalInfo():
                               CALTYPE_RBHF,
                               value)
                 if exists(rbpath):
-                    if self.hfdate != value:
+                    if self.hfdatedir != value:
                         self.reset(['hffile'])
 
-                    self._info['hfdate'] = value
+                    self._info['hfdatedir'] = value
                     self.reset(['hffile'])
 
                     ms_files = glob.glob(join(rbpath, '*.ms'))
@@ -292,7 +297,7 @@ class CalInfo():
                         self.hffile = paired_files[0]
 
             else:
-                self._info['hfdate'] = None
+                self._info['hfdatedir'] = None
                 self.reset(['hffile'])
 
     @property
@@ -302,12 +307,12 @@ class CalInfo():
     @lffile.setter
     def lffile(self, value):
 
-        if self.sta and self.loc and self.sensor and self.lfdate:
+        if self.sta and self.loc and self.sensor and self.lfdatedir:
 
             if value:
                 self.check_type(value, str, 'low freq cal data filename')
                 fpath = join(self.cal_raw_dir, self.sta, self.loc, self.sensor,
-                             CALTYPE_RBLF, self.lfdate)
+                             CALTYPE_RBLF, self.lfdatedir)
                 if exists(join(fpath, value + '.ms')):
                     self._info['lffile'] = value
                     self._info['lfpath'] = fpath
@@ -329,11 +334,11 @@ class CalInfo():
     @hffile.setter
     def hffile(self, value):
 
-        if self.sta and self.loc and self.sensor and self.hfdate:
+        if self.sta and self.loc and self.sensor and self.hfdatedir:
             if value:
                 self.check_type(value, str, 'high freq cal data filename')
                 fpath = join(self.cal_raw_dir, self.sta, self.loc, self.sensor,
-                             CALTYPE_RBHF, self.hfdate)
+                             CALTYPE_RBHF, self.hfdatedir)
                 if exists(join(fpath, value + '.ms')):
                     self._info['hffile'] = value
                     self._info['hfpath'] = fpath
@@ -575,12 +580,12 @@ class CalInfo():
                 if choice == 'S':
                     self.omit_lf = True
                 else:
-                    self.lfdate = datedirlist[user_choice_groups[0][0]]
+                    self.lfdatedir = datedirlist[user_choice_groups[0][0]]
             else:
                 if choice == 'S':
                     self.omit_hf = True
                 else:
-                    self.hfdate = datedirlist[user_choice_groups[0][0]]
+                    self.hfdatedir = datedirlist[user_choice_groups[0][0]]
 
         return result, errmsg
 
@@ -599,6 +604,7 @@ class CalInfo():
                 sensor_fn_list = []
         else:
             sensor_fn_list = []
+
         pick_groups.append(sensor_fn_list)
         group_titles.append('Response on Date of Calibration')
 
@@ -645,8 +651,9 @@ class CalInfo():
         else:
             starting_paz = self.fullpaz
 
-        grp_titles = ['', 'Zeros', 'Poles']
         prompt = 'Enter comma separated list ("q" => quit): '
+        grp_titles = []
+        pert_choices = []
 
         if not isinstance(starting_paz, PAZ):
             raise TypeError('PAZ must be a populated PAZ object')
@@ -661,7 +668,9 @@ class CalInfo():
             ppert_def = poles_pert_def[1]
             zpert_def = zeros_pert_def[1]
 
-        defchoice = [('D', 'Use Defaults (indicated by "<==")')]
+        if ppert_def or zpert_def:
+            pert_choices.append([('D', 'Use Defaults (indicated by "<==")')])
+            grp_titles.append('')
 
         # make list of LF p/z to user perturbing choices
         # Do LOW FREQ FIRST
@@ -679,7 +688,8 @@ class CalInfo():
                 pole_pert_choices.append(str(val))
 
         errmsg = ''
-        pert_choices = [defchoice, zero_pert_choices, pole_pert_choices]
+        pert_choices.extend([zero_pert_choices, pole_pert_choices])
+        grp_titles.extend(['Zeros', 'Poles'])
         result, choices, pert_choice_groups, _ = pick2(pert_choices,
                                                         'Select {} zeros & poles to perturb'.format(CalInfo.CAL_TYPE_TITLE[cal_type]),
                                                         prompt=prompt, group_titles=grp_titles,
@@ -692,7 +702,7 @@ class CalInfo():
             if choices[0].upper() == 'D':  # using defaults
                 pert = (ppert_def, zpert_def)  # beware, put poles then zeros in this map tuple
             else:
-                pert = (pert_choice_groups[2], pert_choice_groups[1])
+                pert = (pert_choice_groups[-1], pert_choice_groups[-2])
 
             if cal_type == CALTYPE_RBLF:
                 self.lfpert = pert
@@ -736,9 +746,9 @@ class CalInfo():
 
         errmsg = ''
         if cal_type == CALTYPE_RBLF:
-            adate = self.lfdate
+            adate = self.lfdatedir
         else:
-            adate = self.hfdate
+            adate = self.hfdatedir
 
         result = PickResult.collect_noop
         if self.sta and self.loc and self.sensor and adate:
@@ -766,8 +776,8 @@ class CalInfo():
         return result, errmsg
 
     def new_filename_stem(self):
-        if self.sta and self.loc and self.sensor and self.comp and (self.lfdate or self.hfdate):
-            adate = self.lfdate if self.lfdate else self.hfdate
+        if self.sta and self.loc and self.sensor and self.comp and (self.lfdatedir or self.hfdatedir):
+            adate = self.lfdatedir if self.lfdatedir else self.hfdatedir
             stem = self.sensor.lower() + '_' + self.sta.lower() + '_' + self.loc + '_' + adate.replace('-', '') + "_" + self.comp.upper()
         else:
             stem = 'INCOMPLETE_CAL_INFO'
@@ -778,7 +788,7 @@ class CalInfo():
 
         done = self.sta and self.loc and self.sensor and \
                self.opsr and self.comp and self.chan and \
-               (self.lfdate or self.omit_lf) and (self.hfdate or self.omit_hf) and \
+               (self.lfdatedir or self.omit_lf) and (self.hfdatedir or self.omit_hf) and \
                self.respfn and self.fullpaz and self.ctbto
 
         return done
@@ -821,16 +831,16 @@ class CalInfo():
             self.comp = None
             done = True
 
-        if not done and (self.hfdate or self.omit_hf):
-            self.hfdate = None
+        if not done and (self.hfdatedir or self.omit_hf):
+            self.hfdatedir = None
             self.hffile = None
             self.omit_hf = False
             self._hf_chn_stages = None  # clear stages since lfdate (epoch) changing
             self._info['hfpath'] = None
             done = True
 
-        if not done and (self.lfdate or self.omit_lf):
-            self.lfdate = None
+        if not done and (self.lfdatedir or self.omit_lf):
+            self.lfdatedir = None
             self.lffile = None
             self.omit_lf = False
             self._lf_chn_stages = None  # clear stages since lfdate (epoch) changing
@@ -849,7 +859,7 @@ class CalInfo():
         if not self.sensor:
             col_res, col_msg = self.select_raw_cal_sensor()
 
-        elif not self.lfdate and not self.omit_lf:
+        elif not self.lfdatedir and not self.omit_lf:
             col_res, col_msg = self.select_raw_cal_date(CALTYPE_RBLF)
             if col_res == PickResult.collect_back:
                 self.collect_backup()
@@ -858,7 +868,7 @@ class CalInfo():
                 if not self.omit_lf:
                     col_res, col_msg = self.find_qcal_files(CALTYPE_RBLF)
 
-        elif not self.hfdate and not self.omit_hf:
+        elif not self.hfdatedir and not self.omit_hf:
             col_res, col_msg = self.select_raw_cal_date(CALTYPE_RBHF)
             if col_res == PickResult.collect_back:
                 self.collect_backup()
@@ -895,9 +905,9 @@ class CalInfo():
                 # good channel, see if we can pull sample rate out of DB, if available
                 if isinstance(self.stages_df, DataFrame):
                     if not self.omit_lf:
-                        self._lf_chn_stages = get_stages(self.stages_df, self.sta, self.loc, self.chan, self.lfdate)
+                        self._lf_chn_stages = get_stages(self.stages_df, self.sta, self.loc, self.chan, self.lfdatedir)
                     elif not self.omit_hf:
-                        self._hf_chn_stages = get_stages(self.stages_df, self.sta, self.loc, self.chan, self.hfdate)
+                        self._hf_chn_stages = get_stages(self.stages_df, self.sta, self.loc, self.chan, self.hfdatedir)
 
                     if isinstance(self.chn_stages, DataFrame) and not (len(self.chn_stages) < 3):
                         # get channel freq from stage 3 srate column

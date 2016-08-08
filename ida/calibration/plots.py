@@ -28,7 +28,7 @@ import matplotlib.gridspec as gridspec
 
 from numpy import linspace, ceil
 
-from ida.instruments import CALTYPE_RBLF, CALTYPE_RBHF
+from ida.instruments import CALTYPE_RBLF
 
 """Convenience methods for plotting response and calibration results."""
 
@@ -36,35 +36,7 @@ def save_comp_response_comparison_plot(sta, chan, loc, resp1_fn, resp2_fn, seis_
                                    operating_sample_rate, num_freqs, norm_freq, resp1,
                                    resp2, adev, pdev):
     """Generate plots of measured response deviations between two respoonses for
-     a single component channel from a nominal response.
-
-    :param sta: Station code
-    :type sta: str
-    :param chancodes: Channle codes for all three components
-    :type chancodes: ComponentsTpl
-    :param loc: Location code
-    :type loc: str
-    :param amp_fn: Fully qualified pathname for file name in which to save Amplitude plots
-    :type amp_fn: str
-    :param pha_fn: Fully qualified pathname for file name in which to save Phase plots
-    :type pha_fn: str
-    :param seis_model: Seismometer model code. Must be one of instruments.SEISMOMETER_MODELS
-    :type seis_model: str
-    :param timestamp: Timestamp to use on plot title. Typically time of data acquisition
-    :type timestamp: datetime
-    :param operating_sample_rate: Sample rates for channels being plotted. Assumed to all be the same rate.
-    :type operating_sample_rate: float
-    :param num_freqs: How many frequencies to plot. Frequency bins will be linearly spaced from 0 to nyquist.
-    :type num_freqs: int
-    :param resp1: Nominal/baseline frequency response being copmared to
-    :type resp1: ndarray
-    :param resp2: North/south channel measured frequency response
-    :type resp2: ndarray
-    :param adev: North/south channel response amplitude deviation from nominal response
-    :type adev: ndarray
-    :param pdev: North/south channel response phase deviation from nominal response
-    :type pdev: ndarray
-    """
+    a single component channel from a nominal response."""
 
     freqs = linspace(0, operating_sample_rate/2, num_freqs)  # must start with 0hz
     nyquist = operating_sample_rate / 2.0
@@ -330,9 +302,10 @@ def apc_plot(sampling_freq, freqs, amp, pha, coh):
     plt.ylim(0.95, 1.05)
     plt.show()
 
-def cross_tf_plot(sta: object, loc: object, chn: object, sensor: object, ondate: object, cal_type: object,
-                  samp_rate: object, freqs: object, cr_amp: object, cr_pha: object, cr_coh: object, green_tol_lims: object = None, grey_tol_lims: object = None) -> object:
-    '''Python port of go_parker.m plots of cross.f output'''
+def cross_tf_plot(sta, loc, chn, sensor, ondate, cal_type,
+                  samp_rate, freqs, cr_amp, cr_pha, cr_coh,
+                  green_tol_lims=None, grey_tol_lims=None) -> object:
+    """Python port of go_parker.m plots of coherence output"""
 
     band_limit = 0.9  # plot to 70% of nyquist
     nyq = samp_rate * 0.5
@@ -350,7 +323,7 @@ def cross_tf_plot(sta: object, loc: object, chn: object, sensor: object, ondate:
     # subp = plt.subplot(3,1,1)
     subp = plt.subplot(gspec[0])
     plt.title('{} TF on {}\n{} {}-{} ({})'.format(
-        title_substr + ' Freq', ondate, sta.upper(), loc, chn.upper(), sensor.upper()
+        title_substr + ' Freq', ondate, sta.upper(), chn.upper(), loc, sensor.upper()
     ))
     plt.xlabel('Frequency')
     plt.ylabel('TF Amp')
@@ -377,7 +350,7 @@ def cross_tf_plot(sta: object, loc: object, chn: object, sensor: object, ondate:
 
     subp = plt.subplot(gspec[1])
     plt.title('{} TF on {}\n{} {}-{} ({})'.format(
-        title_substr + ' Freq', ondate, sta.upper(), loc, chn.upper(), sensor.upper()
+        title_substr + ' Freq', ondate, sta.upper(), chn.upper(), loc, sensor.upper()
     ))
     plt.xlabel('Frequency')
     plt.ylabel('TF Pha')
@@ -404,13 +377,13 @@ def cross_tf_plot(sta: object, loc: object, chn: object, sensor: object, ondate:
 
     subp = plt.subplot(gspec[2])
     plt.title('{} TF on {}\n{} {}-{} ({})'.format(
-        title_substr + ' Freq', ondate, sta.upper(), loc, chn.upper(), sensor.upper()
+        title_substr + ' Freq', ondate, sta.upper(), chn.upper(), loc, sensor.upper()
     ))
     plt.xlabel('Frequency')
     plt.ylabel('TF COH')
     plt.grid(which='both')
     plt.semilogx(freq_plt, coh_plt)
     plt.xlim(freq_plt[0], freq_limit)
-    plt.axis([samp_rate / 1e4, nyq, 0.95, 1.0])
+    plt.axis([samp_rate / 1e4, nyq, 0.945, 1.005])
 
     return fig
