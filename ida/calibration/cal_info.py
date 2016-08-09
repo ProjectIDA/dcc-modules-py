@@ -454,7 +454,7 @@ class CalInfo():
         else:
             result = PickResult.collect_error
             errmsg = 'No directories for supported sensor models found in: ' + abspath(staloc_path)
-            errmsg = errmsg + '\nSupported sensor models: ' + str(SEISMOMETER_MODELS)
+            errmsg = errmsg + '\n' + self.tui_indent_str + 'Supported sensor models: ' + str(SEISMOMETER_MODELS)
 
         return result, errmsg
 
