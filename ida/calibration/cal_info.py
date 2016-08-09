@@ -956,16 +956,13 @@ class CalInfo():
     def collect_info(self):
 
         col_res = PickResult.collect_noop
-        while col_res != PickResult.collect_quit and not self.is_complete():
+        while col_res not in [PickResult.collect_quit, PickResult.collect_error] and not self.is_complete():
             col_res, col_msg = self.collect_next()
             if col_res == PickResult.collect_error:
                 print(bold(red(self.tui_indent_str + col_msg)))
                 self.collect_backup()
 
-        if col_res != PickResult.collect_quit:
-            return True
-        else:
-            print('Looser User quit.')
+        return col_res == PickResult.collect_ok
 
     def print_info(self):
 
