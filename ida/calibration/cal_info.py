@@ -1,3 +1,24 @@
+#######################################################################################################################
+# Copyright (C) 2016  Regents of the University of California
+#
+# This is free software: you can redistribute it and/or modify it under the terms of the
+# GNU General Public License (GNU GPL) as published by the Free Software Foundation, either version 3 of the License,
+# or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+# without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# See the GNU General Public License for more details.
+#
+# A copy of the GNU General Public License can be found in LICENSE.TXT in the root of the source code repository.
+# Additionally, it can be found at http://www.gnu.org/licenses/.
+#
+# NOTES: Per GNU GPLv3 terms:
+#   * This notice must be kept in this source file
+#   * Changes to the source must be clearly noted with date & time of change
+#
+# If you use this software in a product, an explicit acknowledgment in the product documentation of the contribution
+# by Project IDA, Institute of Geophysics and Planetary Physics, UCSD would be appreciated but is not required.
+#######################################################################################################################
 import glob
 from os import getcwd, environ
 from os.path import exists, abspath, join
@@ -7,7 +28,7 @@ import datetime
 from fabulous.color import bold, blue, red, green
 from pandas.core.frame import DataFrame
 
-from ida.tui import pick2, PickResult
+from ida.tui import select, SelectResult
 from ida.instruments import CALTYPE_RBLF, CALTYPE_RBHF, SEISMOMETER_MODELS
 from ida.calibration import nom_resp_for_model, local_resp_files
 from ida.signals.paz import PAZ
@@ -441,18 +462,18 @@ class CalInfo():
 
         errmsg = ''
         if list_len > 0:
-            result, _, user_choice_groups, _ = pick2([sensordirlist],
-                                                     title='Select Sensor Directory',
-                                                     prompt='Select # of desired Sensor directory ("q" => quit): ',
-                                                     implicit_quit_q=True,
-                                                     menu_on_error=True, err_message='Invalid selection. Please try again.',
-                                                     indent_width=self.tui_indent)
-            if result == PickResult.collect_ok:
+            result, _, user_choice_groups, _ = select([sensordirlist],
+                                                      title='Select Sensor Directory',
+                                                      prompt='Select # of desired Sensor directory ("q" => quit): ',
+                                                      implicit_quit_q=True,
+                                                      menu_on_error=True, err_message='Invalid selection. Please try again.',
+                                                      indent_width=self.tui_indent)
+            if result == SelectResult.ok:
                 ndx = user_choice_groups[0][0]
                 self.sensor = sensordirlist[ndx]
 
         else:
-            result = PickResult.collect_error
+            result = SelectResult.error
             errmsg = 'No directories for supported sensor models found in: ' + abspath(staloc_path)
             errmsg = errmsg + '\n' + self.tui_indent_str + 'Supported sensor models: ' + str(SEISMOMETER_MODELS)
 
@@ -463,14 +484,14 @@ class CalInfo():
         complist = [('Z', 'Vertical'),
                     ('1', '1'),
                     ('2', '2')]
-        result, _, user_choice_groups, _ = pick2([complist],
-                                               title='Select Component',
-                                               prompt='Enter selection ("q" => quit, "b" => back): ',
-                                               implicit_quit_q=True, implicit_back_b=True,
-                                               menu_on_error=True, err_message='Invalid choice. Please try again',
-                                               indent_width=self.tui_indent)
+        result, _, user_choice_groups, _ = select([complist],
+                                                  title='Select Component',
+                                                  prompt='Enter selection ("q" => quit, "b" => back): ',
+                                                  implicit_quit_q=True, implicit_back_b=True,
+                                                  menu_on_error=True, err_message='Invalid choice. Please try again',
+                                                  indent_width=self.tui_indent)
 
-        if result == PickResult.collect_ok:
+        if result == SelectResult.ok:
             ndx = user_choice_groups[0][0]
             self.comp = complist[ndx][0]
 
@@ -482,13 +503,13 @@ class CalInfo():
                     ('N', 'No: Not a CTBTO sensor')]
 
         # flaglist = [item for item in ctbto_dict.items()]
-        result, _, user_choice_groups, _ = pick2([flaglist], 'CTBTO Status',
-                                               prompt='Is this a CTBTO sensor ("q" => quit, "b" => back)? ',
-                                               implicit_quit_q=True, implicit_back_b=True,
-                                               menu_on_error=True, err_message='Invalid choice. Please try again',
-                                               indent_width=self.tui_indent)
+        result, _, user_choice_groups, _ = select([flaglist], 'CTBTO Status',
+                                                  prompt='Is this a CTBTO sensor ("q" => quit, "b" => back)? ',
+                                                  implicit_quit_q=True, implicit_back_b=True,
+                                                  menu_on_error=True, err_message='Invalid choice. Please try again',
+                                                  indent_width=self.tui_indent)
 
-        if result == PickResult.collect_ok:
+        if result == SelectResult.ok:
             ndx = user_choice_groups[0][0]
             self.ctbto = flaglist[ndx][0]
 
@@ -496,29 +517,29 @@ class CalInfo():
 
     def enter_chan(self):
 
-        result = PickResult.collect_noop
-        while result not in [PickResult.collect_quit,
-                             PickResult.collect_back,
-                             PickResult.collect_ok]:
+        result = SelectResult.noop
+        while result not in [SelectResult.quit,
+                             SelectResult.goback,
+                             SelectResult.ok]:
             print()
             chan = input(bold(blue(self.tui_indent_str + ' Enter 3 character channel code: ')))
             chan = chan.upper()
             if (len(chan) == 3):
                 if chan[2] in ['Z', '1', '2']:
                     self.chan = chan
-                    result = PickResult.collect_ok
+                    result = SelectResult.ok
                 else:
-                    result = PickResult.collect_error
+                    result = SelectResult.error
 
             elif len(chan) == 1:
                 if chan == 'Q':
-                    result = PickResult.collect_quit
+                    result = SelectResult.quit
                 elif chan == 'B':
-                    result = PickResult.collect_back
+                    result = SelectResult.goback
                 else:
-                    result = PickResult.collect_error
+                    result = SelectResult.error
 
-            if result == PickResult.collect_error:
+            if result == SelectResult.error:
                 print()
                 print(self.tui_indent_str + bold(red('Invalid channel code.')))
                 print(self.tui_indent_str + bold(red('Make sure code is 3 characters and ends in Z, 1 or 2.')))
@@ -528,10 +549,10 @@ class CalInfo():
 
     def enter_opsr(self):
 
-        result = PickResult.collect_noop
-        while result not in [PickResult.collect_quit,
-                             PickResult.collect_back,
-                             PickResult.collect_ok]:
+        result = SelectResult.noop
+        while result not in [SelectResult.quit,
+                             SelectResult.goback,
+                             SelectResult.ok]:
             print()
             opsr_str = input(bold(blue(self.tui_indent_str + ' Enter sensor operating frequency [20, 40]: ')))
 
@@ -545,12 +566,12 @@ class CalInfo():
                     print()
                 else:
                     self.opsr = opsr
-                    result = PickResult.collect_ok
+                    result = SelectResult.ok
             except:
                 if opsr_str.upper() == 'Q':
-                    result = PickResult.collect_quit
+                    result = SelectResult.quit
                 elif opsr_str.upper() == 'B':
-                    result = PickResult.collect_back
+                    result = SelectResult.goback
                 else:
                     print()
                     print(self.tui_indent_str + bold(red('ERROR: Invalid frequency. Please enter frequency in Hz.')))
@@ -569,15 +590,15 @@ class CalInfo():
         omit_option = [('S', 'Skip {} processing'.format(CalInfo.CAL_TYPE_TITLE[cal_type]))]
 
         errmsg = ''
-        result, choices, user_choice_groups, _ = pick2([datedirlist, omit_option],
-                                                 title=CalInfo.CAL_TYPE_TITLE[cal_type] + ' dates for {} {}: '.format(self.sta,
+        result, choices, user_choice_groups, _ = select([datedirlist, omit_option],
+                                                        title=CalInfo.CAL_TYPE_TITLE[cal_type] + ' dates for {} {}: '.format(self.sta,
                                                                                                           self.loc,
                                                                                                           self.sensor),
-                                                 prompt='Select # of desired DATE ("q" => quit, "b" => back): ',
-                                                 implicit_quit_q=True, implicit_back_b=True,
-                                                 menu_on_error=True, err_message='Invalid selection. Please try again.',
-                                                 indent_width=self.tui_indent)
-        if result == PickResult.collect_ok:
+                                                        prompt='Select # of desired DATE ("q" => quit, "b" => back): ',
+                                                        implicit_quit_q=True, implicit_back_b=True,
+                                                        menu_on_error=True, err_message='Invalid selection. Please try again.',
+                                                        indent_width=self.tui_indent)
+        if result == SelectResult.ok:
             choice = choices[0].upper()
             if cal_type == CALTYPE_RBLF:
                 if choice == 'S':
@@ -623,13 +644,13 @@ class CalInfo():
 
         errmsg = ''
         if len(pick_groups) > 0:
-            result, user_choices, _, choice_tpls = pick2(pick_groups, 'Select Response file to use as starting model',
-                                                         prompt='Select # of desired response file ("q" => quit, "b" => back): ',
-                                                         group_titles=group_titles,
-                                                         implicit_quit_q=True, implicit_back_b=True,
-                                                         menu_on_error=True, err_message='Invalid choice. Please try again',
-                                                         indent_width=self.tui_indent)
-            if result == PickResult.collect_ok:
+            result, user_choices, _, choice_tpls = select(pick_groups, 'Select Response file to use as starting model',
+                                                          prompt='Select # of desired response file ("q" => quit, "b" => back): ',
+                                                          group_titles=group_titles,
+                                                          implicit_quit_q=True, implicit_back_b=True,
+                                                          menu_on_error=True, err_message='Invalid choice. Please try again',
+                                                          indent_width=self.tui_indent)
+            if result == SelectResult.ok:
                 fn = pick_groups[choice_tpls[0][0]][choice_tpls[0][1]]
                 if choice_tpls[0][0] == 0:     #  first group is single current resp file as in DB
                     self.respfn = join(self.resp_cur_dir, fn)
@@ -642,7 +663,7 @@ class CalInfo():
                 self.fullpaz = PAZ(pzfilename=self.respfn, fileformat='ida', mode='vel', units='hz')
 
         else:
-            result = PickResult.collect_error
+            result = SelectResult.error
             errmsg = 'No response files found in DB, Resp Dir or cwd.'
 
         return result, errmsg
@@ -693,7 +714,7 @@ class CalInfo():
         errmsg = ''
         pert_choices.extend([zero_pert_choices, pole_pert_choices])
         grp_titles.extend(['Zeros', 'Poles'])
-        result, choices, pert_choice_groups, _ = pick2(pert_choices,
+        result, choices, pert_choice_groups, _ = select(pert_choices,
                                                         'Select {} zeros & poles to perturb'.format(CalInfo.CAL_TYPE_TITLE[cal_type]),
                                                         prompt=prompt, group_titles=grp_titles,
                                                         multiple_choice=True,
@@ -701,7 +722,7 @@ class CalInfo():
                                                         menu_on_error=True, err_message='Invalid entry. Please try again',
                                                         indent_width=self.tui_indent)
 
-        if result == PickResult.collect_ok:
+        if result == SelectResult.ok:
             if choices[0].upper() == 'D':  # using defaults
                 pert = (ppert_def, zpert_def)  # beware, put poles then zeros in this map tuple
             else:
@@ -753,7 +774,7 @@ class CalInfo():
         else:
             adate = self.hfdatedir
 
-        result = PickResult.collect_noop
+        result = SelectResult.noop
         if self.sta and self.loc and self.sensor and adate:
             dpath = abspath(join(self.cal_raw_dir, self.sta, self.loc, self.sensor, cal_type, adate))
 
@@ -768,12 +789,12 @@ class CalInfo():
                     else:
                         self.hffile = Path(msfiles[0]).stem
                         self._info['hfpath'] = dpath
-                    result = PickResult.collect_ok
+                    result = SelectResult.ok
                 else:
-                    result = PickResult.collect_error
+                    result = SelectResult.error
                     errmsg = 'Error: Missing or multiple MS and LOG file(s) in directory: ' + dpath
             else:
-                result = PickResult.collect_error
+                result = SelectResult.error
                 errmsg = 'Directory does not exist: ' + dpath
 
         return result, errmsg
@@ -857,7 +878,7 @@ class CalInfo():
 
     def collect_next(self):
 
-        col_res = PickResult.collect_noop
+        col_res = SelectResult.noop
         col_msg = ''
 
         if not self.sensor:
@@ -865,19 +886,19 @@ class CalInfo():
 
         elif not self.lfdatedir and not self.omit_lf:
             col_res, col_msg = self.select_raw_cal_date(CALTYPE_RBLF)
-            if col_res == PickResult.collect_back:
+            if col_res == SelectResult.goback:
                 self.collect_backup()
-                col_res = PickResult.collect_ok
-            elif col_res == PickResult.collect_ok:
+                col_res = SelectResult.ok
+            elif col_res == SelectResult.ok:
                 if not self.omit_lf:
                     col_res, col_msg = self.find_qcal_files(CALTYPE_RBLF)
 
         elif not self.hfdatedir and not self.omit_hf:
             col_res, col_msg = self.select_raw_cal_date(CALTYPE_RBHF)
-            if col_res == PickResult.collect_back:
+            if col_res == SelectResult.goback:
                 self.collect_backup()
-                col_res = PickResult.collect_ok
-            elif col_res == PickResult.collect_ok:
+                col_res = SelectResult.ok
+            elif col_res == SelectResult.ok:
                 if not self.omit_hf:
                     col_res, col_msg = self.find_qcal_files(CALTYPE_RBHF)
 
@@ -886,7 +907,7 @@ class CalInfo():
             print(bold(red(CalInfo.tui_indent_str + ' ERROR: You can not skip both LF and HF processing.\n')))
             self.omit_lf = False # reset so both dates prompted for again
             self.omit_hf = False
-            col_res = PickResult.collect_ok
+            col_res = SelectResult.ok
 
         # elif not self.lffile and not self.omit_lf:
         #     col_res, col_msg = self.find_qcal_files(CALTYPE_RBLF)
@@ -896,16 +917,16 @@ class CalInfo():
         #
         elif not self.comp:
             col_res = self.select_component()
-            if col_res == PickResult.collect_back:
+            if col_res == SelectResult.goback:
                 self.collect_backup()
-                col_res = PickResult.collect_ok
+                col_res = SelectResult.ok
 
         elif not self.chan:
             col_res = self.enter_chan()
-            if col_res == PickResult.collect_back:
+            if col_res == SelectResult.goback:
                 self.collect_backup()
-                col_res = PickResult.collect_ok
-            elif col_res == PickResult.collect_ok:
+                col_res = SelectResult.ok
+            elif col_res == SelectResult.ok:
                 # good channel, see if we can pull sample rate out of DB, if available
                 if isinstance(self.stages_df, DataFrame):
                     if not self.omit_lf:
@@ -923,46 +944,34 @@ class CalInfo():
 
         elif not self.opsr:
             col_res = self.enter_opsr()
-            if col_res == PickResult.collect_back:
+            if col_res == SelectResult.goback:
                 self.collect_backup()
-                col_res = PickResult.collect_ok
+                col_res = SelectResult.ok
 
         elif not self.respfn:
             col_res, col_msg = self.select_starting_response_file()
-            if col_res == PickResult.collect_back:
+            if col_res == SelectResult.goback:
                 self.collect_backup()
-                col_res = PickResult.collect_ok
+                col_res = SelectResult.ok
 
-        # elif not self.lfpert:
-        #     col_res, col_msg = self.select_perturb_map(CALTYPE_RBLF)
-        #     if col_res == PickResult.collect_back:
-        #         self.collect_backup()
-        #         col_res = PickResult.collect_ok
-        #
-        # elif not self.hfpert:
-        #     col_res, col_msg = self.select_perturb_map(CALTYPE_RBHF)
-        #     if col_res == PickResult.collect_back:
-        #         self.collect_backup()
-        #         col_res = PickResult.collect_ok
-        #
         elif not self.ctbto:
             col_res= self.select_ctbto_flag()
-            if col_res == PickResult.collect_back:
+            if col_res == SelectResult.goback:
                 self.collect_backup()
-                col_res = PickResult.collect_ok
+                col_res = SelectResult.ok
 
         return col_res, col_msg
 
     def collect_info(self):
 
-        col_res = PickResult.collect_noop
-        while col_res not in [PickResult.collect_quit, PickResult.collect_error] and not self.is_complete():
+        col_res = SelectResult.noop
+        while col_res not in [SelectResult.quit, SelectResult.error] and not self.is_complete():
             col_res, col_msg = self.collect_next()
-            if col_res == PickResult.collect_error:
+            if col_res == SelectResult.error:
                 print(bold(red(self.tui_indent_str + col_msg)))
                 self.collect_backup()
 
-        return col_res == PickResult.collect_ok
+        return col_res == SelectResult.ok
 
     def print_info(self):
 

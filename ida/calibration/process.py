@@ -19,7 +19,6 @@
 # If you use this software in a product, an explicit acknowledgment in the product documentation of the contribution
 # by Project IDA, Institute of Geophysics and Planetary Physics, UCSD would be appreciated but is not required.
 #######################################################################################################################
-
 import logging
 from os.path import join
 
@@ -37,30 +36,6 @@ from ida.instruments import *
 
 """utility functions for processing of IDA Random Binary calibration data"""
 
-# def nominal_sys_sens_1hz(sens_resp_at_1hz, seis_model):
-#     """Compute system sensitivity in velocity units at 1hz given sensor response (in vel), sensor model and
-#     assuming a Q330 digitizer. This calculation DOES NOT include absolute gcalib adjustment for sensor,
-#     but does account for digitizer FIR response at 1hz and sensor specific Q330 gcalib value.
-#
-#     :param sens_resp_at_1hz: complex sensor response at 1hz (velovity units)
-#     :type sens_resp_at_1hz: complex128
-#     :param seis_model: seismometer model key
-#     :type seis_model: str
-#     :return: system sensitivity in cts/(m/s)
-#     :rtype: float
-#     """
-#
-#     seis_model = seis_model.upper()
-#
-#     resp_gain_at_nom_freq = abs(sens_resp_at_1hz)
-#     sens_nom_gain = INSTRUMENT_NOMINAL_GAINS[seis_model]
-#     digi_nom_gain_1hz = Q330_NOMINAL_GAIN * \
-#                         Q330_40HZ_NOMINAL_FIR_GAIN_1HZ * \
-#                         Q330_GCALIB_FOR_SEIS[seis_model]
-#
-#     return resp_gain_at_nom_freq * sens_nom_gain * digi_nom_gain_1hz
-#
-#
 def compare_component_response(freqs, paz1, paz2, norm_freq=0.05, mode='vel', phase_detrend=False):
     """Compute amp and pha response of paz1 against paz2.
 
@@ -202,7 +177,7 @@ def analyze_cal_component(fullpaz, lfpertndxs, hfpertndxs, opsr, lftf_f, lf_tf, 
                                       concatenate((lfmeas_tf_norm.real, lfmeas_tf_norm.imag)),
                                       lf_resp0
                                       ),
-                               verbose=2)
+                               verbose=0)
         print(lf_res.message)
 
         new_lf_paz_pert = ida.signals.utils.pack_paz(lf_res.x, lf_paz_pert_flags)
@@ -246,7 +221,7 @@ def analyze_cal_component(fullpaz, lfpertndxs, hfpertndxs, opsr, lftf_f, lf_tf, 
                                      concatenate((hfmeas_tf_norm.real, hfmeas_tf_norm.imag)),
                                      hf_resp0
                                      ),
-                               verbose=2)
+                               verbose=0)
         print(hf_res.message)
 
         new_hf_paz_pert = ida.signals.utils.pack_paz(hf_res.x, hf_paz_pert_flags)
@@ -256,8 +231,9 @@ def analyze_cal_component(fullpaz, lfpertndxs, hfpertndxs, opsr, lftf_f, lf_tf, 
 
 
 def prepare_cal_data(lfpath, lffile, hfpath, hffile, sensor, comp, fullpaz):
-    """Prepare low and high frequency miniseed files produced by qcal for analysis.
-    It assumes all three observed Z12 coponents plus input signal will exist in each miniseed file.
+    """Prepares cal input and measured (output) timeseries for analysis.
+
+
     Each components is:
         - trimmed to remove settling and trailing portions of time series
         - corrected for polarity
@@ -277,35 +253,30 @@ def prepare_cal_data(lfpath, lffile, hfpath, hffile, sensor, comp, fullpaz):
         1) All 3 components are handled at once
         2) Components for triaxial seismometer are transformed to UVW and then to abs() values for each XYZ component
 
-    NOTE: This is uses the SAME PAZ response for all 3 components.
-    TODO: This should be generalized for to accommodate different strating paz for each component
+    Args:
+        lfpath (str): path to LF MS and LOG files
+        lffile (str): name (stem) of LF MS and LOG files
+        hfpath (str): path to LF MS and LOG files
+        hffile (str): name (stem) of LF MS and LOG files
+        sensor (str): sensor key string (should be one of SEISMOMETER_MODELS)
+        comp (str): Component 'Z', '1', or '2'
+        fullpaz (PAZ): Instance of PAZ that should be convolved with input signal
 
-    :param data_dir: Directory path where miniseed and qcal log fiels are found
-    :type data_dir:  str
-    :param lf_fnames: Tuple containing low frequency miniseed and log filenames
-    :type lf_fnames:  (str, str)
-    :param hf_fnames: Tuple containing high frequency miniseed and log filenames
-    :type hf_fnames: (str, str)
-    :param seis_model: Seismometermodel key
-    :type seis_model: str
-    :param lf_paz_tpl: ComponentTpl with starting LF model with which to convolve the calibration input signal.
-    :type lf_paz_tpl: ComponentTpl
-    :param hf_paz_tpl: ComponentTpl with starting HF model with which to convolve the calibration input signal.
-    :type hf_paz_tpl: ComponentTpl
-    :return:
-        low freq sampling rate,
-        low freq time series start_time,
-        low freq convolved input timeseries, in ComponentTpl
-        low freq measured east, north, vertical timeseries, in ComponentTpl
-        high freq sampling rate,
-        high freq time series start_time,
-        high freq convolved input timeseries, in ComponentTpl
-        high freq measured east, north, vertical timeseries, in ComponentTpl
-        complex paz response in low freq band in ComponentTpl, list of low freq frequencies,
-        complex paz response in high freq band in ComponentTpl, list of high freq frequencies
-    :rtype: float, timestamp, ComponentTpl, ComponentTpl
-            float, timestamp, ComponentTpl, ComponentTpl
-            ComponentTpl, ndarray, ComponentTpl, ndarray
+    Returns:
+        samp_rate_lf (float or int): Sample rate of LF calibration data
+        start_time_lf (obspy.UTCDateTime): Start time of LF input calibration stream
+        lf_inp_wth_resp (numpy.ndarray): LF input timeseries convolved with fullpaz response
+        lf_out (numpy-ndarray): LF measured output timeseries
+        samp_rate_hf (): Sample rate of HF calibration data
+        start_time_hf (): Start time of HF input calibration stream
+        hf_inp_wth_resp (): HF input timeseries convolved with fullpaz response
+        hf_out (): HF measured output timeseries
+        freqs_lf (numpy.ndarray): LF Frequency array
+        freqs_hf (numpy.ndarray): HF Frequency array
+        lf_snr (float): LF Signal-to-noise of input+full and measured timeseries. Defined as 1/stdev(lfinput-meas)
+        hf_snr (float): LF Signal-to-noise of input+full and measured timeseries. Defined as 1/stdev(lfinput-meas)
+
+
     """
 
     if lfpath:

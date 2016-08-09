@@ -62,7 +62,7 @@ def ims2_calibrate_result_msg_comp_info(sta, chan, inspec, calib, calper):
                                 calib,
                                 calper)
 
-def ims2_PAZ2_msg(sta, loc, chan, seis_model, cal_timestamp,
+def ims2_paz2_msg(sta, loc, chan, seis_model, cal_timestamp,
                   opsr, calib, calper, paz, sys_scale_factor):
     # sys_scale_factor is A0 * gnom * gcalib (multiplier
     date_str = cal_timestamp.strftime('%Y/%m/%d')
@@ -109,7 +109,7 @@ def ims2_PAZ2_msg(sta, loc, chan, seis_model, cal_timestamp,
     return msg
 
 
-def ims2_DIG2_msg(stage_seq_num, nom_sens, samp_rate, description):
+def ims2_dig2_msg(stage_seq_num, nom_sens, samp_rate, description):
     txt = 'DIG2 {:<2} {:<15.8e} {:<11.5f} {:<}'.format(stage_seq_num,
                                                        nom_sens,
                                                        samp_rate,
@@ -117,7 +117,7 @@ def ims2_DIG2_msg(stage_seq_num, nom_sens, samp_rate, description):
 
     return txt.ljust(61, ' ')
 
-def ims2_FIR2_msg(stage_seq_num, gain, decimation, group_correction,
+def ims2_fir2_msg(stage_seq_num, gain, decimation, group_correction,
                  symmetry, description, factors):
     fmt = 'FIR2 {:<2} {:<10.2e} {:<4} {:<8.3f} {} {:<4} {:<}'
     txthead = fmt.format(stage_seq_num,

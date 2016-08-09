@@ -24,61 +24,17 @@ from enum import Enum
 
 from fabulous.color import bold, underline, blue, red
 
-class PickResult(Enum):
-    collect_noop = 0
-    collect_ok = 1
-    collect_back = 2
-    collect_error = 3
-    collect_quit = 4
+
+class SelectResult(Enum):
+    noop = 0
+    ok = 1
+    goback = 2
+    error = 3
+    quit = 4
 
 
-def pick(picklist, title=None, prompt=None, allow_quit_q=False, menu_on_error=False, err_message=None, indent_width=4):
-
-    indent = (indent_width+1)*' '
-    list_item_fmt = indent + '{} {}'
-    ndxlist = list(range(1, len(picklist)+1))
-
-    quit = False
-    display_list = True
-    choice = -1
-    choice_list = [str(inum) for inum in ndxlist]
-
-    if not prompt:
-        prompt = 'Enter number of selection: '
-    prompt = indent + prompt
-
-    while not quit and (choice not in choice_list):
-
-        print('\n')
-        if title:
-            print(indent + underline(bold(blue(title))))
-            # print(indent + blue(len(title)*'-'), '\n')
-
-        print()
-        if display_list:
-            for ndx, opt in enumerate(picklist):
-                print(list_item_fmt.format(str(blue(bold(str(ndx + 1))+')')), str(bold(opt))))
-        print()
-
-        choice = input(bold(blue(prompt)))
-
-        if allow_quit_q and (choice in ['q', 'Q']):
-            quit = True
-            ndx = 0
-            break
-        elif choice not in choice_list:
-            if err_message:
-                print('\n' + indent + red(bold(err_message)))
-            display_list = menu_on_error
-        else:
-            ndx = int(choice)
-            break
-
-    return not quit, ndx-1
-
-
-def pick2(picklistgroups, title=None, group_titles=None, prompt=None, multiple_choice=False,
-          implicit_quit_q=False, implicit_back_b=False, menu_on_error=False, err_message=None, indent_width=4):
+def select(picklistgroups, title=None, group_titles=None, prompt=None, multiple_choice=False,
+           implicit_quit_q=False, implicit_back_b=False, menu_on_error=False, err_message=None, indent_width=4):
 
     indent = (indent_width+1)*' '
     list_item_fmt = indent + '{} {}'
@@ -117,8 +73,8 @@ def pick2(picklistgroups, title=None, group_titles=None, prompt=None, multiple_c
     invalid = True
     display_list = True
 
-    result = PickResult.collect_noop
-    while (result not in [PickResult.collect_ok, PickResult.collect_back, PickResult.collect_quit]) and (invalid):
+    result = SelectResult.noop
+    while (result not in [SelectResult.ok, SelectResult.goback, SelectResult.quit]) and (invalid):
 
         print('\n')
         if title:
@@ -144,9 +100,9 @@ def pick2(picklistgroups, title=None, group_titles=None, prompt=None, multiple_c
         user_choices = [chc.strip() for chc in choice.split(',')]
 
         if user_choices and ('Q' == user_choices[0]) and implicit_quit_q:
-            result = PickResult.collect_quit
+            result = SelectResult.quit
         elif user_choices and ('B' in user_choices) and implicit_back_b:
-            result = PickResult.collect_back
+            result = SelectResult.goback
         elif not user_choices:
             print('\n' + indent + red(bold(no_entry_message)))
         else:
@@ -156,7 +112,7 @@ def pick2(picklistgroups, title=None, group_titles=None, prompt=None, multiple_c
                 invalid = ((len(user_choices) != 1) or (user_choices[0] not in valid_ndx_tpls.keys()))
 
             if not invalid:
-                result = PickResult.collect_ok
+                result = SelectResult.ok
                 for chc in user_choices:
                     user_choice_groups[valid_ndx_tpls[chc][0]].append(valid_ndx_tpls[chc][1])
                     user_choice_tuples.append(valid_ndx_tpls[chc])
@@ -174,6 +130,7 @@ def input_yn(prompt, err_message=None, indent_width=4, default=None):
     if default:
         prompt = prompt + ' [{}]'.format(default)
 
+    answer = ''
     answered = False
     while not answered:
 
