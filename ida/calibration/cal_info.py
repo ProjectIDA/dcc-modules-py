@@ -436,7 +436,7 @@ class CalInfo():
 
         staloc_path = join(self.cal_raw_dir, self.sta, self.loc)
         sensordirlist = glob.glob(join(staloc_path, '*'))
-        sensordirlist = sorted([Path(item).stem for item in sensordirlist if item.upper() in SEISMOMETER_MODELS])
+        sensordirlist = sorted([Path(item).stem for item in sensordirlist if Path(item).stem.upper() in SEISMOMETER_MODELS])
         list_len = len(sensordirlist)
 
         errmsg = ''
