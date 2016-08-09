@@ -37,30 +37,30 @@ from ida.instruments import *
 
 """utility functions for processing of IDA Random Binary calibration data"""
 
-def nominal_sys_sens_1hz(sens_resp_at_1hz, seis_model):
-    """Compute system sensitivity in velocity units at 1hz given sensor response (in vel), sensor model and
-    assuming a Q330 digitizer. This calculation DOES NOT include absolute gcalib adjustment for sensor,
-    but does account for digitizer FIR response at 1hz and sensor specific Q330 gcalib value.
-
-    :param sens_resp_at_1hz: complex sensor response at 1hz (velovity units)
-    :type sens_resp_at_1hz: complex128
-    :param seis_model: seismometer model key
-    :type seis_model: str
-    :return: system sensitivity in cts/(m/s)
-    :rtype: float
-    """
-
-    seis_model = seis_model.upper()
-
-    resp_gain_at_nom_freq = abs(sens_resp_at_1hz)
-    sens_nom_gain = INSTRUMENT_NOMINAL_GAINS[seis_model]
-    digi_nom_gain_1hz = Q330_NOMINAL_GAIN * \
-                        Q330_40HZ_NOMINAL_FIR_GAIN_1HZ * \
-                        Q330_GCALIB_FOR_SEIS[seis_model]
-
-    return resp_gain_at_nom_freq * sens_nom_gain * digi_nom_gain_1hz
-
-
+# def nominal_sys_sens_1hz(sens_resp_at_1hz, seis_model):
+#     """Compute system sensitivity in velocity units at 1hz given sensor response (in vel), sensor model and
+#     assuming a Q330 digitizer. This calculation DOES NOT include absolute gcalib adjustment for sensor,
+#     but does account for digitizer FIR response at 1hz and sensor specific Q330 gcalib value.
+#
+#     :param sens_resp_at_1hz: complex sensor response at 1hz (velovity units)
+#     :type sens_resp_at_1hz: complex128
+#     :param seis_model: seismometer model key
+#     :type seis_model: str
+#     :return: system sensitivity in cts/(m/s)
+#     :rtype: float
+#     """
+#
+#     seis_model = seis_model.upper()
+#
+#     resp_gain_at_nom_freq = abs(sens_resp_at_1hz)
+#     sens_nom_gain = INSTRUMENT_NOMINAL_GAINS[seis_model]
+#     digi_nom_gain_1hz = Q330_NOMINAL_GAIN * \
+#                         Q330_40HZ_NOMINAL_FIR_GAIN_1HZ * \
+#                         Q330_GCALIB_FOR_SEIS[seis_model]
+#
+#     return resp_gain_at_nom_freq * sens_nom_gain * digi_nom_gain_1hz
+#
+#
 def compare_component_response(freqs, paz1, paz2, norm_freq=0.05, mode='vel', phase_detrend=False):
     """Compute amp and pha response of paz1 against paz2.
 

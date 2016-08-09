@@ -8,7 +8,7 @@ from fabulous.color import bold, blue, red, green
 from pandas.core.frame import DataFrame
 
 from ida.tui import pick2, PickResult
-from ida.instruments import CALTYPE_RBLF, CALTYPE_RBHF
+from ida.instruments import CALTYPE_RBLF, CALTYPE_RBHF, SEISMOMETER_MODELS
 from ida.calibration import nom_resp_for_model, local_resp_files
 from ida.signals.paz import PAZ
 from ida.db.io import read
@@ -76,6 +76,8 @@ class CalInfo():
             'opsr': None,
             'lfdatedir': None,
             'hfdatedir': None,
+            'lfdatestr': None,
+            'hfdatestr': None,
             'lffile': None,
             'hffile': None,
             'lfpath': None,
@@ -430,18 +432,18 @@ class CalInfo():
     def __repr__(self):
         return str(self._info)
 
-    def select_raw_cal_sensor(self):
+    def select_raw_cal_sensordir(self):
 
         staloc_path = join(self.cal_raw_dir, self.sta, self.loc)
         sensordirlist = glob.glob(join(staloc_path, '*'))
-        sensordirlist = sorted([Path(item).stem for item in sensordirlist])
+        sensordirlist = sorted([Path(item).stem for item in sensordirlist if item.upper() in SEISMOMETER_MODELS])
         list_len = len(sensordirlist)
 
         errmsg = ''
         if list_len > 0:
             result, _, user_choice_groups, _ = pick2([sensordirlist],
-                                                     title='Select Sensor',
-                                                     prompt='Select # of desired SENSOR ("q" => quit): ',
+                                                     title='Select Sensor Directory',
+                                                     prompt='Select # of desired Sensor directory ("q" => quit): ',
                                                      implicit_quit_q=True,
                                                      menu_on_error=True, err_message='Invalid selection. Please try again.',
                                                      indent_width=self.tui_indent)
@@ -451,7 +453,8 @@ class CalInfo():
 
         else:
             result = PickResult.collect_error
-            errmsg = 'No sensor directories found in: ' + abspath(staloc_path)
+            errmsg = 'No directories for supported sensor models found in: ' + abspath(staloc_path)
+            errmsg = errmsg + '\nSupported sensor models: ' + str(SEISMOMETER_MODELS)
 
         return result, errmsg
 
@@ -778,7 +781,8 @@ class CalInfo():
     def new_filename_stem(self):
         if self.sta and self.loc and self.sensor and self.comp and (self.lfdatedir or self.hfdatedir):
             adate = self.lfdatedir if self.lfdatedir else self.hfdatedir
-            stem = self.sensor.lower() + '_' + self.sta.lower() + '_' + self.loc + '_' + adate.replace('-', '') + "_" + self.comp.upper()
+            stem = self.sensor.lower() + '_' + self.sta.lower() + '_' + self.loc + '_' + \
+                   adate.replace('-', '') + "_" + self.comp.upper()
         else:
             stem = 'INCOMPLETE_CAL_INFO'
 
@@ -857,7 +861,7 @@ class CalInfo():
         col_msg = ''
 
         if not self.sensor:
-            col_res, col_msg = self.select_raw_cal_sensor()
+            col_res, col_msg = self.select_raw_cal_sensordir()
 
         elif not self.lfdatedir and not self.omit_lf:
             col_res, col_msg = self.select_raw_cal_date(CALTYPE_RBLF)

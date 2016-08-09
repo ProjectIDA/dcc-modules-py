@@ -48,16 +48,19 @@ from numpy import sqrt
 SEISTYPE_STS1E3 = 'STS1E3'
 SEISTYPE_STS1HB = 'STS1HB'
 SEISTYPE_STS1VB = 'STS1VB'
+SEISTYPE_STS1 = 'STS1'
 SEISTYPE_STS2 = 'STS2'
 SEISTYPE_STS25 = 'STS2_5'
 SEISTYPE_STS25F = 'STS2_5_FAST'
 SEISTYPE_STS5A = 'STS-5A'
-SEISTYPE_TR120PH = 'TRI_PH'
+SEISTYPE_TR12PA = 'TR12PB'
+SEISTYPE_TR12PB = 'TR12PA'
 SEISTYPE_TR240 = 'TR240'
 SEISTYPE_TR360 = 'TR360'
 SEISTYPE_GS13 = 'GS13'
 SEISTYPE_3ESPC = '3ESPC'
-SEISTYPE_KS54000 = 'K54000'
+SEISTYPE_KS54A = 'KS54A'
+SEISTYPE_KS54B = 'KS54B'
 SEISTYPE_CMG3T = 'CMG3T'
 SEISTYPE_FBAEST = 'FBAEST'
 SEISTYPE_FBA23 = 'FBA23'
@@ -70,21 +73,24 @@ SEISMOMETER_MODELS = [
     SEISTYPE_STS1E3,
     SEISTYPE_STS1HB,
     SEISTYPE_STS1VB,
+    SEISTYPE_STS1,
     SEISTYPE_STS2,
     SEISTYPE_STS25,
     SEISTYPE_STS25F,
     SEISTYPE_STS5A,
-    SEISTYPE_TR120PH,
+    SEISTYPE_TR12PA,
+    SEISTYPE_TR12PB,
     SEISTYPE_TR240,
-    SEISTYPE_TR360,
-    SEISTYPE_GS13,
-    SEISTYPE_3ESPC,
-    SEISTYPE_KS54000,
-    SEISTYPE_CMG3T,
-    SEISTYPE_FBAEST,
-    SEISTYPE_FBA23,
-    SEISTYPE_M2166V,
-    SEISTYPE_M2166H,
+    # SEISTYPE_TR360,
+    # SEISTYPE_GS13,
+    # SEISTYPE_3ESPC,
+    SEISTYPE_KS54A,
+    SEISTYPE_KS54B,
+    # SEISTYPE_CMG3T,
+    # SEISTYPE_FBAEST,
+    # SEISTYPE_FBA23,
+    # SEISTYPE_M2166V,
+    # SEISTYPE_M2166H,
 ]
 
 # only include currently supported triaxial list
@@ -95,7 +101,8 @@ TRIAXIAL_SEIS_MODELS = [
     SEISTYPE_STS25,
     SEISTYPE_STS25F,
     SEISTYPE_STS5A,
-    SEISTYPE_TR120PH,
+    SEISTYPE_TR12PA,
+    SEISTYPE_TR12PB,
     SEISTYPE_TR240,
     SEISTYPE_TR360
 ]
@@ -137,6 +144,7 @@ STS5A_UVW2ENZ_ABS = [
 ]
 
 # TRILLIUM TRIAXIAL TRANSFORMS
+# for both A nad B models
 TR120PH_XYZ2UVW = [
     [ sqrt(6) / 3,  0,           sqrt(3) / 3],
     [-sqrt(6) / 6,  sqrt(2) / 2, sqrt(3) / 3],
@@ -162,45 +170,6 @@ TR240_UVW2ENZ_ABS = [
 ]
 
 
-# paz maps for seismometer response fitting by model
-# indices are for python ZERO-based arrays
-# 'fit' indices are into FULL response PAZ
-# 'perturb' indices are into FULL response PAZ
-
-# ONLY USED FOR PyCal CTBTO. Need to get rid of this code, is DEAD CODE for internal IDA Cals
-SEISMOMETER_RESPONSES = {
-    SEISTYPE_STS25 : {
-        'full_resp_file': SEISTYPE_STS25 + "_full.ida",
-        'fit': {
-            'lf_poles' : [0,1,2,3,4,5,6],
-            'lf_zeros' : [0,1,2,3,4,5,6,7],
-            'hf_poles' : [0,1,2,3,4,5,6],
-            'hf_zeros' : [0,1,2,3,7]
-        },
-        'perturb': {
-            'lf_poles': [0,1],
-            'lf_zeros': [],
-            'hf_poles': [4,5],
-            'hf_zeros': [],
-        },
-    },
-    SEISTYPE_STS25F : {
-        'full_resp_file': SEISTYPE_STS25 + "_full.ida",
-        'fit': {
-            'lf_poles' : [0,1,2,3,4,5,6],
-            'lf_zeros' : [0,1,2,3,4,5,6,7],
-            'hf_poles' : [0,1,2,3,4,5,6],
-            'hf_zeros' : [0,1,2,3,7]
-        },
-        'perturb': {
-            'lf_poles': [0,1],
-            'lf_zeros': [],
-            'hf_poles': [4,5],
-            'hf_zeros': [],
-        },
-    },
-}
-
 XFRM_TYPE_XYZ2UVW = 'XYZ2UVW'
 XFRM_TYPE_UVW2ENZ_ABS = 'UVW2ENZ_ABS'
 
@@ -221,7 +190,11 @@ TRIAXIAL_TRANSFORMS = {
         XFRM_TYPE_XYZ2UVW: STS5A_XYZ2UVW,
         XFRM_TYPE_UVW2ENZ_ABS: STS5A_UVW2ENZ_ABS
     },
-    SEISTYPE_TR120PH: {
+    SEISTYPE_TR12PA: {
+        XFRM_TYPE_XYZ2UVW: TR120PH_XYZ2UVW,
+        XFRM_TYPE_UVW2ENZ_ABS: TR120PH_UVW2ENZ_ABS
+    },
+    SEISTYPE_TR12PB: {
         XFRM_TYPE_XYZ2UVW: TR120PH_XYZ2UVW,
         XFRM_TYPE_UVW2ENZ_ABS: TR120PH_UVW2ENZ_ABS
     },
@@ -236,36 +209,30 @@ CTBTO_SEIS_MODELS = [
     SEISTYPE_STS25F
 ]
 
-SEIS_INVERT_CAL_CHAN = [SEISTYPE_GS13, SEISTYPE_TR120PH]
-SEIS_INVERT_NORTH_CHAN = [SEISTYPE_STS1E3, SEISTYPE_STS1HB]
-SEIS_INVERT_EAST_CHAN = [SEISTYPE_STS1E3, SEISTYPE_STS1HB]
+SEIS_INVERT_CAL_CHAN = [SEISTYPE_GS13, SEISTYPE_TR12PA, SEISTYPE_TR12PB]
+SEIS_INVERT_NORTH_CHAN = [SEISTYPE_STS1E3, SEISTYPE_STS1HB, SEISTYPE_STS1]
+SEIS_INVERT_EAST_CHAN = [SEISTYPE_STS1E3, SEISTYPE_STS1HB, SEISTYPE_STS1]
 
 CALTYPE_RBHF = 'rbhf'
 CALTYPE_RBLF = 'rblf'
 CALIBRATION_TYPES = [CALTYPE_RBHF, CALTYPE_RBLF]
 
-INSTRUMENT_NOMINAL_GAINS = {
-    SEISTYPE_KS54000: 2400,
-
-    SEISTYPE_STS2: 1500,
-    SEISTYPE_STS25: 1500,
-    SEISTYPE_STS25F: 1500,
-    SEISTYPE_STS5A: 1500,
-
-    SEISTYPE_TR120PH: 1200,
-    SEISTYPE_TR240: 1200,
-    SEISTYPE_TR360: 1200,
-
-}
-
-# obtained from IDA filter file q330.40 May 2016
-Q330_40_FIR_COEFFS = [
- 4.18952E-13, 3.30318E-04, 1.02921E-03,-3.14123E-03, 2.05709E-04, 1.52521E-03,-6.23193E-03, 1.04801E-02,-1.31202E-02,
- 1.07821E-02,-1.44455E-03,-1.58729E-02, 3.95074E-02,-6.51036E-02, 8.53716E-02,-8.91913E-02, 5.00619E-02, 8.37233E-01,
- 2.66723E-01,-1.66693E-01, 9.52840E-02,-5.09218E-02, 1.61458E-02, 7.06362E-03,-1.83877E-02, 1.99414E-02,-1.54895E-02,
- 8.52735E-03,-2.55789E-03,-1.81103E-03, 2.42649E-03,-3.75769E-03, 4.67293E-04, 6.33072E-04,-1.56874E-06,-1.25480E-05,
- 3.21041E-07,-2.63324E-08,-5.09997E-08
-]
+# obtained from DB stage 1 rec
+# INSTRUMENT_NOMINAL_GAINS = {
+#     SEISTYPE_KS54A: 2400,
+#     SEISTYPE_KS54B: 2400,
+#
+#     SEISTYPE_STS2: 1500,
+#     SEISTYPE_STS25: 1500,
+#     SEISTYPE_STS25F: 1500,
+#     SEISTYPE_STS5A: 1500,
+#
+#     SEISTYPE_TR12PA: 1200,
+#     SEISTYPE_TR12PB: 1200,
+#     SEISTYPE_TR240: 1200,
+#     SEISTYPE_TR360: 1200,
+#
+# }
 
 # obtained from IDA filter file q330.40/20 May/Aug 2016
 Q330_40_FIR_FILTER_DELAY = 17.218
@@ -273,7 +240,6 @@ Q330_FIR_FILTER_DELAY = {
     40: 17.218,
     20: 32.6090
 }
-
 Q330_40_FIR_FILTER_COEFFS = [ 4.18952E-13,  3.30318E-04,  1.02921E-03, -3.14123E-03,  2.05709E-04,  1.52521E-03, -6.23193E-03,  1.04801E-02,
  -1.31202E-02,  1.07821E-02, -1.44455E-03, -1.58729E-02,  3.95074E-02, -6.51036E-02,  8.53716E-02, -8.91913E-02,
  5.00619E-02,  8.37233E-01,  2.66723E-01, -1.66693E-01,  9.52840E-02, -5.09218E-02,  1.61458E-02,  7.06362E-03,
@@ -289,22 +255,19 @@ Q330_20_FIR_FILTER_COEFFS = [ -3.65342E-17,  3.67488E-08, -4.27060E-07,  1.14502
 -4.76110E-03,  3.38213E-03, -1.92052E-03,  7.15218E-04,  7.67719E-05, -4.51897E-04,  5.02700E-04, -5.65037E-04,
 -5.56800E-05,  1.57736E-05, -1.41985E-06,  8.14909E-07,  6.80795E-07, -1.25273E-06,  1.52435E-06, -2.83336E-07,
 -1.06384E-08,  1.25712E-09, -5.42954E-11]
-
 Q330_FIR_COEFFS = {
     40: Q330_40_FIR_FILTER_COEFFS,
     20: Q330_20_FIR_FILTER_COEFFS
 }
 
 # obtained from IDA database. This value is specific to each Q330-Seis_Model combination
-# and is in the IDA database as gcalib
-Q330_GCALIB_FOR_SEIS = {
-    SEISTYPE_KS54000: .9953,
-
-    SEISTYPE_STS25: .9911,  # value for Q330/STS2.5 combination
-    SEISTYPE_STS25F: .9911,  # value for Q330/STS2.5 combination
-
-    SEISTYPE_TR120PH: 1.0011
-}
+# and is in the IDA database as gcalib from stage 3 rec
+# Q330_GCALIB_FOR_SEIS = {
+#     SEISTYPE_KS54000: .9953,
+#     SEISTYPE_STS25: .9911,  # value for Q330/STS2.5 combination
+#     SEISTYPE_STS25F: .9911,  # value for Q330/STS2.5 combination
+#     SEISTYPE_TR120PH: 1.0011
+# }
 
 
 # compute_response_fir(Q330_40_FIR_COEFFS,...)
@@ -324,6 +287,7 @@ Q330_FIR_GAIN_1HZ = {
     20: Q330_20HZ_NOMINAL_FIR_GAIN_1HZ
 }
 
-Q330_NOMINAL_GAIN = 1.67e6 # todo get from stages rec 3 gnom # INSTRUMENT_NOMINAL_GAINS[DIGITYPE_Q330]
+# get from stages rec 3 gnom
+# Q330_NOMINAL_GAIN = 1.67e6
 
 ComponentsTpl = namedtuple('Components', ['north', 'east', 'vertical'])
