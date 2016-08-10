@@ -22,7 +22,7 @@
 
 from math import floor, atan2, sqrt
 import logging
-from numpy import ndarray, pi, sqrt, array, zeros, float64, concatenate
+from numpy import ndarray, pi, sqrt, array, zeros, float64, concatenate, unwrap, sign, add, rad2deg
 from numpy.fft import fft
 
 """Python port of subst of cross.f Fortran code tailored with IDA-specific
@@ -117,7 +117,7 @@ def cross_correlate(sampling_rate, ts1, ts2):
     for freqndx in range(fft_usable_len):
         coh[freqndx] = (sxy[freqndx, 2] ** 2 + sxy[freqndx, 3] ** 2) / (sxy[freqndx, 0] * sxy[freqndx, 1])
         gain[freqndx] = sqrt(coh[freqndx] * sxy[freqndx, 1] / sxy[freqndx, 0])
-        phase[freqndx] = deg_per_rad * atan2(sxy[freqndx, 3], sxy[freqndx, 2])
+        phase[freqndx] = atan2(sxy[freqndx, 3], sxy[freqndx, 2])  # phase in radians
         # gain[freqndx] = np.sqrt(coh[freqndx] * sxy[freqndx, 1] / sxy[freqndx, 0])
         # phase[freqndx] = DEG_PER_RAD * np.arctan(sxy[freqndx, 3] / sxy[freqndx, 2])
         #     ofl.write('{:>15.9f} {:>15.9f} {:>15.9f} {:>15.9f} {:>15.9f} {:>15.9f} {:>15.9f} {:>15.9f}\n'.format(
@@ -157,6 +157,10 @@ def cross_correlate(sampling_rate, ts1, ts2):
     # # SKIPPING LAG SINCE WE KNOW TIME SERIES ARE IN SYNC wrt TIME
     # # 2000 continue
     # #     kbar=kbar/nf
+
+    # add pi if phase starts negative, subtract pi if positive
+    phase = unwrap(add(phase, -sign(phase[0]) * pi))
+    phase = rad2deg(phase)  # phase in degrees
 
     del sxy
     del ts1_data
