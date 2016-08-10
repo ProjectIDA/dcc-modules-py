@@ -22,7 +22,8 @@
 
 from math import floor, atan2, sqrt
 import logging
-from numpy import ndarray, pi, sqrt, array, zeros, float64, concatenate, unwrap, sign, add, rad2deg
+from numpy import ndarray, pi, sqrt, array, zeros, float64, concatenate, unwrap, sign, add, subtract, \
+    rad2deg, max, min
 from numpy.fft import fft
 
 """Python port of subst of cross.f Fortran code tailored with IDA-specific
@@ -159,7 +160,15 @@ def cross_correlate(sampling_rate, ts1, ts2):
     # #     kbar=kbar/nf
 
     # add pi if phase starts negative, subtract pi if positive
-    phase = unwrap(add(phase, -sign(phase[0]) * pi))
+    # phase = unwrap(add(phase, -sign(phase[0]) * pi))
+    print(min(phase), max(phase))
+    phase = unwrap(phase)  # phase in degrees
+    print(min(phase), max(phase))
+    if max(phase) > pi:
+        phase  = subtract(phase, pi)
+    elif min(phase) < -pi:
+        phase = add(phase, pi)
+    print(min(phase), max(phase))
     phase = rad2deg(phase)  # phase in degrees
 
     del sxy
