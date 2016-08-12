@@ -48,12 +48,9 @@ def cross_correlate(sampling_rate, ts1, ts2):
     :rtype: (ndarray, ndarray, ndarray, ndarray)
     """
 
-    deg_per_rad = 180.0 / pi
-
     if (type(ts1) != ndarray) or (type(ts2) != ndarray):
         msg = 'ERROR: Timeseries need to be of type list or numpy.ndarray.'
         raise TypeError(msg)
-
 
     logging.debug('Making copies of time series...')
     ts1_data = ts1.copy()
@@ -159,16 +156,14 @@ def cross_correlate(sampling_rate, ts1, ts2):
     # # 2000 continue
     # #     kbar=kbar/nf
 
-    # add pi if phase starts negative, subtract pi if positive
-    # phase = unwrap(add(phase, -sign(phase[0]) * pi))
-    print(min(phase), max(phase))
-    phase = unwrap(phase)  # phase in degrees
-    print(min(phase), max(phase))
-    if max(phase) > pi:
-        phase  = subtract(phase, pi)
-    elif min(phase) < -pi:
-        phase = add(phase, pi)
-    print(min(phase), max(phase))
+    print('Phase: 1st, min, max:', phase[0], min(phase), max(phase))
+    phase = unwrap(phase, discont=pi*1.05)  # phase in degrees
+    print('Unwrapped Phase: 1st, min, max:', phase[0], min(phase), max(phase))
+    # if max(phase) > pi:
+    #     phase  = subtract(phase, pi)
+    # elif min(phase) < -pi:
+    #     phase = add(phase, pi)
+    # print(min(phase), max(phase))
     phase = rad2deg(phase)  # phase in degrees
 
     del sxy

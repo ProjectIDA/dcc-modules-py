@@ -110,6 +110,8 @@ def analyze_cal_component(fullpaz, lfpertndxs, hfpertndxs, opsr, lftf_f, lf_tf, 
     input/output time series using a least_squares minimization approach.
 
     """
+
+
     def resp_cost(p, paz_partial_flags, freqs, normfreq, tf_target, resp_pert0):
 
         # pack up into PAZ instances

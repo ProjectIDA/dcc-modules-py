@@ -24,7 +24,6 @@ import os.path
 
 from ida import IDA_RESPONSES_NOM_DIR
 
-
 def nom_resp_for_model(seis_model):
 
     nom_resps = glob.glob(os.path.join(IDA_RESPONSES_NOM_DIR, (seis_model+'_*').lower()))
