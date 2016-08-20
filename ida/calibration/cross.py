@@ -22,7 +22,7 @@
 
 from math import floor, atan2, sqrt
 import logging
-from numpy import ndarray, pi, sqrt, array, zeros, float64, concatenate, unwrap, sign, add, subtract, \
+from numpy import ndarray, full, pi, sqrt, array, zeros, float64, concatenate, unwrap, sign, add, subtract, \
     rad2deg, max, min
 from numpy.fft import fft
 
@@ -65,7 +65,7 @@ def cross_correlate(sampling_rate, ts1, ts2, smoothing_factor=2.0):
     ts2_data.__isub__(ts2_mean)
     # ts2_var = ts2_data.var()
 
-    # smoothing_factor = 2.0
+    smoothing_factor = 2.0
     # calculate number of tapers
     # NOTE: inner floor probably not ideal
     taper_cnt = floor(floor((3.0 + 0.3 * sqrt(ts1_data.size))) * sqrt(smoothing_factor))
@@ -89,21 +89,8 @@ def cross_correlate(sampling_rate, ts1, ts2, smoothing_factor=2.0):
 
     sxy *= const
 
-    #      fNyq=0.5/dt
-    #      df=fNyq/(nf - 1)
-    # c
-    # c    Normalize by variance in x1 = area under psd
-    # c
-    #      power=0.5*(sxy(1,1) + sxy(nf,1))
-    #      do 1600 k=2, nf-1
-    #        power=power + sxy(k,1)
-    # 1600 continue
-    #      const=varx(1)/(power*df)
-    #      do 1750 k=1, nf
-    #        do 1700 i=1, 4
-    #          sxy(k,i)=sxy(k,i)*const
-    # 1700   continue
-    # 1750 continue
+    # not currently supporting 'adaptive tapers ( see Fortran adapt2 subroutine). so setting kopt to it's constant val
+    kopt = full(fft_usable_len, taper_cnt, dtype=int)
 
     freq_bin_size = (sampling_rate / 2.0) / (fft_usable_len - 1)
 
@@ -116,27 +103,6 @@ def cross_correlate(sampling_rate, ts1, ts2, smoothing_factor=2.0):
         coh[freqndx] = (sxy[freqndx, 2] ** 2 + sxy[freqndx, 3] ** 2) / (sxy[freqndx, 0] * sxy[freqndx, 1])
         gain[freqndx] = sqrt(coh[freqndx] * sxy[freqndx, 1] / sxy[freqndx, 0])
         phase[freqndx] = atan2(sxy[freqndx, 3], sxy[freqndx, 2])  # phase in radians
-        # gain[freqndx] = np.sqrt(coh[freqndx] * sxy[freqndx, 1] / sxy[freqndx, 0])
-        # phase[freqndx] = DEG_PER_RAD * np.arctan(sxy[freqndx, 3] / sxy[freqndx, 2])
-        #     ofl.write('{:>15.9f} {:>15.9f} {:>15.9f} {:>15.9f} {:>15.9f} {:>15.9f} {:>15.9f} {:>15.9f}\n'.format(
-        #         freqs[freqndx ],
-        #         sxy[freqndx, 0], sxy[freqndx, 1], sxy[freqndx, 2], sxy[freqndx, 3],
-        #         gain[freqndx], coh[freqndx], phase[freqndx]
-        #     ))
-        # ofl.write('\n')
-
-        # lag(ts_info, freqndx, phase, gamsq)
-
-    # if not getattr(sys, 'frozen', False):
-    #     logging.debug('Writing cross results for file system...')
-    #     with open('pycross-output-' + str(sampling_rate) + 'hz.txt', 'wt') as cfl:
-    #         for freqndx in range(fft_usable_len):
-    #             cfl.write('{:12.4e} {:12.4e} {:12.4e} {:12.4e}\n'.format(freqs[freqndx],
-    #                                                                      gain[freqndx],
-    #                                                                      phase[freqndx],
-    #                                                                      coh[freqndx]))
-    #     logging.debug('Writing cross results for file system... complete')
-
 
     # # kmin=nf
     # #     kmax=0
@@ -166,12 +132,10 @@ def cross_correlate(sampling_rate, ts1, ts2, smoothing_factor=2.0):
     # print(min(phase), max(phase))
     phase = rad2deg(phase)  # phase in degrees
 
-    del sxy
     del ts1_data
     del ts2_data
 
-    return freqs, gain, phase, coh
-
+    return freqs, gain, phase, coh, sxy[:0], sxy[:1], sxy[:2], sxy[:3], kopt
 
 # def lag(ts_info, fndx, phase, gamsq):
 #
@@ -237,16 +201,6 @@ def spcmat(ts1, ts2, taper_cnt):
     padded = concatenate([ts2[0:opt_len], zeros(opt_len)])
     ts2_fft = fft(padded).conjugate()
 
-    # print('ts1 fft input len:', ts1_fft.size)
-    # print('ts2 fft input len:', ts2_fft.size)
-
-    # with open('py-cross-fft.txt', 'wt') as ofl:
-    #     for ndx in range(ts_info['ts1']['fft'].size):
-    #         ofl.write('{:15.8f} {:15.8f} {:15.8f} {:15.8f}\n'.format(
-    #             ts1_fft[ndx].real, ts1_fft[ndx].imag,
-    #             ts2_fft[ndx].real, ts2_fft[ndx].imag))
-
-    # ojzfl = open('py-cross-jz.txt', 'wt')
     sxy = zeros([fft_usable_len, 4], dtype=float64)
     klim = taper_cnt
     ck = 1.0 / klim ** 2
@@ -267,13 +221,6 @@ def spcmat(ts1, ts2, taper_cnt):
             sxy[freqndx, 1] += (totwt * (z2.real ** 2 + z2.imag ** 2))
             sxy[freqndx, 2] += (totwt * (z1.real * z2.real + z1.imag * z2.imag))
             sxy[freqndx, 3] += (totwt * (z2.real * z1.imag - z1.real * z2.imag))
-            # if freqndx < 5:
-            #     ojzfl.write('{:15.8f} {:>8} {:>8} {:15.8f} {:15.8f} {:15.8f} {:15.8f}\n'.format(
-            #         wk, j1, j2,
-            #         z1.real, z1.imag,
-            #         z2.real, z2.imag,
-            #
-            #     ))
 
     # ojzfl.close()
     # c  Loop over frequency[
@@ -309,7 +256,7 @@ def spcmat(ts1, ts2, taper_cnt):
     # c
     #  1500 continue
 
-    return sxy, fft_usable_len
+    return sxy, fft_usable_len, kopt
 
 
 # def prepare_for_cross(seis_model, input_strm, output_strm, cal_log, paz):
