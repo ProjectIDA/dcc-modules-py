@@ -256,7 +256,7 @@ def spcmat(ts1, ts2, taper_cnt):
     # c
     #  1500 continue
 
-    return sxy, fft_usable_len, kopt
+    return sxy, fft_usable_len
 
 
 # def prepare_for_cross(seis_model, input_strm, output_strm, cal_log, paz):
