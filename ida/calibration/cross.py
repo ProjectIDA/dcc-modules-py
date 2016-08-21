@@ -135,7 +135,7 @@ def cross_correlate(sampling_rate, ts1, ts2, smoothing_factor=2.0):
     del ts1_data
     del ts2_data
 
-    return freqs, gain, phase, coh, sxy[:0], sxy[:1], sxy[:2], sxy[:3], kopt
+    return freqs, gain, phase, coh, sxy[:,0], sxy[:,1], sxy[:,2], sxy[:,3], kopt
 
 # def lag(ts_info, fndx, phase, gamsq):
 #
