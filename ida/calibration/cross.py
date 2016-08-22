@@ -30,7 +30,7 @@ from numpy.fft import fft
 parameter values.
 """
 
-def cross_correlate(sampling_rate, ts1, ts2, smoothing_factor=2.0):
+def cross_correlate(sampling_rate, ts1, ts2):
     """
     Compute coherence of and transfer function between two time series
 
@@ -122,9 +122,9 @@ def cross_correlate(sampling_rate, ts1, ts2, smoothing_factor=2.0):
     # # 2000 continue
     # #     kbar=kbar/nf
 
-    print('Phase: 1st, min, max:', phase[0], min(phase), max(phase))
+    # print('Phase: 1st, min, max:', phase[0], min(phase), max(phase))
     phase = unwrap(phase, discont=pi*1.05)  # phase in degrees
-    print('Unwrapped Phase: 1st, min, max:', phase[0], min(phase), max(phase))
+    # print('Unwrapped Phase: 1st, min, max:', phase[0], min(phase), max(phase))
     # if max(phase) > pi:
     #     phase  = subtract(phase, pi)
     # elif min(phase) < -pi:
