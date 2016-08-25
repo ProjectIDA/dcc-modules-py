@@ -30,7 +30,7 @@ from numpy.fft import fft, rfft
 parameter values.
 """
 
-def cross_correlate(sampling_rate, ts1, ts2):
+def cross_correlate(sampling_rate, ts1, ts2, smoothing_factor=2.0):
     """
     Compute coherence of and transfer function between two time series
 
@@ -65,7 +65,8 @@ def cross_correlate(sampling_rate, ts1, ts2):
     ts2_data.__isub__(ts2_mean)
     # ts2_var = ts2_data.var()
 
-    smoothing_factor = 2.0
+    # smoothing_factor = 0.5    now passed a kwarg
+
     # calculate number of tapers
     # NOTE: inner floor probably not ideal
     taper_cnt = floor(floor((3.0 + 0.3 * sqrt(ts1_data.size))) * sqrt(smoothing_factor))
