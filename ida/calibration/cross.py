@@ -19,12 +19,12 @@
 # If you use this software in a product, an explicit acknowledgment in the product documentation of the contribution
 # by Project IDA, Institute of Geophysics and Planetary Physics, UCSD would be appreciated but is not required.
 #######################################################################################################################
-
+import datetime
 from math import floor, atan2, sqrt
 import logging
-from numpy import ndarray, full, pi, sqrt, array, zeros, float64, concatenate, unwrap, sign, add, subtract, \
-    rad2deg, max, min
-from numpy.fft import fft
+from numpy import ndarray, full, pi, sqrt, square, array, arange, zeros, float64, concatenate, \
+    unwrap, sign, add, subtract, rad2deg, max, min, arctan2
+from numpy.fft import fft, rfft
 
 """Python port of subst of cross.f Fortran code tailored with IDA-specific
 parameter values.
@@ -70,7 +70,6 @@ def cross_correlate(sampling_rate, ts1, ts2):
     # NOTE: inner floor probably not ideal
     taper_cnt = floor(floor((3.0 + 0.3 * sqrt(ts1_data.size))) * sqrt(smoothing_factor))
     logging.debug('Cross taper cnt: ' + str(taper_cnt))
-
     # with open('py-cross-pre-fft.txt', 'wt') as ofl:
     #     for r in range(ts_info['ts1']['data'].size):
     #         ofl.write('{} {}\n'.format(ts_info['ts1']['data'][r], ts_info['ts2']['data'][r]))
@@ -81,11 +80,11 @@ def cross_correlate(sampling_rate, ts1, ts2):
 
     logging.debug('calling spcmat... complete (fft-len: ' + str(fft_usable_len) + ')')
 
-    power = 0.5 * (sxy[0, 0] + sxy[-1, 0]) + sxy[1:fft_usable_len - 1, 0].sum()
+    pwr = 0.5 * (sxy[0, 0] + sxy[fft_usable_len - 1, 0]) + (sxy[1:fft_usable_len - 2, 0]).sum()
     # for ndx in range(1,ts_info['fft_usable_len']-1):
     #     power += sxy[ndx, 0]
 
-    const = ts1_var / (power * (sampling_rate * 0.5 / (fft_usable_len - 1)))
+    const = ts1_var / (pwr * (sampling_rate * 0.5 / (fft_usable_len - 1)))
 
     sxy *= const
 
@@ -95,14 +94,20 @@ def cross_correlate(sampling_rate, ts1, ts2):
     freq_bin_size = (sampling_rate / 2.0) / (fft_usable_len - 1)
 
     freqs = array([freq_bin_size * ndx for ndx in range(fft_usable_len)], dtype=float64)
-    gain = zeros(fft_usable_len, dtype=float64)
-    coh = zeros(fft_usable_len, dtype=float64)
-    phase = zeros(fft_usable_len, dtype=float64)
 
-    for freqndx in range(fft_usable_len):
-        coh[freqndx] = (sxy[freqndx, 2] ** 2 + sxy[freqndx, 3] ** 2) / (sxy[freqndx, 0] * sxy[freqndx, 1])
-        gain[freqndx] = sqrt(coh[freqndx] * sxy[freqndx, 1] / sxy[freqndx, 0])
-        phase[freqndx] = atan2(sxy[freqndx, 3], sxy[freqndx, 2])  # phase in radians
+    # gain = zeros(fft_usable_len, dtype=float64)
+    # coh = zeros(fft_usable_len, dtype=float64)
+    # phase = zeros(fft_usable_len, dtype=float64)
+
+    # for freqndx in range(fft_usable_len):
+    #     coh[freqndx] = (sxy[freqndx, 2] ** 2 + sxy[freqndx, 3] ** 2) / (sxy[freqndx, 0] * sxy[freqndx, 1])
+    #     gain[freqndx] = sqrt(coh[freqndx] * sxy[freqndx, 1] / sxy[freqndx, 0])
+    #     phase[freqndx] = atan2(sxy[freqndx, 3], sxy[freqndx, 2])  # phase in radians
+
+    coh = (square(sxy[:, 2][:fft_usable_len]) + square(sxy[:, 3][:fft_usable_len])) / \
+          (sxy[:, 0][:fft_usable_len] * sxy[:, 1][:fft_usable_len])
+    gain = sqrt(coh * sxy[:, 1][:fft_usable_len] / sxy[:, 0][:fft_usable_len])
+    phase = arctan2(sxy[:, 3][:fft_usable_len], sxy[:, 2][:fft_usable_len])  # phase in radians
 
     # # kmin=nf
     # #     kmax=0
@@ -123,7 +128,7 @@ def cross_correlate(sampling_rate, ts1, ts2):
     # #     kbar=kbar/nf
 
     # print('Phase: 1st, min, max:', phase[0], min(phase), max(phase))
-    phase = unwrap(phase, discont=pi*1.05)  # phase in degrees
+    # phase = unwrap(phase)  # phase in degrees
     # print('Unwrapped Phase: 1st, min, max:', phase[0], min(phase), max(phase))
     # if max(phase) > pi:
     #     phase  = subtract(phase, pi)
@@ -188,11 +193,8 @@ def spcmat(ts1, ts2, taper_cnt):
     """Python implementation of the cross.f spcmat() routine with IDA fixed parameters"""
 
     opt_len = int((ts1.size // 2) * 2)
-    # opt_len = 139968  # just for testing aginst cross.f
     pad_len = 2 * opt_len
-
-    # ts_info['fft_usable_len'] = opt_len // 2
-    fft_usable_len = opt_len // 2
+    fft_usable_len = opt_len // 2 + 1
 
     logging.debug('cross.spcmat() fft_usable_len: ' + str(fft_usable_len))
 
@@ -206,21 +208,38 @@ def spcmat(ts1, ts2, taper_cnt):
     ck = 1.0 / klim ** 2
     wt = 6.0 * klim / (4 * klim ** 2 + 3 * klim - 1)
 
+    taper_ndx_array = arange(1, klim + 1)
     for freqndx in range(fft_usable_len):
         freqndx2 = freqndx * 2
 
-        for taperndx in range(1, klim + 1):
-            j1 = (freqndx2 + pad_len - taperndx) % pad_len
-            j2 = (freqndx2 + taperndx) % pad_len
-            z1 = ts1_fft[j1] - ts1_fft[j2]
-            z2 = ts2_fft[j1] - ts2_fft[j2]
+        # for taperndx in range(1, klim + 1):
+        #     j1 = (freqndx2 + pad_len - taperndx) % pad_len
+        #     j2 = (freqndx2 + taperndx) % pad_len
+        #     z1 = ts1_fft[j1] - ts1_fft[j2]
+        #     z2 = ts2_fft[j1] - ts2_fft[j2]
+        #
+        #     totwt = wt * (1.0 - ck * (taperndx - 1) ** 2)
+        #
+        #     sxy[freqndx, 0] += (totwt * (z1.real ** 2 + z1.imag ** 2))
+        #     sxy[freqndx, 1] += (totwt * (z2.real ** 2 + z2.imag ** 2))
+        #     sxy[freqndx, 2] += (totwt * (z1.real * z2.real + z1.imag * z2.imag))
+        #     sxy[freqndx, 3] += (totwt * (z2.real * z1.imag - z1.real * z2.imag))
 
-            totwt = wt * (1.0 - ck * (taperndx - 1) ** 2)
+        j1 = (freqndx2 + pad_len - taper_ndx_array) % pad_len
+        j2 = (freqndx2 + taper_ndx_array) % pad_len
+        z1 = ts1_fft[j1] - ts1_fft[j2]
+        z2 = ts2_fft[j1] - ts2_fft[j2]
+        totwt = wt * (1.0 - ck * square(taper_ndx_array - 1))
+        # if freqndx in [0]: #, fft_usable_len-1]:
+        #     print('j1:', j1)
+        #     print('z1:', z1)
+        #     print('j2:', j2)
+        #     print(taper_ndx_array - 1)
+        sxy[freqndx, 0] = (totwt * (square(z1.real) + square(z1.imag))).sum()
+        sxy[freqndx, 1] = (totwt * (square(z2.real) + square(z2.imag))).sum()
+        sxy[freqndx, 2] = (totwt * (z1.real * z2.real + z1.imag * z2.imag)).sum()
+        sxy[freqndx, 3] = (totwt * (z2.real * z1.imag - z1.real * z2.imag)).sum()
 
-            sxy[freqndx, 0] += (totwt * (z1.real ** 2 + z1.imag ** 2))
-            sxy[freqndx, 1] += (totwt * (z2.real ** 2 + z2.imag ** 2))
-            sxy[freqndx, 2] += (totwt * (z1.real * z2.real + z1.imag * z2.imag))
-            sxy[freqndx, 3] += (totwt * (z2.real * z1.imag - z1.real * z2.imag))
 
     # ojzfl.close()
     # c  Loop over frequency[
