@@ -23,8 +23,8 @@ from datetime import datetime
 import os.path
 import yaml
 
-from numpy import float64, multiply, logical_and, less_equal, greater_equal, greater, \
-    polyfit, polyval, subtract, log10
+from numpy import float32, multiply, logical_and, less_equal, greater_equal, greater, \
+    polyfit, polyval, subtract, log10, column_stack, savetxt
 from numpy.fft import rfft, irfft
 import matplotlib.pyplot as plt
 
@@ -32,8 +32,7 @@ from fabulous.color import red, green, bold
 from obspy.core import read, UTCDateTime, Stream
 from obspy.signal.invsim import evalresp
 
-# from ida.calibration.cross import cross_correlate
-import ida.calibration.cross
+from ida.calibration.cross import cross_correlate
 
 
 # for cleanup of (mostly) past crud.
@@ -149,13 +148,13 @@ def save_chan_traces(chancode, fn, strm):
     else:
         return True
 
-def correlate_channel_traces(chan_trace, ref_trace, sample_rate, config):
+def correlate_channel_traces(chan_trace, ref_trace, sample_rate, shake_m_per_volt, digi_sens_cnts_per_volt):
 
     cross_results = {}
-    npts = chan_trace.stats.npts
-    comp = chan_trace.stats.channel[2]
-    ref_comp = ref_trace.stats.channel[2]
-    thedate = chan_trace.stats.starttime
+    npts = ref_trace.stats.npts
+    # comp = chan_trace.stats.channel[2]
+    # ref_comp = ref_trace.stats.channel[2]
+    # thedate = chan_trace.stats.starttime
     if not os.environ.get('SEEDRESP'):
         print(red('Error: Can not find RESP files without SEEDRESP env var being set.'))
         return False, cross_results
@@ -171,8 +170,6 @@ def correlate_channel_traces(chan_trace, ref_trace, sample_rate, config):
     )
     resp_filepath = os.path.join(resp_dir, resp_file)
 
-    print(resp_filepath)
-
     fresp, f = evalresp(1/sample_rate,
                         ref_trace.stats.npts,
                         resp_filepath,
@@ -184,27 +181,23 @@ def correlate_channel_traces(chan_trace, ref_trace, sample_rate, config):
                         units='DIS', freq=True )
 
     # Convolving ref data with nominal response...
-    indata        = ref_trace.data.astype(float64)
-    indata_fft    = rfft(subtract(indata.astype(float64), indata.astype(float64).mean()))
-    inp_cnv_resp  = multiply(indata_fft, fresp)
-    inp_wth_resp  = irfft(inp_cnv_resp, npts)
+    refdata    = ref_trace.data.astype(float32)
+    mean       = refdata.mean()
+    refdata   -= mean
+    refdata_fft    = rfft(refdata)
+    refdata_fft   *= fresp
+    ref_wth_resp  = irfft(refdata_fft, npts)
+    ref_wth_resp *= (shake_m_per_volt/digi_sens_cnts_per_volt)
 
-    # apply shake table and digitizer sensitivity
-    shake_m_per_volt = config.shake_table_meters_per_volt(ref_comp, thedate)
-    digi_sens_cnts_per_volt = config.digi_cnts_per_volt()
-
-    print(shake_m_per_volt)
-    print(digi_sens_cnts_per_volt)
-    inp_wth_resp_sens = multiply(inp_wth_resp, shake_m_per_volt/digi_sens_cnts_per_volt)
 
     # trim 20 smaples off both ends.
-    inp_wth_resp_trimmed = inp_wth_resp_sens[20:-20]
-    outdata = chan_trace.data[20:-20].astype(float64)
+    ref_wth_resp = ref_wth_resp[20:-20]
+    outdata = chan_trace.data[20:-20].astype(float32)
 
     # noinspection PyTupleAssignmentBalance
-    freqs, amp, pha, coh, psd1, psd2, _, _, _ = ida.calibration.cross.cross_correlate(sample_rate,
-                                                                             outdata,
-                                                                             inp_wth_resp_trimmed)
+    freqs, amp, pha, coh, psd1, psd2, _, _, _ = cross_correlate(sample_rate,
+                                                                outdata,
+                                                                ref_wth_resp)
 
     cross_results = {
         'freqs': freqs,
@@ -239,6 +232,7 @@ def shake_table_chan_plots(datadir, comp, cross_res_dict, coh_min=0.98, freq_ban
     ph = pha[use_freqs]
 
     # comp = 'Z'
+    fig_ndx = 0
     if comp == 'BHZ':
         fig_ndx = 0
     elif comp == 'BH1':
@@ -335,6 +329,63 @@ def shake_table_chan_plots(datadir, comp, cross_res_dict, coh_min=0.98, freq_ban
 
     return fig1, fig2, fig3
 
+def shake_table_psd_plot(fignum, datadir, comp, freqs, psd1, psd2, coh, add_title_text=''):
+
+    # plot psd for both time series
+    fig = plt.figure(fignum, figsize=(8.5, 11))
+    plt.subplot(311)
+    plt.title('Shake Table PSDs: {} : {}'.format(datadir, comp) + add_title_text)
+    plt.xlim(1e-1, 10)
+    # plt.ylim(75, 110)
+
+    plt.ylabel('PSD (dB)')
+    plt.xlabel('Freq (Hz)')
+    plt.grid(which='both')
+    plt.semilogx(freqs, 10 * log10(psd1))
+    plt.semilogx(freqs, 10 * log10(psd2))
+
+    plt.subplot(312)
+    plt.xlim(1e-1, 10)
+    plt.ylim(0.9, 1.01)
+    plt.ylabel('Coh**2')
+    plt.xlabel('Freq (Hz)')
+    plt.grid(which='both')
+    plt.semilogx(freqs, coh)
+
+    return fig
+
+def shake_table_tf_plot(fignum, datadir, comp, freqs, amp, pha, coh, add_title_text=''):
+
+    fig = plt.figure(fignum, figsize=(8.5, 11))
+    plt.subplot(311)
+    plt.title('Shake Table TF: {} : {}'.format(datadir, comp) + add_title_text)
+    plt.xlim(1e-1, 10)
+    plt.ylim(0.99, 1.01)
+    axlim = plt.axis()
+
+    plt.ylabel('TF Gain')
+    plt.xlabel('Freq (Hz)')
+    plt.grid(which='both')
+    plt.semilogx(freqs, amp)
+
+    plt.subplot(312)
+    plt.xlim(1e-1, 10)
+    # plt.ylim(-10, 5)
+    plt.ylabel('TF Phase')
+    plt.xlabel('Freq (Hz)')
+    plt.grid(which='both')
+    plt.semilogx(freqs, pha)
+
+    plt.subplot(313)
+    plt.xlim(1e-1, 10)
+    plt.ylim(0.9, 1.01)
+    plt.xlabel('Freq (Hz)')
+    plt.ylabel('Coh**2')
+    plt.grid(which='both')
+    plt.semilogx(freqs, coh)
+
+    return fig
+
 class ShakeConfig(object):
 
     def __init__(self, fn):
@@ -374,3 +425,15 @@ class ShakeConfig(object):
                     break
 
         return res
+
+    def sample_rate(self):
+        return self._config['sample_rate']
+
+    def plot_min_freq(self):
+        return self._config['plots']['start_freq']
+
+    def plot_max_freq(self):
+        return self._config['plots']['end_freq']
+
+    def plot_coh_min(self):
+        return self._config['plots']['coh_min']
