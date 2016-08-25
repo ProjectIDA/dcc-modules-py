@@ -22,9 +22,10 @@
 from datetime import datetime
 import os.path
 import yaml
+import collections
 
 from numpy import float32, multiply, logical_and, less_equal, greater_equal, greater, \
-    polyfit, polyval, subtract, log10, column_stack, savetxt
+    polyfit, polyval, subtract, log10, ceil, floor, column_stack, savetxt
 from numpy.fft import rfft, irfft
 import matplotlib.pyplot as plt
 
@@ -53,7 +54,7 @@ def rename_chan(inchan):
 
 def read_intimes(fn):
 
-    intimes_data = {}
+    intimes_data = collections.OrderedDict()
     with open(fn, 'rt') as ifl:
         for line in ifl:
             cline = line.upper().strip()
@@ -110,7 +111,7 @@ def prepare_traces(meta, msfn):
 
     # loop through metadata record with trace start/end time info
     # and drop and channels without waveform 'wf' ot 'wf_ref' data
-    good_meta = {}
+    good_meta = collections.OrderedDict()
     for chan, vals in meta.items():
         wf = strm.select(channel=chan).copy().trim(starttime=vals['starttime'], endtime=vals['endtime'])
         wf_ref = strm.select(channel=vals['ref_chan']).copy().trim(starttime=vals['starttime'], endtime=vals['endtime'])
@@ -148,7 +149,7 @@ def save_chan_traces(chancode, fn, strm):
     else:
         return True
 
-def correlate_channel_traces(chan_trace, ref_trace, sample_rate, shake_m_per_volt, digi_sens_cnts_per_volt):
+def correlate_channel_traces(chan_trace, ref_trace, sample_rate, shake_m_per_volt, digi_sens_cnts_per_volt, **kwargs):
 
     cross_results = {}
     npts = ref_trace.stats.npts
@@ -194,10 +195,14 @@ def correlate_channel_traces(chan_trace, ref_trace, sample_rate, shake_m_per_vol
     ref_wth_resp = ref_wth_resp[20:-20]
     outdata = chan_trace.data[20:-20].astype(float32)
 
+    if 'smoothing_factor' in kwargs:
+        sf = kwargs['smoothing_factor']
+    else:
+        sf = 0.5
     # noinspection PyTupleAssignmentBalance
     freqs, amp, pha, coh, psd1, psd2, _, _, _ = cross_correlate(sample_rate,
                                                                 outdata,
-                                                                ref_wth_resp)
+                                                                ref_wth_resp, smoothing_factor=sf)
 
     cross_results = {
         'freqs': freqs,
@@ -360,7 +365,7 @@ def shake_table_tf_plot(fignum, datadir, comp, freqs, amp, pha, coh, add_title_t
     plt.subplot(311)
     plt.title('Shake Table TF: {} : {}'.format(datadir, comp) + add_title_text)
     plt.xlim(1e-1, 10)
-    plt.ylim(0.99, 1.01)
+    plt.ylim(floor(amp.min() * 100) / 100, ceil(amp.max() * 100) / 100)
     axlim = plt.axis()
 
     plt.ylabel('TF Gain')
@@ -437,3 +442,6 @@ class ShakeConfig(object):
 
     def plot_coh_min(self):
         return self._config['plots']['coh_min']
+
+    def analysis_smoothing_factor(self):
+        return self._config['analysis']['smoothing_factor']
