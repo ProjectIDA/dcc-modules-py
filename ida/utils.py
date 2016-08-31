@@ -45,7 +45,8 @@ def i10get(sta, chan_list, startime, endtime, outfn=None, **kwargs):
     gz_files_processed = set()
 
     for gz_dir in gz_dirs:
-        gz_files = set([Path(gz_file).name for gz_file in glob.glob(os.path.join(gz_dir, '*.gz'))])
+        gz_files = set([Path(gz_file).name for gz_file in
+                        (glob.glob(os.path.join(gz_dir, '*.gz')) + glob.glob(os.path.join(gz_dir, '*.GZ')))])
 
         # remove any already processed gz files from this batch
         gz_files -= gz_files_processed
