@@ -412,7 +412,8 @@ class ShakeConfig(object):
         if comp.upper() not in ['Z', '1', '2']:
             raise ValueError('Invalid component: ', comp)
 
-        if not isinstance(thedate, UTCDateTime):
+        # noinspection PyUnresolvedReferences
+        if not isinstance(thedate, datetime.datetime):
             raise TypeError('Invalid date: ' + str(thedate))
 
         datenum = int(thedate.strftime('%Y%j'))
