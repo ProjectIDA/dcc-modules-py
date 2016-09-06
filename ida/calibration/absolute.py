@@ -42,12 +42,12 @@ class AbsOnsiteConfig(object):
 
     @property
     def ref_azi_seed_file(self):
-        return  self._config.ref_azi_seed_file
+        return  self._config['ref_azi_seed_file']
 
     @property
     def ref_abs_seed_file(self):
-        return  self._config.ref_abs_seed_file
+        return  self._config['ref_abs_seed_file']
 
     @property
-    def segment_size(self):
-        return self._config.segment_sample_size
+    def segment_size_samples(self):
+        return self._config['segment_size_samples']
