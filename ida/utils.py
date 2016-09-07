@@ -31,6 +31,19 @@ from pathlib import Path
 from fabulous.color import red, bold
 
 
+def pimseed(sta, i10_fn, ms_fn):
+
+    if not (os.path.exists(i10_fn) and os.path.isfile(i10_fn)):
+        print(red(bold('Error running imseed: IDA10 file not found:' + i10_fn)))
+    elif not shutil.which('imseed'):
+        print(red(bold('Error running imseed: IMSEED binary not found in PATH.')))
+    else:
+        cmdstr = 'imseed sta=' + sta.upper() + ' < ' + i10_fn + ' > ' + ms_fn
+        res = subprocess.run(cmdstr, shell=True, stderr=subprocess.PIPE, universal_newlines=True)
+        if res.returncode != 0:
+            print(red(bold(res.stderr)))
+
+
 def i10get(sta, chan_list, startime, endtime, outfn=None, **kwargs):
 
     # get list of raw yr/day dirs for sta within tart/end dates
