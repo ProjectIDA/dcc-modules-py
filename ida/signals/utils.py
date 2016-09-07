@@ -49,7 +49,8 @@ def time_offset(trace1, trace2, bpfreqmin=0.1, bpfreqmax=1.0, winsize=1000):
             - checked for gaps. Any gaps will prevent the computation
 
         correlation performed by shifting timeseries +/- winsize samples
-        Returns offset in seconds, > 0 if trace1 ahead of trace2
+        Returns offset in seconds that needs to be applied to trace2 for it to be in sync with
+        trace1. So, >0 if trace1 ahead of trace2, i.e. add offset to trace2 timestamps
     """
 
     if Stream([trace1, trace2]).get_gaps():

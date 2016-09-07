@@ -19,14 +19,13 @@
 # If you use this software in a product, an explicit acknowledgment in the product documentation of the contribution
 # by Project IDA, Institute of Geophysics and Planetary Physics, UCSD would be appreciated but is not required.
 #######################################################################################################################
-from datetime import datetime
-import os.path
+#from datetime import datetime
+#import os.path
 from pathlib import Path
 import yaml
-import collections
+#import collections
 
 from fabulous.color import red, bold
-
 
 class AbsOnsiteConfig(object):
 
@@ -53,6 +52,8 @@ class AbsOnsiteConfig(object):
     def segment_size_samples(self):
         return self._config['segment_size_samples']
 
-    @property
+    @property   
     def minimum_segment_cnt(self):
         return self._config['minimum_segment_cnt']
+
+
