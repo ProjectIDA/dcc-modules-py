@@ -29,7 +29,7 @@ import functools
 from fabulous.color import red, bold
 from obspy import read, Stream, Trace, UTCDateTime
 
-from ida.utils import i10get
+from ida.utils import i10get, pimseed
 from ida.calibration.shaketable import rename_chan
 
 
@@ -63,73 +63,78 @@ class AbsOnsiteConfig(object):
             self._config = yaml.load(config_txt)
             self._config_dir = Path(fn).parent
         except:
+            self._config = {}
             print(red(bold('Error parsing YAML config file: ' + fn)))
             self.errs.append('Error parsing YAML config file: ' + fn)
         else:
             self.process_config()
 
+        if self.errs:
+            print(red(bold('\nThe following problems were encountered while parsing the config file: \n')))
+            print(red('\n'.join(self.errs)))
+
 
     def process_config(self):
 
         # check ENV
-        if not os.environ.get('IDA_CAL_SITEDATA_DIR'):
-            self.errs.append('The env var IDA_CAL_SITEDATA_DIR must be set to the root directory of the onsite reference data.')
+        if not os.environ.get('IDA_CAL_ABS_SITEDATA_DIR'):
+            self.errs.append('The env var IDA_CAL_ABS_SITEDATA_DIR must be set to the root directory of the onsite reference data.')
         if not os.environ.get('IDA_ARCHIVE_RAW_DIR'):
             self.errs.append('The env var IDA_ARCHIVE_RAW_DIR must be set to the root directory IDA10 waveform data.')
 
         # check azimuth settings
-        if self._config['process_azimuth'] == 1:
+        if self._config['process_azimuth']:
 
             if not PurePath(self._config['azimuth_ref_data']['ms_file']).is_absolute():
-                fpath = os.path.join(os.environ.get('IDA_CAL_SITEDATA_DIR'),
+                fpath = os.path.join(os.environ.get('IDA_CAL_ABS_SITEDATA_DIR'),
                                      self._config['azimuth_ref_data']['ms_file'])
                 self._config['azimuth_ref_data']['ms_file'] = fpath
             else:
                 fpath = self._config['azimuth_ref_data']['ms_file']
 
             if not (os.path.exists(fpath) and os.path.isfile(fpath)):
-                self.errs.append('Reference azimuth file not found: {}'.format(fpath))
+                self.errs.append('Azimuth file for reference sensor not found: {}'.format(fpath))
 
             try:
                 self._config['azimuth_ref_data']['starttime_iso'] = \
                     UTCDateTime(self._config['azimuth_ref_data']['starttime_iso'])
             except:
-                self.errs.append('Error parsing azimuth_ref_data starttime_iso: {}'.format(
+                self.errs.append('Error parsing starttime_iso for azimuth reference data: {}'.format(
                     self._config['azimuth_ref_data']['starttime_iso']
                 ))
             try:
                 self._config['azimuth_ref_data']['endtime_iso'] = \
                     UTCDateTime(self._config['azimuth_ref_data']['endtime_iso'])
             except:
-                self.errs.append('Error parsing azimuth_ref_data endtime_iso: {}'.format(
+                self.errs.append('Error parsing endtime_iso for azimuth reference data: {}'.format(
                     self._config['azimuth_ref_data']['endtime_iso']
                 ))
 
         # check absolute settings
-        if self._config['process_absolute'] == 1:
+        if self._config['process_absolute']:
 
             if not PurePath(self._config['absolute_ref_data']['ms_file']).is_absolute():
-                fpath = os.path.join(os.environ.get('IDA_CAL_SITEDATA_DIR'),
+                fpath = os.path.join(os.environ.get('IDA_CAL_ABS_SITEDATA_DIR'),
                                      self._config['absolute_ref_data']['ms_file'])
                 self._config['absolute_ref_data']['ms_file'] = fpath
             else:
                 fpath = self._config['absolute_ref_data']['ms_file']
 
             if not (os.path.exists(fpath) and os.path.isfile(fpath)):
-                self.errs.append('Reference absolute file not found: {}'.format(fpath))
+                self.errs.append('Absolute file for reference sensor not found: {}'.format(fpath))
 
             try:
                 self._config['absolute_ref_data']['starttime_iso'] = \
                     UTCDateTime(self._config['absolute_ref_data']['starttime_iso'])
             except:
-                self.errs.append('Error parsing azimuth_ref_data starttime_iso: {}'.format(
+                self.errs.append('Error parsing starttime_iso for absolute reference data: {}'.format(
                     self._config['absolute_ref_data']['starttime_iso']
                 ))
             try:
                 self._config['absolute_ref_data']['endtime_iso'] = \
                     UTCDateTime(self._config['absolute_ref_data']['endtime_iso'])
             except:
-                self.errs.append('Error parsing azimuth_ref_data endtime_iso: {}'.format(
+                self.errs.append('Error parsing endtime_iso for absolute reference data: {}'.format(
                     self._config['absolute_ref_data']['endtime_iso']
                 ))
 
@@ -169,21 +174,20 @@ class AbsOnsiteConfig(object):
     def read_ref_data(self):
         """
         Reads AZI and ABS miniseed data for ref sensor.
-
-        Performs trim (in-place) based on start/end times in config and saves pointer to streams
-
         """
-        if self.ref_azi_seed_file:
+        if self._config['process_azimuth'] and self.ref_azi_seed_file:
             try:
                 self._ref_azi_strm = read(self.ref_azi_seed_file, format='MSEED')
             except:
                 print(red(bold('Error reading reference azimuth data: ' + self.ref_azi_seed_file)))
 
-        if self.ref_abs_seed_file:
+        if self._config['process_absolute'] and self.ref_abs_seed_file:
             try:
                 self._ref_abs_strm = read(self.ref_abs_seed_file, format='MSEED')
             except:
                 print(red(bold('Error reading reference absolute data: ' + self.ref_abs_seed_file)))
+
+        self.clean_ref_channels()
 
     def clean_ref_channels(self):
         """
@@ -193,10 +197,15 @@ class AbsOnsiteConfig(object):
         if self._ref_azi_strm:
             for tr in self._ref_azi_strm:
                 tr.stats.channel = rename_chan(tr.stats.channel)
+                tr.stats.network = self._config['field_kit_metadata']['network']
+                tr.stats.station = self._config['field_kit_metadata']['station']
+                tr.stats.location = self._config['field_kit_metadata']['location']
         if self._ref_abs_strm:
             for tr in self._ref_abs_strm:
                 tr.stats.channel = rename_chan(tr.stats.channel)
-
+                tr.stats.network = self._config['field_kit_metadata']['network']
+                tr.stats.station = self._config['field_kit_metadata']['station']
+                tr.stats.location = self._config['field_kit_metadata']['location']
 
     def trim_data(self):
         """
@@ -216,19 +225,60 @@ class AbsOnsiteConfig(object):
         Retrieve IDA10 data from IDA Archive and comvert to miniseed for azi/abs time periods
         """
 
-        if self._pri_azi_strm:
+        if self._config['process_azimuth']:
+
             print('Retrieving primary sensor data for azimuth period...')
-            i10get(self._pri_azi_strm[0].stats.station,
-                   ','.join(self._pri_chanloc_codes()),
+            outname = './{}_{}_{}'.format(self._config['site_settings']['station'],
+                                           self._config['site_settings']['pri_sensor_loc'],
+                                           'azi')
+            i10get(self._config['site_settings']['station'],
+                   self._config['site_settings']['pri_sensor_chans'],
                    self.azi_starttime, self.azi_endtime,
-                   outfn='./{}_{}_{}.ms'.format(self._pri_azi_strm[0].stats.station,
-                                                self._config['site_settings']['pri_sensor_loc'],
-                                                'azi.i10'))
+                   outfn=outname+'.i10')
+            pimseed(self._config['site_settings']['station'], outname+'.i10', outname+'.ms')
+
+            print('Retrieving secondary sensor data for azimuth period...')
+            outname = './{}_{}_{}'.format(self._config['site_settings']['station'],
+                                             self._config['site_settings']['sec_sensor_loc'],
+                                             'azi')
+            i10get(self._sec_azi_strm[0].stats.station,
+                   self._config['site_settings']['sec_sensor_chans'],
+                   self.azi_starttime, self.azi_endtime,
+                   outfn=outname + '.i10')
+            pimseed(self._config['site_settings']['station'], outname + '.i10', outname + '.ms')
+
+
+        if self._config['process_absolute'] and self._ref_abs_strm:
+            print('Retrieving primary sensor data for absolute period...')
+            outname = './{}_{}_{}'.format(self._config['site_settings']['station'],
+                                           self._config['site_settings']['pri_sensor_loc'],
+                                           'abs')
+            i10get(self._config['site_settings']['station'],
+                   self._config['site_settings']['pri_sensor_chans'],
+                   self.abs_starttime, self.abs_endtime,
+                   outfn=outname+'.i10')
+            pimseed(self._config['site_settings']['station'], outname+'.i10', outname+'.ms')
+
+            print('Retrieving secondary sensor data for absolute period...')
+            outname = './{}_{}_{}'.format(self._config['site_settings']['station'],
+                                           self._config['site_settings']['sec_sensor_loc'],
+                                           'abs')
+            i10get(self._config['site_settings']['station'],
+                   self._config['site_settings']['sec_sensor_chans'],
+                   self.abs_starttime, self.abs_endtime,
+                   outfn=outname+'.i10')
+            pimseed(self._config['site_settings']['station'], outname+'.i10', outname+'.ms')
 
 
     def _pri_chanloc_codes(self):
-        if self._pri_azi_strm:
+        if self._ref_azi_strm:
             return [tr.stats.channel+self._config['site_settings']['pri_sensor_loc'] for tr in self._pri_azi_strm]
+        else:
+            return ''
+
+    def _sec_chanloc_codes(self):
+        if self._ref_azi_strm:
+            return [tr.stats.channel+self._config['site_settings']['sec_sensor_loc'] for tr in self._sec_azi_strm]
         else:
             return ''
 

@@ -34,7 +34,7 @@ from fabulous.color import red, bold
 def pimseed(sta, i10_fn, ms_fn):
 
     if not (os.path.exists(i10_fn) and os.path.isfile(i10_fn)):
-        print(red(bold('Error running imseed: IDA10 file not found:' + i10_fn)))
+        print(red(bold('Error running imseed: IDA10 file not found: ' + i10_fn)))
     elif not shutil.which('imseed'):
         print(red(bold('Error running imseed: IMSEED binary not found in PATH.')))
     else:
@@ -52,7 +52,7 @@ def i10get(sta, chan_list, startime, endtime, outfn=None, **kwargs):
         print(red(bold('FATAL ERROR: IDA_ARCHIVE_RAW_DIR env var not set.')), file=sys.stderr)
         sys.exit(1)
 
-    gz_dirs = arc_raw_i10_dirs(arcrawdir, sta, startime, endtime)
+    gz_dirs = arc_raw_i10_dirs(arcrawdir, sta.lower(), startime, endtime)
 
     # keep track of gz files across days for each station to remove dupes
     gz_files_processed = set()
