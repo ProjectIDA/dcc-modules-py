@@ -40,7 +40,7 @@ TAPER_TYPES = [
 ]
 
 
-def time_offset(trace1, trace2, bpfreqmin=0.1, bpfreqmax=1.0, winsize=1000, ret_corr_func=False):
+def time_offset(trace1, trace2, bpfreqmin=0.1, bpfreqmax=1.0, winsize=1000):
     """ Timeseries time offset computed using correlation computation.
 
         Timeseries will be:
@@ -53,21 +53,22 @@ def time_offset(trace1, trace2, bpfreqmin=0.1, bpfreqmax=1.0, winsize=1000, ret_
     """
 
     if Stream([trace1, trace2]).get_gaps():
-        return 0, 0.0, 'The supplied traces have gaps. Cannot compute time_offset.'
+        return 0, 0.0, [], 'The supplied traces have gaps. Cannot compute time_offset.'
 
-    trace1.filter('bandpass', freqmin=bpfreqmin, freqmax=bpfreqmax)
-    trace1.normalize()
-    trace2.filter('bandpass', freqmin=bpfreqmin, freqmax=bpfreqmax)
-    trace2.normalize()
+    # leave originals alone...
+    tr1 = trace1.copy()
+    tr2 = trace2.copy()
 
-    if ret_corr_func:
-        index, val, corfunc40 = xcorr(trace1, trace2, winsize, full_xcorr=True)
-    else:
-        index, val = xcorr(trace1, trace2, winsize, full_xcorr=False)
+    tr1.filter('bandpass', freqmin=bpfreqmin, freqmax=bpfreqmax)
+    tr1.normalize()
+    tr2.filter('bandpass', freqmin=bpfreqmin, freqmax=bpfreqmax)
+    tr2.normalize()
+
+    index, val, corrfun = xcorr(tr1, tr2, winsize, full_xcorr=True)
 
     offset = index / trace1.stats.sampling_rate
 
-    return offset, val, ''
+    return offset, val, corrfun, ''
 
 
 def check_and_fix_polarities(strm, seis_model):
