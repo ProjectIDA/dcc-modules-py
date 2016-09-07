@@ -27,6 +27,7 @@ import collections
 
 from fabulous.color import red, bold
 
+
 class AbsOnsiteConfig(object):
 
     def __init__(self, fn):
@@ -42,12 +43,16 @@ class AbsOnsiteConfig(object):
 
     @property
     def ref_azi_seed_file(self):
-        return  self._config['ref_azi_seed_file']
+        return  self._config['azimuth_processing']['ms_file']
 
     @property
     def ref_abs_seed_file(self):
-        return  self._config['ref_abs_seed_file']
+        return  self._config['abssens_processing']['ms_file']
 
     @property
     def segment_size_samples(self):
         return self._config['segment_size_samples']
+
+    @property
+    def minimum_segment_cnt(self):
+        return self._config['minimum_segment_cnt']

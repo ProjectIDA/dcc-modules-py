@@ -22,7 +22,8 @@
 import logging
 import copy
 
-from obspy.core.trace import Trace
+from obspy.core import Trace, Stream, UTCDateTime
+from obspy.signal.cross_correlation import xcorr
 from scipy.signal import freqs
 from scipy.signal.ltisys import zpk2tf
 from numpy import array, ndarray, isclose, abs, divide, multiply, pi
@@ -37,6 +38,36 @@ from ida.instruments import SEIS_INVERT_CAL_CHAN, SEIS_INVERT_NORTH_CHAN, SEIS_I
 TAPER_TYPES = [
     'tukey'
 ]
+
+
+def time_offset(trace1, trace2, bpfreqmin=0.1, bpfreqmax=1.0, winsize=1000, ret_corr_func=False):
+    """ Timeseries time offset computed using correlation computation.
+
+        Timeseries will be:
+            - filtered with bandpass between bpfreqmin and bpfreqmax
+            - normalized
+            - checked for gaps. Any gaps will prevent the computation
+
+        correlation performed by shifting timeseries +/- winsize samples
+        Returns offset in seconds, > 0 if trace1 ahead of trace2
+    """
+
+    if Stream([trace1, trace2]).get_gaps():
+        return 0, 0.0, 'The supplied traces have gaps. Cannot compute time_offset.'
+
+    trace1.filter('bandpass', freqmin=bpfreqmin, freqmax=bpfreqmax)
+    trace1.normalize()
+    trace2.filter('bandpass', freqmin=bpfreqmin, freqmax=bpfreqmax)
+    trace2.normalize()
+
+    if ret_corr_func:
+        index, val, corfunc40 = xcorr(trace1, trace2, winsize, full_xcorr=True)
+    else:
+        index, val = xcorr(trace1, trace2, winsize, full_xcorr=False)
+
+    offset = index / trace1.stats.sampling_rate
+
+    return offset, val, ''
 
 
 def check_and_fix_polarities(strm, seis_model):
