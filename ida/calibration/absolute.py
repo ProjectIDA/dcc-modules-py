@@ -21,13 +21,13 @@
 #######################################################################################################################
 #from datetime import datetime
 import os.path
+#from os import remove
 from pathlib import Path, PurePath
 import yaml
-import functools
 #import collections
 
 from fabulous.color import red, bold
-from obspy import read, Stream, Trace, UTCDateTime
+from obspy import read, UTCDateTime #, Stream, Trace
 
 from ida.utils import i10get, pimseed
 from ida.calibration.shaketable import rename_chan
@@ -231,43 +231,54 @@ class AbsOnsiteConfig(object):
             outname = './{}_{}_{}'.format(self._config['site_settings']['station'],
                                            self._config['site_settings']['pri_sensor_loc'],
                                            'azi')
+            if os.path.exists(outname+'.i10'): os.remove(outname+'.i10')
+            if os.path.exists(outname+'.ms'): os.remove(outname+'.ms')
             i10get(self._config['site_settings']['station'],
-                   self._config['site_settings']['pri_sensor_chans'],
+                   self._pri_chanloc_codes(),
                    self.azi_starttime, self.azi_endtime,
                    outfn=outname+'.i10')
             pimseed(self._config['site_settings']['station'], outname+'.i10', outname+'.ms')
+            self._pri_azi_strm = read(outname + '.ms')
 
             print('Retrieving secondary sensor data for azimuth period...')
             outname = './{}_{}_{}'.format(self._config['site_settings']['station'],
                                              self._config['site_settings']['sec_sensor_loc'],
                                              'azi')
+            if os.path.exists(outname+'.i10'): os.remove(outname+'.i10')
+            if os.path.exists(outname+'.ms'): os.remove(outname+'.ms')
             i10get(self._sec_azi_strm[0].stats.station,
-                   self._config['site_settings']['sec_sensor_chans'],
+                   self._sec_chanloc_codes(),
                    self.azi_starttime, self.azi_endtime,
                    outfn=outname + '.i10')
             pimseed(self._config['site_settings']['station'], outname + '.i10', outname + '.ms')
-
+            self._sec_azi_strm = read(outname + '.ms')
 
         if self._config['process_absolute'] and self._ref_abs_strm:
             print('Retrieving primary sensor data for absolute period...')
             outname = './{}_{}_{}'.format(self._config['site_settings']['station'],
                                            self._config['site_settings']['pri_sensor_loc'],
                                            'abs')
+            if os.path.exists(outname+'.i10'): os.remove(outname+'.i10')
+            if os.path.exists(outname+'.ms'): os.remove(outname+'.ms')
             i10get(self._config['site_settings']['station'],
-                   self._config['site_settings']['pri_sensor_chans'],
+                   self._pri_chanloc_codes(),
                    self.abs_starttime, self.abs_endtime,
                    outfn=outname+'.i10')
             pimseed(self._config['site_settings']['station'], outname+'.i10', outname+'.ms')
+            self._pri_abs_strm = read(outname + '.ms')
 
             print('Retrieving secondary sensor data for absolute period...')
             outname = './{}_{}_{}'.format(self._config['site_settings']['station'],
                                            self._config['site_settings']['sec_sensor_loc'],
                                            'abs')
+            if os.path.exists(outname+'.i10'): os.remove(outname+'.i10')
+            if os.path.exists(outname+'.ms'): os.remove(outname+'.ms')
             i10get(self._config['site_settings']['station'],
-                   self._config['site_settings']['sec_sensor_chans'],
+                   self._sec_chanloc_codes(),
                    self.abs_starttime, self.abs_endtime,
                    outfn=outname+'.i10')
             pimseed(self._config['site_settings']['station'], outname+'.i10', outname+'.ms')
+            self._sec_abs_strm = read(outname + '.ms')
 
 
     def _pri_chanloc_codes(self):

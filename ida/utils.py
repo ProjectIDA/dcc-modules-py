@@ -85,7 +85,7 @@ def i10get(sta, chan_list, startime, endtime, outfn=None, **kwargs):
 
 def mstrim(starttime=None, endtime=None, infn=None, outfn=None):
 
-    from obspy import UTCDateTime
+    from obspy import read, UTCDateTime
 
     if not starttime and not endtime:
         print(red(bold('ERROR: You must supply startime, endtime or both')), file=sys.stderr)
@@ -93,31 +93,35 @@ def mstrim(starttime=None, endtime=None, infn=None, outfn=None):
     start_dt = UTCDateTime(starttime) if starttime else None
     end_dt = UTCDateTime(endtime) if endtime else None
 
-    # with open(sys.__stdin__, 'rb') as msin:
-    # strm_bytes = sys.__stdin__.read()
+    if not infn:
+        # copy input piped stream to temp file
+        intf = tempfile.NamedTemporaryFile(delete=False)
+        with os.fdopen(sys.stdin.fileno(), 'rb') as input_file, \
+                open(intf.name, 'wb') as output_file:
+            shutil.copyfileobj(input_file, output_file)
+        msin = intf.name
+    else:
+        msin = infn
 
-    ntf = tempfile.NamedTemporaryFile(delete=False)
+    if not outfn:
+        # send trimmed output to tempfile for pipping to stdout
+        outtf = tempfile.NamedTemporaryFile(delete=False)
+        msout = outtf.name
+    else:
+        msout = outfn
 
-    with os.fdopen(sys.stdin.fileno(), 'rb') as input_file, \
-            open(ntf.name, 'wb') as output_file:
-        shutil.copyfileobj(input_file, output_file)
+    strm = read(msin)
+    strm.trim(starttime=start_dt, endtime=end_dt)
+    strm.write(msout, format='MSEED')
 
-        # for trimmed ms file
-        mstmp = tempfile.NamedTemporaryFile(delete=False)  # for writeing stream to
-
-        from obspy import read
-        msfn = ntf.name
-        strm = read(msfn)
-        strm.trim(starttime=start_dt, endtime=end_dt)
-        strm.write(mstmp.name, format='MSEED')
-        del strm
-
-        res = subprocess.run('cat ' + mstmp.name, shell=True)
+    if not infn:
+        os.remove(intf.name)
+    if not outfn:
+        # send to stdout
+        res = subprocess.run('cat ' + msout, shell=True)
         if res.returncode != 0:
             print(red(bold('ERROR streaming miniseed data to stdout.')), file=sys.stderr)
-
-        os.remove(ntf.name)
-        os.remove(mstmp.name)
+        os.remove(outtf.name)
 
 
 def arc_raw_i10_dirs(raw_root_dir, sta, start_dt, end_dt):
