@@ -43,10 +43,7 @@ TAPER_TYPES = [
 def time_offset(trace1, trace2, bpfreqmin=0.1, bpfreqmax=1.0, winsize=1000):
     """ Timeseries time offset computed using correlation computation.
 
-        Timeseries will be:
-            - filtered with bandpass between bpfreqmin and bpfreqmax
-            - normalized
-            - checked for gaps. Any gaps will prevent the computation
+        Timeseries will be checked for gaps. Any gaps will prevent the computation
 
         correlation performed by shifting timeseries +/- winsize samples
         Returns offset in seconds that needs to be applied to trace2 for it to be in sync with
@@ -59,11 +56,6 @@ def time_offset(trace1, trace2, bpfreqmin=0.1, bpfreqmax=1.0, winsize=1000):
     # leave originals alone...
     tr1 = trace1.copy()
     tr2 = trace2.copy()
-
-    tr1.filter('bandpass', freqmin=bpfreqmin, freqmax=bpfreqmax)
-    tr1.normalize()
-    tr2.filter('bandpass', freqmin=bpfreqmin, freqmax=bpfreqmax)
-    tr2.normalize()
 
     index, val, corrfun = xcorr(tr1, tr2, winsize, full_xcorr=True)
 
