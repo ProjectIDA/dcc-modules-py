@@ -24,13 +24,13 @@ import os.path
 import yaml
 import collections
 
-from numpy import float32, multiply, logical_and, less_equal, greater_equal, greater, \
-    polyfit, polyval, subtract, log10, ceil, floor, column_stack, savetxt
+from numpy import float32, logical_and, less_equal, greater_equal, greater, \
+    polyfit, polyval, subtract, log10, ceil, floor
 from numpy.fft import rfft, irfft
 import matplotlib.pyplot as plt
 
-from fabulous.color import red, green, bold
-from obspy.core import read, UTCDateTime, Stream
+from fabulous.color import red, bold
+from obspy.core import read, UTCDateTime
 from obspy.signal.invsim import evalresp
 
 from ida.calibration.cross import cross_correlate
