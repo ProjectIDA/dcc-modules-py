@@ -29,6 +29,10 @@ import yaml
 from fabulous.color import red, bold
 from obspy import read, UTCDateTime, Stream#, Trace
 from obspy.signal.invsim import evalresp
+import obspy.signal.filter as ops
+from numpy import float32, std, mean
+from numpy.fft import rfft, irfft
+import scipy.signal as ss
 
 from ida.utils import i10get, pimseed
 from ida.signals.utils import time_offset
@@ -64,6 +68,8 @@ class AbsOnsiteConfig(object):
             self.errs.append('Error parsing YAML config file: ' + fn)
         else:
             self.process_config()
+
+        self._config['respfile_dir'] = os.environ.get('SEEDRESP') or ''
 
         if self.errs:
             print(red(bold('\nThe following problems were encountered while parsing the config file: \n')))
@@ -171,6 +177,25 @@ class AbsOnsiteConfig(object):
     def correlation_segment_size(self):
         return self._config['correlation_segment_size_secs']
 
+    def respfilename(self, tr):
+        resp_file = 'RESP.{}.{}.{}.{}'.format(
+            tr.stats.network, tr.stats.station, tr.stats.loc, tr.stats.channel
+        )
+        return os.path.join(self._config['resp_filedir'], resp_file)
+
+    def response_tr(self, tr):
+        resp = evalresp(1/tr.stats.sampling_rate,
+                        tr.stats.npts,
+                        self.respfilename(tr),
+                        tr.stats.starttime,
+                        station=tr.stats.station,
+                        channel=tr.stats.channel,
+                        network=tr.stats.network,
+                        locid=tr.stats.loc,
+                        units='VEL')
+        return resp
+
+
     def correct_ref_abs_time(self):
 
         offset = 0
@@ -274,23 +299,23 @@ class AbsOnsiteConfig(object):
         if self._config['process_azimuth']:
 
             print('Retrieving primary sensor data for azimuth period...')
-            outname = './{}_{}_{}'.format(self._config['site_settings']['station'],
-                                           self._config['site_settings']['pri_sensor_loc'],
+            outname = './{}_{}_{}'.format(self._config['site_info']['station'],
+                                           self._config['site_info']['pri_sensor_loc'],
                                            'azi')
             if os.path.exists(outname+'.i10'): os.remove(outname+'.i10')
             if os.path.exists(outname+'.ms'): os.remove(outname+'.ms')
-            i10get(self._config['site_settings']['station'],
+            i10get(self._config['site_info']['station'],
                    self._pri_chanloc_codes(),
                    self.azi_starttime, self.azi_endtime,
                    outfn=outname+'.i10')
-            pimseed(self._config['site_settings']['station'], outname+'.i10', outname+'.ms')
+            pimseed(self._config['site_info']['station'], outname+'.i10', outname+'.ms')
             self._pri_azi_strm = read(outname + '.ms')
             self._pri_azi_strm.trim(starttime=self.azi_starttime, endtime=self.azi_endtime)
             self._pri_azi_strm.merge()
 
             print('Retrieving secondary sensor data for azimuth period...')
-            outname = './{}_{}_{}'.format(self._config['site_settings']['station'],
-                                             self._config['site_settings']['sec_sensor_loc'],
+            outname = './{}_{}_{}'.format(self._config['site_info']['station'],
+                                             self._config['site_info']['sec_sensor_loc'],
                                              'azi')
             if os.path.exists(outname+'.i10'): os.remove(outname+'.i10')
             if os.path.exists(outname+'.ms'): os.remove(outname+'.ms')
@@ -298,60 +323,60 @@ class AbsOnsiteConfig(object):
                    self._sec_chanloc_codes(),
                    self.azi_starttime, self.azi_endtime,
                    outfn=outname + '.i10')
-            pimseed(self._config['site_settings']['station'], outname + '.i10', outname + '.ms')
+            pimseed(self._config['site_info']['station'], outname + '.i10', outname + '.ms')
             self._sec_azi_strm = read(outname + '.ms')
             self._sec_azi_strm.trim(starttime=self.azi_starttime, endtime=self.azi_endtime)
             self._sec_azi_strm.merge()
 
         if self._config['process_absolute'] and self._ref_abs_strm:
             print('Retrieving primary sensor data for absolute period...')
-            outname = './{}_{}_{}'.format(self._config['site_settings']['station'],
-                                           self._config['site_settings']['pri_sensor_loc'],
+            outname = './{}_{}_{}'.format(self._config['site_info']['station'],
+                                           self._config['site_info']['pri_sensor_loc'],
                                            'abs')
             if os.path.exists(outname+'.i10'): os.remove(outname+'.i10')
             if os.path.exists(outname+'.ms'): os.remove(outname+'.ms')
-            i10get(self._config['site_settings']['station'],
+            i10get(self._config['site_info']['station'],
                    self._pri_chanloc_codes(),
                    self.abs_starttime, self.abs_endtime,
                    outfn=outname+'.i10')
-            pimseed(self._config['site_settings']['station'], outname+'.i10', outname+'.ms')
+            pimseed(self._config['site_info']['station'], outname+'.i10', outname+'.ms')
             self._pri_abs_strm = read(outname + '.ms')
             self._pri_abs_strm.trim(starttime=self.abs_starttime, endtime=self.abs_endtime)
             self._pri_abs_strm.merge()
 
             print('Retrieving secondary sensor data for absolute period...')
-            outname = './{}_{}_{}'.format(self._config['site_settings']['station'],
-                                           self._config['site_settings']['sec_sensor_loc'],
+            outname = './{}_{}_{}'.format(self._config['site_info']['station'],
+                                           self._config['site_info']['sec_sensor_loc'],
                                            'abs')
             if os.path.exists(outname+'.i10'): os.remove(outname+'.i10')
             if os.path.exists(outname+'.ms'): os.remove(outname+'.ms')
-            i10get(self._config['site_settings']['station'],
+            i10get(self._config['site_info']['station'],
                    self._sec_chanloc_codes(),
                    self.abs_starttime, self.abs_endtime,
                    outfn=outname+'.i10')
-            pimseed(self._config['site_settings']['station'], outname+'.i10', outname+'.ms')
+            pimseed(self._config['site_info']['station'], outname+'.i10', outname+'.ms')
             self._sec_abs_strm = read(outname + '.ms')
             self._sec_abs_strm.trim(starttime=self.abs_starttime, endtime=self.abs_endtime)
             self._sec_abs_strm.merge()
 
 
     def _pri_chanloc_codes(self):
-        chans = self._config['site_settings']['pri_sensor_chans'].split(',')
-        loc = self._config['site_settings']['pri_sensor_loc']
+        chans = self._config['site_info']['pri_sensor_chans'].split(',')
+        loc = self._config['site_info']['pri_sensor_loc']
         if chans :
             return ','.join([chan+loc for chan in chans])
         else:
             return ''
 
     def _sec_chanloc_codes(self):
-        chans = self._config['site_settings']['sec_sensor_chans'].split(',')
-        loc = self._config['site_settings']['sec_sensor_loc']
+        chans = self._config['site_info']['sec_sensor_chans'].split(',')
+        loc = self._config['site_info']['sec_sensor_loc']
         if chans :
             return ','.join([chan+loc for chan in chans])
         else:
             return ''
 
-    def compare_streams(self, ref_st, sen_st):
+    def compare_streams(self, strm1, strm2):
         """
         Loops through component traces and runs azi and abs analysis on segments
 
@@ -359,94 +384,95 @@ class AbsOnsiteConfig(object):
             trim sample count to multiple of analysis frequency rate
             decimate to analysis sample rate
             bandpass filter to analysis bandpass
-            deconvolve inst resp and convolve ref response to sens_st
+            deconvolve strm2 sensor resp from strm2 and convolve strm1 response
             loop over segments performing analysis and compute
             angle, amp, and variance measures
 
 
         """
-        ref_z_tr = ref_st.select(component='Z').copy()
-        ref_1_tr = ref_st.select(component='1').copy()
-        ref_2_tr = ref_st.select(component='2').copy()
-        sen_z_tr = sen_st.select(component='Z').copy()
-        sen_1_tr = sen_st.select(component='1').copy()
-        sen_2_tr = sen_st.select(component='2').copy()
-        # construct RESP file filename for sensor_trace
+        strm1_z = strm1.select(component='Z')[0].copy()
+        strm1_1 = strm1.select(component='1')[0].copy()
+        strm1_2 = strm1.select(component='2')[0].copy()
+        strm2_z = strm2.select(component='Z')[0].copy()
+        strm2_1 = strm2.select(component='1')[0].copy()
+        strm2_2 = strm2.select(component='2')[0].copy()
 
-############# NEED TO PUT RESP FILE LOCATIONS (REF, PRI, SEC) IN YAML
-############# EMPTY STRING ==> USE $SEEDRESP
+        strm1_z_resp = self.response_tr(strm1_z)
+        strm1_1_resp = self.response_tr(strm1_1)
+        strm1_2_resp = self.response_tr(strm1_2)
+        strm2_z_resp = self.response_tr(strm2_z)
+        strm2_1_resp = self.response_tr(strm2_1)
+        strm2_2_resp = self.response_tr(strm2_2)
 
-        resp_file = 'RESP.{}.{}.{}.{}'.format(
-            sen_z_tr.stats.network, sen_z_tr.stats.station, sen_z_tr.stats.loc, sen_z_tr.stats.channel
-        )
-        resp_filepath = os.path.join(self._config['resp_file_location'], resp_file)
-        sen_z_resp = evalresp(1/sen_z_tr.stats.sampling_rate,
-                            sen_z_tr.stats.npts,
-                            resp_filepath,
-                            sen_z_tr.stats.starttime,
-                            station=sen_z_tr.stats.station,
-                            channel=sen_z_tr.stats.channel,
-                            network=sen_z_tr.stats.network,
-                            locid=sen_z_tr.stats.loc,
-                            units='DIS')
+        # lets do vertical first...
+        dbg_cnt = 0
+        start_t = strm1_z.stats.starttime
+        while start_t + self.segment_size_secs < strm1_z.stats.endtime:
 
-        resp_file = 'RESP.{}.{}.{}.{}'.format(
-            sen_1_tr.stats.network, sen_1_tr.stats.station, sen_1_tr.stats.loc, sen_1_tr.stats.channel
-        )
-        resp_filepath = os.path.join(self._config['resp_file_location'], resp_file)
-        sen_1_resp = evalresp(1/sen_1_tr.stats.sampling_rate,
-                            sen_1_tr.stats.npts,
-                            resp_filepath,
-                            sen_1_tr.stats.starttime,
-                            station=sen_1_tr.stats.station,
-                            channel=sen_1_tr.stats.channel,
-                            network=sen_1_tr.stats.network,
-                            locid=sen_1_tr.stats.loc,
-                            units='DIS')
+            strm1_z_seg = strm1_z.slice(starttime=start_t, endtime=start_t + self.segment_size_secs).data.astype(float32)
+            strm2_z_seg = strm2_z.slice(starttime=start_t, endtime=start_t + self.segment_size_secs).data.astype(float32)
 
-        resp_file = 'RESP.{}.{}.{}.{}'.format(
-            sen_2_tr.stats.network, sen_2_tr.stats.station, sen_2_tr.stats.loc, sen_2_tr.stats.channel
-        )
-        resp_filepath = os.path.join(self._config['resp_file_location'], resp_file)
-        sen_2_resp = evalresp(1/sen_2_tr.stats.sampling_rate,
-                            sen_2_tr.stats.npts,
-                            resp_filepath,
-                            sen_2_tr.stats.starttime,
-                            station=sen_2_tr.stats.station,
-                            channel=sen_2_tr.stats.channel,
-                            network=sen_2_tr.stats.network,
-                            locid=sen_2_tr.stats.loc,
-                            units='DIS')
+            mn = mean(strm1_z_seg)
+            strm1_z_seg -= mn
+            mn = mean(strm2_z_seg)
+            strm2_z_seg -= mn
 
-        start_t = ref_z_tr.stats.starttime
-        while start_t + self.segment_size_secs < ref_z_tr.stats.endtime:
+            # move strm2 into strm1 response space
+            strm2_z_fft = rfft(strm2_z_seg)
+            strm2_z_fft /= strm2_z_resp
+            strm2_z_fft *= strm1_z_resp
+            strm2_z_cnv = irfft(strm2_z_seg, len(strm2_z_seg))
 
-            ref_z_seg = ref_z_tr.slice(starttime=start_t, endtime=start_t + self.segment_size_secs)
-            ref_1_seg = ref_1_tr.slice(starttime=start_t, endtime=start_t + self.segment_size_secs)
-            ref_2_seg = ref_2_tr.slice(starttime=start_t, endtime=start_t + self.segment_size_secs)
-            sen_z_seg = sen_z_tr.slice(starttime=start_t, endtime=start_t + self.segment_size_secs)
-            sen_1_seg = sen_1_tr.slice(starttime=start_t, endtime=start_t + self.segment_size_secs)
-            sen_2_seg = sen_2_tr.slice(starttime=start_t, endtime=start_t + self.segment_size_secs)
+            # trim ends
+            trim_cnt = strm1_z.stats.sampling_rate * self._config['segment_size_trim']
+            strm1_z_seg = strm1_z_seg[trim_cnt:-trim_cnt]
+            trim_cnt = strm2_z.stats.sampling_rate * self._config['segment_size_trim']
+            strm2_z_seg = strm2_z_seg[trim_cnt:-trim_cnt]
 
-            # deconvolve sensor resp from sen data
-    # DEConvolving ref data with nominal response...
-    refdata    = ref_trace.data.astype(float32)
-    mean       = refdata.mean()
-    refdata   -= mean
-    refdata_fft    = rfft(refdata)
-    refdata_fft   *= fresp
-    ref_wth_resp  = irfft(refdata_fft, npts)
-    ref_wth_resp *= (shake_m_per_volt/digi_sens_cnts_per_volt)
-            # convolve sen data with ref resp
-    # Convolving ref data with nominal response...
-    refdata    = ref_trace.data.astype(float32)
-    mean       = refdata.mean()
-    refdata   -= mean
-    refdata_fft    = rfft(refdata)
-    refdata_fft   *= fresp
-    ref_wth_resp  = irfft(refdata_fft, npts)
-    ref_wth_resp *= (shake_m_per_volt/digi_sens_cnts_per_volt)
-            # trim to 768 secs
+            # decimate, detrend and bandpass filter
+            strm1_z_seg = ss.decimate(strm1_z_seg,
+                                      int(round(strm1_z[0].stats.sampling_rate / self._config['analysis_sample_rate'])),
+                                      ftype='fir')
+            strm2_z_cnv = ss.decimate(strm2_z_cnv,
+                                      int(round(strm2_z[0].stats.sampling_rate / self._config['analysis_sample_rate'])),
+                                      ftype='fir')
+
+            strm1_z_seg = ss.detrend(strm1_z_seg,
+                                     type='linear')
+            strm2_z_cnv = ss.detrend(strm2_z_cnv,
+                                     type='linear')
+
+            strm1_z_seg = ops.bandpass(strm1_z_seg,
+                                       self._config['analysis_bandpass'][0],
+                                       self._config['analysis_bandpass'][1],
+                                       self._config['analysis_sample_rate'])
+            strm2_z_cnv = ops.bandpass(strm2_z_cnv,
+                                       self._config['analysis_bandpass'][0],
+                                       self._config['analysis_bandpass'][1],
+                                       self._config['analysis_sample_rate'])
+
+            amp_ratio = std(strm2_z.cnv) / std(strm1_z_seg)
+
+            print('{}: rel amp: {}'.format(start_t, amp_ratio))
+
+            start_t += self.segment_size_secs
+            dbg_cnt += 1
+
+            if dbg_cnt > 5:
+                break
+
+            # GET DATA ARRAYS, conv/deconv strm1 resp from strm2,
+            # rfft/irfft
+
+
+            # CHANGE BELOW TO USE SCIPY FUNCTIONS
+            # strm1_z_seg.decimate(round(strm1_z_seg.stats.sampling_rate / self._config['analysis_sample_rate']), no_filter=True)
+            # strm2_z_seg.decimate(round(strm2_z_seg.stats.sampling_rate / self._config['analysis_sample_rate']), no_filter=True)
+            # strm1_1_seg = strm1_1.slice(starttime=start_t, endtime=start_t + self.segment_size_secs).data.astype(float32)
+            # strm1_2_seg = strm1_2.slice(starttime=start_t, endtime=start_t + self.segment_size_secs).data.astype(float32)
+            # strm2_1_seg = strm2_1.slice(starttime=start_t, endtime=start_t + self.segment_size_secs).data.astype(float32)
+            # strm2_2_seg = strm2_2.slice(starttime=start_t, endtime=start_t + self.segment_size_secs).data.astype(float32)
+
 
     def compare_traces(self, ref_tr, sen_tr, segment_size_samples=1024*40):
         """These """
