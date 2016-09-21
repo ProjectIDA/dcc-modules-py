@@ -20,14 +20,16 @@
 # by Project IDA, Institute of Geophysics and Planetary Physics, UCSD would be appreciated but is not required.
 #######################################################################################################################
 import logging
-import copy
 
-from obspy.core import Trace, Stream, UTCDateTime
+from obspy.core import Trace, Stream  #, UTCDateTime
 from obspy.signal.cross_correlation import xcorr
 from scipy.signal import freqs
 from scipy.signal.ltisys import zpk2tf
-from numpy import array, ndarray, isclose, abs, divide, multiply, pi
+from numpy import array, ndarray, isclose, abs, mod, divide, multiply, pi, exp, cos, sin, \
+        angle, absolute, complex128, asarray, less
 from numpy.fft import rfft
+
+from fabulous.color import red, bold
 
 import ida.signals.paz
 # from ida.signals.trace import IDATrace
@@ -49,8 +51,12 @@ def time_offset(trace1, trace2, bpfreqmin=0.1, bpfreqmax=1.0, winsize=1000):
         Returns offset in seconds that needs to be applied to trace2 for it to be in sync with
         trace1. So, >0 if trace1 ahead of trace2, i.e. add offset to trace2 timestamps
     """
+    if trace1.stats.sampling_rate != trace2.stats.sampling_rate:
+        print(red(bold('The supplied traces must have the same sampling rate. Cannot compute time_offset.')))
+        return 0, 0.0, [], 'The supplied traces must have the same sampling rate. Cannot compute time_offset.'
 
     if Stream([trace1, trace2]).get_gaps():
+        print(red(bold('The supplied traces have gaps. Cannot compute time_offset.')))
         return 0, 0.0, [], 'The supplied traces have gaps. Cannot compute time_offset.'
 
     # leave originals alone...
@@ -63,12 +69,80 @@ def time_offset(trace1, trace2, bpfreqmin=0.1, bpfreqmax=1.0, winsize=1000):
 
     return offset, val, corrfun, ''
 
+def decimate_factors_425(sr_st, sr_targ):
+    """Assuming both startting (sr_st) and target (sr_targ) are divible by
+    returns list of decimation factors of 4, 2, 5"""
+
+    factors = []
+    cur_sr = round(sr_st)
+    while cur_sr != sr_targ:
+        if (mod(cur_sr, 4) == 0) and (round(divide(cur_sr, 4)) >= sr_targ):
+            factors.append(4)
+            cur_sr = round(divide(cur_sr, 4))
+        elif (mod(cur_sr, 2) == 0) and (round(divide(cur_sr, 2)) >= sr_targ):
+            factors.append(2)
+            cur_sr = round(divide(cur_sr, 2))
+        elif (mod(cur_sr, 5) == 0) and (round(divide(cur_sr, 5)) >= sr_targ):
+            factors.append(5)
+            cur_sr = round(divide(cur_sr, 5))
+
+    return factors
 
 def check_and_fix_polarities(strm, seis_model):
 
     for tr in strm:
         if invert_signal(tr.stats.channel, seis_model):
             tr.data *= -1.0
+
+def taper_high_freq_resp(resp, taper_fraction):
+    """This comes from idaresponse/resp.c where highest 5% of complex frequency response
+    is tapered using exponential function.
+
+    resp: complex response to be tapered
+    taper_fraction: decimal fraction of high freq to taper
+
+    Tapering is done IN-PLACE and updated resp is type np.complex128."""
+
+    if (taper_fraction < 0.0) or (taper_fraction > 1.0):
+        raise ValueError('taper_high_freq_resp: taper_fraction must be between 0.0 and 1.0')
+    resp = asarray(resp, dtype=complex128)
+    if len(resp) == 0:
+        raise ValueError('taper_high_freq_resp: resp must not be empty')
+
+    # lets get exponentially taper off highest fraction of freqs before nyquist
+    # taken from idaresponse/resp.c
+    resplen = len(resp)
+    startndx = int( taper_fraction * resplen)
+    decay_rng = range(startndx, resplen)
+    factors = [exp(5 * (ndx - startndx) / (resplen - startndx)) for ndx in decay_rng]
+
+    pha = angle(resp[decay_rng])
+    amp = factors * absolute(resp[decay_rng])
+    resp[decay_rng] = complex128(amp*cos(pha) + amp*sin(pha))
+
+
+def dynlimit_resp_min(resp, dyn_range):
+    """This comes from idaresponse/resp.c where dynamic range of response is clipped
+    by setting minimum value for amplitude response.
+
+    resp: complex response to be tapered
+    dyn_range: amplitude dynamic range limit. Lower resp amplitudes clipped to 
+        (max amplitude)/dyn_range.
+
+    resp is modified IN-PLACE and updated resp is type np.complex128.
+    """
+
+    resp = asarray(resp, dtype=complex128)
+    if len(resp) == 0:
+        raise ValueError('dynlimit_resp_min: resp must not be empty')
+
+    amp = absolute(resp)
+    max_amp = amp.max()
+    limit_min = max_amp / dyn_range
+    amp_flag = less(amp, limit_min)
+    # save phase for freqs below minimum amp limit
+    phavals = angle(resp[amp_flag])
+    resp[amp_flag] = limit_min * complex128(cos(phavals) + sin(phavals)*1j)
 
 
 def invert_signal(channel, seis_model):

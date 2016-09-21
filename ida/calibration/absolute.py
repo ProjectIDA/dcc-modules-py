@@ -26,16 +26,21 @@ from pathlib import Path, PurePath
 import yaml
 #import collections
 
+import matplotlib.pyplot as plt
+
 from fabulous.color import red, bold
 from obspy import read, UTCDateTime, Stream#, Trace
 from obspy.signal.invsim import evalresp
-import obspy.signal.filter as ops
-from numpy import float32, std, mean
+#import obspy.signal.filter as ops
+from scipy.signal import tukey
+from numpy import float64, complex128, absolute, less, multiply, divide, log10, subtract, \
+        exp, mean, std, sqrt, dot, sin, cos, angle, insert
 from numpy.fft import rfft, irfft
 import scipy.signal as ss
 
 from ida.utils import i10get, pimseed
-from ida.signals.utils import time_offset
+from ida.signals.utils import time_offset, decimate_factors_425, taper_high_freq_resp, \
+        dynlimit_resp_min
 from ida.calibration.shaketable import rename_chan
 
 
@@ -58,7 +63,6 @@ class AbsOnsiteConfig(object):
 
         with open(fn, 'rt') as cfl:
             config_txt = cfl.read()
-
         try:
             self._config = yaml.load(config_txt)
             self._config_dir = Path(fn).parent
@@ -69,7 +73,7 @@ class AbsOnsiteConfig(object):
         else:
             self.process_config()
 
-        self._config['respfile_dir'] = os.environ.get('SEEDRESP') or ''
+        self._config['resp_dir'] = os.environ.get('SEEDRESP') or ''
 
         if self.errs:
             print(red(bold('\nThe following problems were encountered while parsing the config file: \n')))
@@ -170,6 +174,10 @@ class AbsOnsiteConfig(object):
         return self._config['segment_size_secs']
 
     @property
+    def segment_size_trim(self):
+        return self._config['segment_size_trim']
+
+    @property
     def minimum_segment_cnt(self):
         return self._config['minimum_segment_cnt']
 
@@ -177,23 +185,25 @@ class AbsOnsiteConfig(object):
     def correlation_segment_size(self):
         return self._config['correlation_segment_size_secs']
 
-    def respfilename(self, tr):
-        resp_file = 'RESP.{}.{}.{}.{}'.format(
-            tr.stats.network, tr.stats.station, tr.stats.loc, tr.stats.channel
-        )
-        return os.path.join(self._config['resp_filedir'], resp_file)
+    @property
+    def analysis_sample_rate(self):
+        return self._config['analysis_sample_rate']
 
-    def response_tr(self, tr):
-        resp = evalresp(1/tr.stats.sampling_rate,
-                        tr.stats.npts,
-                        self.respfilename(tr),
-                        tr.stats.starttime,
-                        station=tr.stats.station,
-                        channel=tr.stats.channel,
-                        network=tr.stats.network,
-                        locid=tr.stats.loc,
-                        units='VEL')
-        return resp
+    def respfilename(self, net, sta, chn, loc):
+        resp_file = 'RESP.{}.{}.{}.{}'.format(net, sta, loc, chn)
+        return os.path.join(self._config['resp_dir'], resp_file)
+
+    def response_tr(self, respdate, npts, sr, net, sta, chn, loc, units='VEL'):
+        resp, f = evalresp(1/sr,
+                        npts,
+                        self.respfilename(net, sta, chn, loc),
+                        UTCDateTime(respdate),
+                        station=sta,
+                        channel=chn,
+                        network=net,
+                        locid=loc,
+                        units=units, freq=True)
+        return resp, f
 
 
     def correct_ref_abs_time(self):
@@ -220,8 +230,10 @@ class AbsOnsiteConfig(object):
            return offset, cval, cfunc, emsg
 
 
-       # may need to decimate ref data if using 20Hz Primary
-        ref_z.decimate(round(ref_z[0].stats.sampling_rate / sensor_z[0].stats.sampling_rate))
+        # may need to decimate ref data if using 20Hz Primary
+        sr_ratio = round(ref_z[0].stats.sampling_rate / sensor_z[0].stats.sampling_rate)
+        if sr_ratio != 1:
+            ref_z.decimate(round(ref_z[0].stats.sampling_rate / sensor_z[0].stats.sampling_rate))
 
         if sensor_z and ref_z:
            self.ref_z = ref_z
@@ -234,10 +246,9 @@ class AbsOnsiteConfig(object):
                         freqmin=self._config['analysis_bandpass'][0],
                         freqmax=self._config['analysis_bandpass'][1])
            sensor_z.normalize()
-           # take middle two hours for time series correlation
+           # take middle for time series correlation
            dur = sensor_z[0].stats.endtime - sensor_z[0].stats.starttime
            start_t = sensor_z[0].stats.starttime + dur/2 - self.correlation_segment_size/2
-           #start_t = sensor_z[0].stats.starttime + 60*60*4
            end_t = start_t + self.correlation_segment_size
            ref_z.trim(start_t, end_t)
            sensor_z.trim(start_t, end_t)
@@ -245,6 +256,9 @@ class AbsOnsiteConfig(object):
            offset, cval, cfunc, emsg = time_offset(sensor_z[0], ref_z[0])
            for tr in self._ref_abs_strm:
                tr.stats.starttime = tr.stats.starttime + offset
+
+           if cval < 0.9:
+               print(red('WARNING (time_offset): Correlation value < 0.9'))
 
         return offset, cval, cfunc, emsg
 
@@ -331,8 +345,8 @@ class AbsOnsiteConfig(object):
         if self._config['process_absolute'] and self._ref_abs_strm:
             print('Retrieving primary sensor data for absolute period...')
             outname = './{}_{}_{}'.format(self._config['site_info']['station'],
-                                           self._config['site_info']['pri_sensor_loc'],
-                                           'abs')
+                                          self._config['site_info']['pri_sensor_loc'],
+                                          'abs')
             if os.path.exists(outname+'.i10'): os.remove(outname+'.i10')
             if os.path.exists(outname+'.ms'): os.remove(outname+'.ms')
             i10get(self._config['site_info']['station'],
@@ -397,81 +411,151 @@ class AbsOnsiteConfig(object):
         strm2_1 = strm2.select(component='1')[0].copy()
         strm2_2 = strm2.select(component='2')[0].copy()
 
-        strm1_z_resp = self.response_tr(strm1_z)
-        strm1_1_resp = self.response_tr(strm1_1)
-        strm1_2_resp = self.response_tr(strm1_2)
-        strm2_z_resp = self.response_tr(strm2_z)
-        strm2_1_resp = self.response_tr(strm2_1)
-        strm2_2_resp = self.response_tr(strm2_2)
+        strm1_z_resp, freqs = self.response_tr(strm1_z.stats.starttime,
+                                        strm2_z.stats.sampling_rate*self.segment_size_secs,
+                                        strm2_z.stats.sampling_rate * \
+                                            strm2_z.stats.sampling_rate / strm1_z.stats.sampling_rate,
+                                        strm1_z.stats.network,
+                                        strm1_z.stats.station,
+                                        strm1_z.stats.channel,
+                                        strm1_z.stats.location,
+                                        units='VEL')
+        strm2_z_resp, freqs = self.response_tr(strm2_z.stats.starttime,
+                                        strm2_z.stats.sampling_rate*self.segment_size_secs,
+                                        strm2_z.stats.sampling_rate,
+                                        strm2_z.stats.network,
+                                        strm2_z.stats.station,
+                                        strm2_z.stats.channel,
+                                        strm2_z.stats.location,
+                                        units='VEL')
+#        plt.semilogx(freqs, absolute(strm1_z_resp))
+#        plt.show()
+#        strm1_1_resp = self.response_tr(strm1_1)
+#        strm1_2_resp = self.response_tr(strm1_2)
+#        strm2_z_resp = self.response_tr(strm2_z)
+#        strm2_1_resp = self.response_tr(strm2_1)
+#        strm2_2_resp = self.response_tr(strm2_2)
+
+        # but lets exponentially taper off highest 5% of freqs before nyquist
+        #  taper off high freq response before deconvolving strm2 resp
+        # per idaresponse/resp.c
+        taper_high_freq_resp(strm2_z_resp, 0.95)
+
+        # clip minimum amp resp to 1/100.0 of max amp
+        # per idaresponse/resp.c
+        dynlimit_resp_min(strm1_z_resp, 100.0)
+        dynlimit_resp_min(strm2_z_resp, 100.0)
+
+        # lets find decimation factors
+        strm1_factors = decimate_factors_425(strm1_z.stats.sampling_rate, self.analysis_sample_rate)
+        strm2_factors = decimate_factors_425(strm2_z.stats.sampling_rate, self.analysis_sample_rate)
 
         # lets do vertical first...
         dbg_cnt = 0
+        amp_list = []
         start_t = strm1_z.stats.starttime
         while start_t + self.segment_size_secs < strm1_z.stats.endtime:
 
-            strm1_z_seg = strm1_z.slice(starttime=start_t, endtime=start_t + self.segment_size_secs).data.astype(float32)
-            strm2_z_seg = strm2_z.slice(starttime=start_t, endtime=start_t + self.segment_size_secs).data.astype(float32)
-
-            mn = mean(strm1_z_seg)
-            strm1_z_seg -= mn
-            mn = mean(strm2_z_seg)
-            strm2_z_seg -= mn
-
-            # move strm2 into strm1 response space
-            strm2_z_fft = rfft(strm2_z_seg)
-            strm2_z_fft /= strm2_z_resp
-            strm2_z_fft *= strm1_z_resp
-            strm2_z_cnv = irfft(strm2_z_seg, len(strm2_z_seg))
-
-            # trim ends
-            trim_cnt = strm1_z.stats.sampling_rate * self._config['segment_size_trim']
-            strm1_z_seg = strm1_z_seg[trim_cnt:-trim_cnt]
-            trim_cnt = strm2_z.stats.sampling_rate * self._config['segment_size_trim']
-            strm2_z_seg = strm2_z_seg[trim_cnt:-trim_cnt]
-
-            # decimate, detrend and bandpass filter
-            strm1_z_seg = ss.decimate(strm1_z_seg,
-                                      int(round(strm1_z[0].stats.sampling_rate / self._config['analysis_sample_rate'])),
-                                      ftype='fir')
-            strm2_z_cnv = ss.decimate(strm2_z_cnv,
-                                      int(round(strm2_z[0].stats.sampling_rate / self._config['analysis_sample_rate'])),
-                                      ftype='fir')
-
-            strm1_z_seg = ss.detrend(strm1_z_seg,
-                                     type='linear')
-            strm2_z_cnv = ss.detrend(strm2_z_cnv,
-                                     type='linear')
-
-            strm1_z_seg = ops.bandpass(strm1_z_seg,
-                                       self._config['analysis_bandpass'][0],
-                                       self._config['analysis_bandpass'][1],
-                                       self._config['analysis_sample_rate'])
-            strm2_z_cnv = ops.bandpass(strm2_z_cnv,
-                                       self._config['analysis_bandpass'][0],
-                                       self._config['analysis_bandpass'][1],
-                                       self._config['analysis_sample_rate'])
-
-            amp_ratio = std(strm2_z.cnv) / std(strm1_z_seg)
-
-            print('{}: rel amp: {}'.format(start_t, amp_ratio))
-
-            start_t += self.segment_size_secs
             dbg_cnt += 1
 
-            if dbg_cnt > 5:
-                break
+            #print('satrting segment analysis...')
+            strm1_z_seg = strm1_z.slice(starttime=start_t, endtime=start_t + self.segment_size_secs - 1/strm1_z.stats.sampling_rate)
+            strm2_z_seg = strm2_z.slice(starttime=start_t, endtime=start_t + self.segment_size_secs- 1/strm2_z.stats.sampling_rate)
 
-            # GET DATA ARRAYS, conv/deconv strm1 resp from strm2,
-            # rfft/irfft
+            strm1_z_seg = strm1_z_seg.data.astype(float64)
+            strm2_z_seg = strm2_z_seg.data.astype(float64)
+
+            # need to demean and taper strm2, deconvolve it's resp, convolve strm1 resp
+            strm1_z_seg = ss.detrend(strm1_z_seg, type='constant')
+            strm2_z_seg = ss.detrend(strm2_z_seg, type='constant')
+
+            fraction = (self.segment_size_trim/self.segment_size_secs)  # each side Creating tapers...
+            taper = tukey(len(strm2_z_seg), alpha=fraction * 2, sym=True)
+
+            strm2_z_fft = rfft(multiply(strm2_z_seg, taper))
+            strm2_z_fft_dcnv = divide(strm2_z_fft[1:], strm2_z_resp[1:])
+            strm2_z_fft_dcnv = insert(strm2_z_fft_dcnv, 0, 0.0)
+            strm2_z_dcnv = irfft(strm2_z_fft_dcnv)
+            # demean again before convolving strm2 resp
+            strm2_z_dcnv = ss.detrend(strm2_z_dcnv, type='constant')
+            strm2_z_fft = rfft(multiply(strm2_z_dcnv, taper))
+            strm2_z_fft_cnv = multiply(strm2_z_fft, strm1_z_resp)
+            strm2_z_cnv = irfft(strm2_z_fft_cnv)
+            del strm2_z_fft, strm2_z_fft_dcnv, strm2_z_dcnv, strm2_z_fft_cnv
+
+            #print('trimming...')
+            # trim segment_size_trim in secs
+            trim_cnt = round(strm1_z.stats.sampling_rate * self.segment_size_trim)
+            strm1_z_seg = strm1_z_seg[trim_cnt:-trim_cnt]
+            trim_cnt = round(strm2_z.stats.sampling_rate * self.segment_size_trim)
+            strm2_z_cnv = strm2_z_cnv[trim_cnt:-trim_cnt]
+#           if dbg_cnt in range(10, 10):
+#               plt.plot(strm1_z_seg)
+#               #plt.plot(strm2_z_seg)
+#               plt.plot(strm2_z_dcnv, 'r')
+#               plt.plot(strm2_z_cnv, 'm')
+#               plt.show()
+
+            # decimate, detrend and bandpass filter
+            for factor in strm1_factors:
+                strm1_z_seg = ss.decimate(strm1_z_seg, factor, ftype='fir', zero_phase=True)
+            for factor in strm2_factors:
+                strm2_z_cnv = ss.decimate(strm2_z_cnv, factor, ftype='fir', zero_phase=True)
+#           if dbg_cnt in range(10,10):
+#               plt.plot(strm1_z_seg)
+#               plt.plot(strm2_z_cnv)
+#               plt.show()
+
+            #print('detrend...')
+            #print('strm1 mean:{}; strm2 mean:{}'.format(strm1_z_seg.mean(), strm2_z_cnv.mean()))
+            strm1_z_seg = ss.detrend(strm1_z_seg, type='linear')
+            strm2_z_cnv = ss.detrend(strm2_z_cnv, type='linear')
+            #print('strm1 mean:{}; strm2 mean:{}'.format(strm1_z_seg.mean(), strm2_z_cnv.mean()))
+
+            fraction = 1/12
+            taper = tukey(len(strm1_z_seg), fraction * 2, sym=True)
+            strm1_z_seg *= taper
+            strm2_z_cnv *= taper
+#           if dbg_cnt == 10:
+#               plt.plot(strm1_z_seg)
+#               plt.plot(strm2_z_cnv)
+#               plt.show()
+
+            #print('bandpass..')
+            b, a = ss.iirdesign(wp=[.1, .3], ws=[0.05, .4], gstop=80, gpass=1, ftype='cheby2')
+            strm1_z_seg = ss.lfilter(b, a, strm1_z_seg)
+            strm2_z_cnv = ss.lfilter(b, a, strm2_z_cnv)
+#           if dbg_cnt == 10:
+#               plt.plot(strm1_z_seg)
+#               plt.plot(strm2_z_cnv)
+#               plt.show()
+
+            amp_ratio = strm2_z_cnv.std() / strm1_z_seg.std()
+            lrms = log10( sqrt ( multiply(strm2_z_cnv, strm2_z_cnv).sum() / len(strm2_z_cnv)))
+            syn  = strm1_z_seg * amp_ratio
+            res = strm2_z_cnv - syn
+            myvar = res.std() / strm2_z_cnv.std()
+            coh = dot(strm2_z_cnv, syn) / sqrt(dot(strm2_z_cnv, strm2_z_cnv) * dot(syn, syn))
+
+            res = '{}:  amp: {}; lrms: {}; var: {}; coh: {}'.format(start_t, amp_ratio,
+                                                                   lrms, myvar, coh)
+
+            if coh >= self.coherence_cutoff:
+                amp_list.append(amp_ratio)
+                print(res)
+            else:
+                print(red(bold(res)))
+
+            # start time for next segment
+            start_t += self.segment_size_secs
 
 
-            # CHANGE BELOW TO USE SCIPY FUNCTIONS
-            # strm1_z_seg.decimate(round(strm1_z_seg.stats.sampling_rate / self._config['analysis_sample_rate']), no_filter=True)
-            # strm2_z_seg.decimate(round(strm2_z_seg.stats.sampling_rate / self._config['analysis_sample_rate']), no_filter=True)
-            # strm1_1_seg = strm1_1.slice(starttime=start_t, endtime=start_t + self.segment_size_secs).data.astype(float32)
-            # strm1_2_seg = strm1_2.slice(starttime=start_t, endtime=start_t + self.segment_size_secs).data.astype(float32)
-            # strm2_1_seg = strm2_1.slice(starttime=start_t, endtime=start_t + self.segment_size_secs).data.astype(float32)
-            # strm2_2_seg = strm2_2.slice(starttime=start_t, endtime=start_t + self.segment_size_secs).data.astype(float32)
+        print('SEG CNT >= ', self.coherence_cutoff, ':', len(amp_list), 'of', dbg_cnt)
+        if len(amp_list) > 0:
+            print('AMP RATIO AVERAGE:', mean(amp_list))
+            print('AMP RATIO  STDDEV:', std(amp_list))
+        else:
+            print(red(bold('No segments with coh >= cutoff ')))
 
 
     def compare_traces(self, ref_tr, sen_tr, segment_size_samples=1024*40):
