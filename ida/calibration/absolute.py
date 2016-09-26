@@ -45,6 +45,73 @@ from ida.signals.utils import time_offset, decimate_factors_425, taper_high_freq
 from ida.calibration.shaketable import rename_chan
 
 
+class APSurveryComponentResult(object):
+
+    def __init__(self, comp):
+        self.component = comp
+        self.seg_results = []
+        self._amp_mean = None
+        self._ang_mean = None
+        self._ang_resid = None
+        self._lrms_mean = None
+        self._var_mean = None
+
+    def add_segment(self, apssegres):
+        self.seg_results.append(apssegres)
+
+    def recalc(self):
+        self._amp_mean = array([seg.amp for seg in self.seg_results]).mean()
+        self._ang_mean = array([seg.ang for seg in self.seg_results]).mean()
+        self._lrms_mean = array([seg.lrms for seg in self.seg_results]).mean()
+        self._var_mean = array([seg.var for seg in self.seg_results]).mean()
+
+        pass
+
+
+class APSurveySegmentResult(object):
+
+    def __init__(self, start_t_utc, ang, ang_resid, amp, lrms, var, coh):
+        self._start_t_utc = start_t_utc
+        self._ang = ang
+        self._ang_resid = ang_resid
+        self._amp = amp
+        self._lrms = lrms
+        self._var = var
+        self._coh = coh
+
+    @property
+    def start_utc(self):
+        return self._start_t_utc
+
+    @property
+    def start_epoch(self):
+        return self._start_t_utc.timestamp
+
+    @property
+    def ang(self):
+        return self._ang
+
+    @property
+    def ang_resid(self):
+        return self._ang_resid
+
+    @property
+    def amp(self):
+        return self._amp
+
+    @property
+    def lrms(self):
+        return self._lrms
+
+    @property
+    def var(self):
+        return self._var
+
+    @property
+    def coh(self):
+        return self._coh
+
+
 class APSurvey(object):
 
     ChanTpl = namedtuple('ChanTuple', 'z n e')
@@ -107,6 +174,10 @@ class APSurvey(object):
             'abs': False,
             'azi': False
         }
+        self.results = self.ChanTpl('ChanTpl',
+                                    z=APSurveyComponentResult('Z'),
+                                    n=APSurveryComponentResult('1'),
+                                    e=APSurveryComponentResult('2'))
 
         with open(fn, 'rt') as cfl:
             config_txt = cfl.read()
@@ -627,11 +698,11 @@ class APSurvey(object):
         strm2_1_resp = self.responses[src2][src2].n
         strm2_2_resp = self.responses[src2][src2].e
 
-        self.compare_verticals(src1, src2, strm1_z, strm2_z, strm1_z_resp, strm2_z_resp)
-        self.compare_horizontals(src1, src2, strm1_1, strm1_2, strm2_1, strm1_1_resp, strm2_1_resp)
-        self.compare_horizontals(src1, src2, strm1_1, strm1_2, strm2_2, strm1_2_resp, strm2_2_resp)
+        self.compare_verticals(src1, src2, strm1_z, strm2_z, strm1_z_resp, strm2_z_resp, self.results.z)
+        self.compare_horizontals(src1, src2, strm1_1, strm1_2, strm2_1, strm1_1_resp, strm2_1_resp, self.results.n)
+        self.compare_horizontals(src1, src2, strm1_1, strm1_2, strm2_2, strm1_2_resp, strm2_2_resp, self.results.e)
 
-    def compare_horizontals(self, src1, src2, tr1_n, tr1_e, tr2, tr1_resp, tr2_resp):
+    def compare_horizontals(self, src1, src2, tr1_n, tr1_e, tr2, tr1_resp, tr2_resp, results):
 
         # # lets find decimation factors
         strm1_factors = self.decifactors[src1]
@@ -719,7 +790,7 @@ class APSurvey(object):
             dc = ones(len(tr1_n_seg), dtype=float64)  # to take care of any non-zero means
             mat = array([dc, tr1_n_seg, tr1_e_seg])
             matinv = mat.transpose()
-            solution, _, _, _ = la.lstsq(matinv, tr2_cnv)
+            solution, resid, _, _ = la.lstsq(matinv, tr2_cnv)
             # print('solution:', solution)
             w = arctan2(solution[2], solution[1])
             if w < 0:
@@ -746,6 +817,11 @@ class APSurvey(object):
             myvar = std(res) / std(tr2_cnv)
             coh = dot(tr2_cnv, syn) / sqrt(dot(tr2_cnv, tr2_cnv) * dot(syn, syn))
 
+            results.add_segment(APSurveySegmentResult(start_t, w_deg, resid, amp_ratio,
+                                                       lrms, myvar, coh))
+
+            def __init__(self, start_t_utc, ang, ang_resid, amp, lrms, var, coh):
+
             res = '{} ({})  Comp: {}  ang: {:6.3f}; amp: {:5.3f}; lrms: {:5.3f}; ' \
                     'var: {:5.3f}; coh: {:5.3f}'.format(
                     start_t, start_t.timestamp, comp, w_deg, amp_ratio, lrms,  myvar, coh)
@@ -768,10 +844,14 @@ class APSurvey(object):
             print(comp, 'AMP RATIO  STDDEV:', std(amp_list))
             print(comp, 'ANG AVERAGE:', mean(ang_list))
             print(comp, 'ANG STDDEV:', std(ang_list))
+            print()
+            results.recalc()
+            print(results.amp_mean, results.amp_std, results.ang_mean, results.ang_std, results.lrms_mean, results.var_mean)
+
         else:
             print(red(bold('No segments with coh >= cutoff ')))
 
-    def compare_verticals(self, src1, src2, tr1, tr2, tr1_resp, tr2_resp):
+    def compare_verticals(self, src1, src2, tr1, tr2, tr1_resp, tr2_resp, results):
 
         # # lets find decimation factors
         strm1_factors = self.decifactors[src1]
@@ -894,56 +974,4 @@ class APSurvey(object):
             new_ref_st (Stream): copy of ref_st with starttime adjusted
 
         """
-
-class APSurveryComponentResult(object):
-
-    def __init__(self, ):
-        self.seg_results = []
-        self._amp_mean = None
-        self._amp_std = None
-        self._ang_mean = None
-        self._ang_std = None
-        self._ang_resid = None
-        self._lrms_mean = None
-        self._lrms_std = None
-        self._var_mean = None
-        self._var_std = None
-
-    def _recalc(self):
-        pass
-
-class APSurveySegmentResult(object):
-
-    def __init__(self, refstrachnloc, targ_stachnloc, start_t, ang, ang_resid, amp, lrms, var, coh):
-
-        self._ang = ang
-        self._ang_resid = ang_resid
-        self._amp = amp
-        self._lrms = lrms
-        self._var = var
-        self._coh = coh
-
-    @property
-    def ang(self):
-        return self._ang
-
-    @property
-    def ang_resid(self):
-        return self._ang_resid
-
-    @property
-    def amp(self):
-        return self._amp
-
-    @property
-    def lrms(self):
-        return self._lrms
-
-    @property
-    def var(self):
-        return self._var
-
-    @property
-    def coh(self):
-        return self._coh
 
