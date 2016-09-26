@@ -25,7 +25,6 @@ import os.path
 from pathlib import Path # , PurePath
 import yaml
 from collections import namedtuple
-
 # import matplotlib.pyplot as plt
 
 from fabulous.color import red, bold
@@ -34,8 +33,10 @@ from obspy.signal.invsim import evalresp
 # import obspy.signal.filter as ops
 from scipy.signal import tukey
 # from numpy import array, cos, sin, subtract, angle, complex128, absolute, less
-from numpy import float64, multiply, divide, log10, mean, std, sqrt, dot, insert
+from numpy import array, ones, pi, arctan2, float64, multiply, divide, log10
+from numpy import mean, std, sqrt, dot, insert
 from numpy.fft import rfft, irfft
+import numpy.linalg as la
 import scipy.signal as ss
 
 from ida.utils import i10get, pimseed
@@ -627,11 +628,148 @@ class APSurvey(object):
         strm2_2_resp = self.responses[src2][src2].e
 
         self.compare_verticals(src1, src2, strm1_z, strm2_z, strm1_z_resp, strm2_z_resp)
-        self.compare_horizontals(src1, src2, strm1_1, strm2_1, strm1_1_resp, strm2_1_resp)
-        self.compare_horizontals(src1, src2, strm1_2, strm2_2, strm1_2_resp, strm2_2_resp)
+        self.compare_horizontals(src1, src2, strm1_1, strm1_2, strm2_1, strm1_1_resp, strm2_1_resp)
+        self.compare_horizontals(src1, src2, strm1_1, strm1_2, strm2_2, strm1_2_resp, strm2_2_resp)
 
-    def compare_horizontals(self, src1, src2, tr1, tr2, tr1_resp, tr2_resp):
-        pass
+    def compare_horizontals(self, src1, src2, tr1_n, tr1_e, tr2, tr1_resp, tr2_resp):
+
+        # # lets find decimation factors
+        strm1_factors = self.decifactors[src1]
+        strm2_factors = self.decifactors[src2]
+
+        dbg_cnt = 0
+        amp_list = []  # list of amp values for each segment beating coh_cutoff
+        ang_list = []  # list of amp values for each segment beating coh_cutoff
+        dc_list = []  # list of amp values for each segment beating coh_cutoff
+        start_t = max(tr1_n.stats.starttime, tr2.stats.starttime)
+        end_t = min(tr1_n.stats.endtime, tr2.stats.endtime)
+        tr1_sr = tr1_n.stats.sampling_rate
+        tr2_sr = tr2.stats.sampling_rate
+        tr1_time_delta = 1.0/tr1_sr
+        tr2_time_delta = 1.0/tr2_sr
+        comp = tr2.stats.channel[-1].upper()
+
+        while start_t + self.segment_size_secs < end_t:
+            dbg_cnt += 1
+
+            # print('satrting segment analysis...')
+            tr1_n_seg = tr1_n.slice(starttime=start_t,
+                                    endtime=start_t + self.segment_size_secs - tr1_time_delta)
+            tr1_e_seg = tr1_e.slice(starttime=start_t,
+                                    endtime=start_t + self.segment_size_secs - tr1_time_delta)
+            tr2_seg = tr2.slice(starttime=start_t,
+                                endtime=start_t + self.segment_size_secs - tr2_time_delta)
+
+            tr1_n_seg = tr1_n_seg.data.astype(float64)
+            tr1_e_seg = tr1_e_seg.data.astype(float64)
+            tr2_seg = tr2_seg.data.astype(float64)
+
+            # need to demean and taper strm2, deconvolve it's resp, convolve strm1 resp
+            tr1_n_seg = ss.detrend(tr1_n_seg, type='constant')
+            tr1_e_seg = ss.detrend(tr1_e_seg, type='constant')
+            tr2_seg = ss.detrend(tr2_seg, type='constant')
+
+            # each side Creating tapers...
+            fraction = (self.segment_size_trim/self.segment_size_secs)
+            taper = tukey(len(tr2_seg), alpha=fraction * 2, sym=True)
+
+            tr2_fft = rfft(multiply(tr2_seg, taper))
+            tr2_fft_dcnv = divide(tr2_fft[1:], tr2_resp[1:])
+            tr2_fft_dcnv = insert(tr2_fft_dcnv, 0, 0.0)
+            tr2_dcnv = irfft(tr2_fft_dcnv)
+            # demean again before convolving strm2 resp
+            tr2_dcnv = ss.detrend(tr2_dcnv, type='constant')
+            tr2_fft = rfft(multiply(tr2_dcnv, taper))
+            tr2_fft_cnv = multiply(tr2_fft, tr1_resp)
+            tr2_cnv = irfft(tr2_fft_cnv)
+            del tr2_fft, tr2_fft_dcnv, tr2_dcnv, tr2_fft_cnv
+
+            # trim segment_size_trim in secs
+            trim_cnt = round(tr1_sr * self.segment_size_trim)
+            tr1_n_seg = tr1_n_seg[trim_cnt:-trim_cnt]
+            tr1_e_seg = tr1_e_seg[trim_cnt:-trim_cnt]
+            trim_cnt = round(tr2_sr * self.segment_size_trim)
+            tr2_cnv = tr2_cnv[trim_cnt:-trim_cnt]
+
+            # decimate, detrend and bandpass filter
+            for factor in strm1_factors:
+                tr1_n_seg = ss.decimate(tr1_n_seg, factor, ftype='fir', zero_phase=True)
+                tr1_e_seg = ss.decimate(tr1_e_seg, factor, ftype='fir', zero_phase=True)
+            for factor in strm2_factors:
+                tr2_cnv = ss.decimate(tr2_cnv, factor, ftype='fir', zero_phase=True)
+
+            tr1_n_seg = ss.detrend(tr1_n_seg, type='linear')
+            tr1_e_seg = ss.detrend(tr1_e_seg, type='linear')
+            tr2_cnv = ss.detrend(tr2_cnv, type='linear')
+
+            fraction = 1/12
+            taper = tukey(len(tr1_n_seg), fraction * 2, sym=True)
+            tr1_n_seg *= taper
+            tr1_e_seg *= taper
+            tr2_cnv *= taper
+
+            # print('bandpass..')
+            b, a = ss.iirdesign(wp=[.1, .3], ws=[0.05, .4], gstop=80, gpass=1, ftype='cheby2')
+            tr1_n_seg = ss.lfilter(b, a, tr1_n_seg)
+            tr1_e_seg = ss.lfilter(b, a, tr1_e_seg)
+            tr2_cnv = ss.lfilter(b, a, tr2_cnv)
+
+            # set up matrix to solve for cos(w) & sin(w) where w is angle of tr2_cnv from North
+            # set up with [N, E] so solution comes out [cos, sin]
+            dc = ones(len(tr1_n_seg), dtype=float64)  # to take care of any non-zero means
+            mat = array([dc, tr1_n_seg, tr1_e_seg])
+            matinv = mat.transpose()
+            solution, _, _, _ = la.lstsq(matinv, tr2_cnv)
+            # print('solution:', solution)
+            w = arctan2(solution[2], solution[1])
+            if w < 0:
+                w += 2*pi
+            w_deg = w*180/pi
+            amp_ratio =  sqrt(solution[1]*solution[1] + solution[2]*solution[2])
+
+#       import numpy.linalg as la
+#       # Defining matrixes
+#       n = np.array([1.,3,4])
+#       e = np.array([2.,6,8])
+#       b = np.array([2.2, 6.7, 8.9])
+#
+#       a1= np.array([n,e])
+#       a1t = a1.transpose()
+#       print(a1)
+#       print(a1t)
+#
+#       x, _, _, _ = la.lstsq(a1t, b)
+#       print(x)
+            lrms = log10(sqrt(multiply(tr2_cnv, tr2_cnv).sum() / len(tr2_cnv)))
+            syn  = dot(matinv, solution)
+            res = tr2_cnv - syn
+            myvar = std(res) / std(tr2_cnv)
+            coh = dot(tr2_cnv, syn) / sqrt(dot(tr2_cnv, tr2_cnv) * dot(syn, syn))
+
+            res = '{} ({})  Comp: {}  ang: {:6.3f}; amp: {:5.3f}; lrms: {:5.3f}; ' \
+                    'var: {:5.3f}; coh: {:5.3f}'.format(
+                    start_t, start_t.timestamp, comp, w_deg, amp_ratio, lrms,  myvar, coh)
+
+            if True: # coh >= self.coherence_cutoff:
+                amp_list.append(amp_ratio)
+                ang_list.append(w_deg)
+                dc_list.append(solution[0])
+                print(res)
+            else:
+                print(red(bold(res)))
+
+            # start time for next segment
+            start_t += self.segment_size_secs
+
+
+        print('Comp:', comp, 'seg cnt >= ', self.coherence_cutoff, ':', len(amp_list), 'of', dbg_cnt)
+        if len(amp_list) > 0:
+            print(comp, 'AMP RATIO AVERAGE:', mean(amp_list))
+            print(comp, 'AMP RATIO  STDDEV:', std(amp_list))
+            print(comp, 'ANG AVERAGE:', mean(ang_list))
+            print(comp, 'ANG STDDEV:', std(ang_list))
+        else:
+            print(red(bold('No segments with coh >= cutoff ')))
 
     def compare_verticals(self, src1, src2, tr1, tr2, tr1_resp, tr2_resp):
 
@@ -640,7 +778,7 @@ class APSurvey(object):
         strm2_factors = self.decifactors[src2]
 
         dbg_cnt = 0
-        amp_list = []
+        amp_list = []  # list of amp values for each segment beating coh_cutoff
         start_t = max(tr1.stats.starttime, tr2.stats.starttime)
         while start_t + self.segment_size_secs < tr1.stats.endtime:
             dbg_cnt += 1
@@ -658,7 +796,7 @@ class APSurvey(object):
             tr1_seg = ss.detrend(tr1_seg, type='constant')
             tr2_seg = ss.detrend(tr2_seg, type='constant')
 
-# each side Creating tapers...
+            # each side Creating tapers...
             fraction = (self.segment_size_trim/self.segment_size_secs)
             taper = tukey(len(tr2_seg), alpha=fraction * 2, sym=True)
 
@@ -720,7 +858,7 @@ class APSurvey(object):
             myvar = res.std() / tr2_cnv.std()
             coh = dot(tr2_cnv, syn) / sqrt(dot(tr2_cnv, tr2_cnv) * dot(syn, syn))
 
-            res = '{}:  amp: {}; lrms: {}; var: {}; coh: {}'.format(start_t, amp_ratio,
+            res = '{}:  ang: 0.0; amp: {}; lrms: {}; var: {}; coh: {}'.format(start_t, amp_ratio,
                                                                    lrms, myvar, coh)
 
             if coh >= self.coherence_cutoff:
@@ -756,4 +894,56 @@ class APSurvey(object):
             new_ref_st (Stream): copy of ref_st with starttime adjusted
 
         """
+
+class APSurveryComponentResult(object):
+
+    def __init__(self, ):
+        self.seg_results = []
+        self._amp_mean = None
+        self._amp_std = None
+        self._ang_mean = None
+        self._ang_std = None
+        self._ang_resid = None
+        self._lrms_mean = None
+        self._lrms_std = None
+        self._var_mean = None
+        self._var_std = None
+
+    def _recalc(self):
+        pass
+
+class APSurveySegmentResult(object):
+
+    def __init__(self, refstrachnloc, targ_stachnloc, start_t, ang, ang_resid, amp, lrms, var, coh):
+
+        self._ang = ang
+        self._ang_resid = ang_resid
+        self._amp = amp
+        self._lrms = lrms
+        self._var = var
+        self._coh = coh
+
+    @property
+    def ang(self):
+        return self._ang
+
+    @property
+    def ang_resid(self):
+        return self._ang_resid
+
+    @property
+    def amp(self):
+        return self._amp
+
+    @property
+    def lrms(self):
+        return self._lrms
+
+    @property
+    def var(self):
+        return self._var
+
+    @property
+    def coh(self):
+        return self._coh
 
