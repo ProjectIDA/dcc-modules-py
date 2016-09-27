@@ -44,8 +44,9 @@ from ida.signals.utils import time_offset, decimate_factors_425, taper_high_freq
         dynlimit_resp_min
 from ida.calibration.shaketable import rename_chan
 
+# from . import APSurveyComponentResult, APSurveySegmentResult
 
-class APSurveryComponentResult(object):
+class APSurveyComponentResult(object):
 
     def __init__(self, comp):
         self.component = comp
@@ -61,7 +62,9 @@ class APSurveryComponentResult(object):
 
     def recalc(self):
         self._amp_mean = array([seg.amp for seg in self.seg_results]).mean()
+        self._amp_std = array([seg.amp for seg in self.seg_results]).std()
         self._ang_mean = array([seg.ang for seg in self.seg_results]).mean()
+        self._ang_std = array([seg.ang for seg in self.seg_results]).std()
         self._lrms_mean = array([seg.lrms for seg in self.seg_results]).mean()
         self._var_mean = array([seg.var for seg in self.seg_results]).mean()
 
@@ -174,10 +177,9 @@ class APSurvey(object):
             'abs': False,
             'azi': False
         }
-        self.results = self.ChanTpl('ChanTpl',
-                                    z=APSurveyComponentResult('Z'),
-                                    n=APSurveryComponentResult('1'),
-                                    e=APSurveryComponentResult('2'))
+        self.results = self.ChanTpl(z=APSurveyComponentResult('Z'),
+                                    n=APSurveyComponentResult('1'),
+                                    e=APSurveyComponentResult('2'))
 
         with open(fn, 'rt') as cfl:
             config_txt = cfl.read()
@@ -702,6 +704,11 @@ class APSurvey(object):
         self.compare_horizontals(src1, src2, strm1_1, strm1_2, strm2_1, strm1_1_resp, strm2_1_resp, self.results.n)
         self.compare_horizontals(src1, src2, strm1_1, strm1_2, strm2_2, strm1_2_resp, strm2_2_resp, self.results.e)
 
+        for compres in self.results:
+            for res in compres.seg_results:
+                print(compres.component, res.start_utc, res.start_epoch, 
+                      res.amp, res.ang, res.lrms, res.var, res.coh)
+
     def compare_horizontals(self, src1, src2, tr1_n, tr1_e, tr2, tr1_resp, tr2_resp, results):
 
         # # lets find decimation factors
@@ -820,8 +827,6 @@ class APSurvey(object):
             results.add_segment(APSurveySegmentResult(start_t, w_deg, resid, amp_ratio,
                                                        lrms, myvar, coh))
 
-            def __init__(self, start_t_utc, ang, ang_resid, amp, lrms, var, coh):
-
             res = '{} ({})  Comp: {}  ang: {:6.3f}; amp: {:5.3f}; lrms: {:5.3f}; ' \
                     'var: {:5.3f}; coh: {:5.3f}'.format(
                     start_t, start_t.timestamp, comp, w_deg, amp_ratio, lrms,  myvar, coh)
@@ -846,7 +851,9 @@ class APSurvey(object):
             print(comp, 'ANG STDDEV:', std(ang_list))
             print()
             results.recalc()
-            print(results.amp_mean, results.amp_std, results.ang_mean, results.ang_std, results.lrms_mean, results.var_mean)
+            print(results.component, results._amp_mean, results._amp_std, 
+                  results._ang_mean, results._ang_std, 
+                  results._lrms_mean, results._var_mean)
 
         else:
             print(red(bold('No segments with coh >= cutoff ')))
@@ -938,6 +945,9 @@ class APSurvey(object):
             myvar = res.std() / tr2_cnv.std()
             coh = dot(tr2_cnv, syn) / sqrt(dot(tr2_cnv, tr2_cnv) * dot(syn, syn))
 
+            results.add_segment(APSurveySegmentResult(start_t, 0.0, 0.0, amp_ratio,
+                                                       lrms, myvar, coh))
+
             res = '{}:  ang: 0.0; amp: {}; lrms: {}; var: {}; coh: {}'.format(start_t, amp_ratio,
                                                                    lrms, myvar, coh)
 
@@ -955,6 +965,10 @@ class APSurvey(object):
         if len(amp_list) > 0:
             print('AMP RATIO AVERAGE:', mean(amp_list))
             print('AMP RATIO  STDDEV:', std(amp_list))
+            results.recalc()
+            print(results.component, results._amp_mean, results._amp_std, 
+                  results._ang_mean, results._ang_std, 
+                  results._lrms_mean, results._var_mean)
         else:
             print(red(bold('No segments with coh >= cutoff ')))
 
