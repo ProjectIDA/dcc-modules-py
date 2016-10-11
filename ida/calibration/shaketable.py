@@ -20,28 +20,33 @@
 # by Project IDA, Institute of Geophysics and Planetary Physics, UCSD would be appreciated but is not required.
 #######################################################################################################################
 from datetime import datetime
-import os.path
+import os
+from os.path import exists, join, isfile  #  , abspath, split, isdir
+#from pathlib import Path
 import yaml
 import collections
+import logging
 
 from numpy import float32, logical_and, less_equal, greater_equal, greater, \
     polyfit, polyval, subtract, log10, ceil, floor
 from numpy.fft import rfft, irfft
+import matplotlib
+matplotlib.use('Qt4Agg')
 import matplotlib.pyplot as plt
+plt.ion()
 
 from fabulous.color import red, bold
-from obspy.core import read, UTCDateTime
+from obspy.core import read, Stream, UTCDateTime
 from obspy.signal.invsim import evalresp
 
 from ida.calibration.cross import cross_correlate
 
-
-# for cleanup of (mostly) past crud.
-bhz_chan_list = ['UN1', 'BHZ', 'HHZ', 'HNZ']
-bhn_chan_list = ['UN2', 'BHN', 'HHN', 'HHY', 'HNY', 'BH1']
-bhe_chan_list = ['UN3', 'BHE', 'HHE', 'HHX', 'HNX', 'BH2']
-
 def rename_chan(inchan):
+
+    bhz_chan_list = ['UN1', 'BHZ', 'HHZ', 'HNZ']
+    bhn_chan_list = ['UN2', 'BHN', 'HHN', 'HHY', 'HNY', 'BH1']
+    bhe_chan_list = ['UN3', 'BHE', 'HHE', 'HHX', 'HNX', 'BH2']
+
     if inchan in bhz_chan_list:
         return 'BHZ'
     elif inchan in bhn_chan_list:
@@ -50,104 +55,6 @@ def rename_chan(inchan):
         return 'BH2'
     else:
         return inchan
-
-
-def read_intimes(fn):
-
-    intimes_data = collections.OrderedDict()
-    with open(fn, 'rt') as ifl:
-        for line in ifl:
-            cline = line.upper().strip()
-            if cline.startswith('BH'):
-                recitems = cline.split()
-                # print(recitems)
-                # print(cline)
-                if (len(recitems) != 6) and (len(recitems) != 4):
-                    print(red(bold('Error reading record: ' + line)))
-                    print(red('from file ' + fn + '. '))
-                    print(red('Skipping record.'))
-                    continue
-
-                chan = rename_chan(recitems[0][:3])
-                if chan not in (bhz_chan_list + bhn_chan_list + bhe_chan_list):
-                    print(red(bold('Unknown channel code: {}. Skipping record.'.format(chan))))
-                    continue
-                start_t =  UTCDateTime(datetime.strptime(recitems[2][:17], '%Y:%j-%H:%M:%S'))
-                end_t = UTCDateTime(datetime.strptime(recitems[3][:17], '%Y:%j-%H:%M:%S'))
-                intimes_data[chan] = {
-                    'loc': recitems[0][3:5],
-                    'ref_chan': rename_chan(recitems[1][:3]),
-                    'starttime': start_t,
-                    'endtime':  end_t,
-                    'station': 'TRI',   # may be overwritten below
-                    'network': 'II',    # ditto
-                }
-                if (len(recitems) == 6):
-                    intimes_data[chan]['station'] = recitems[5]
-                    intimes_data[chan]['network']= recitems[4]
-
-                # print(chan, ':', intimes_data[chan])
-    return intimes_data
-
-
-def prepare_traces(meta, msfn):
-
-    try:
-        strm = read(msfn)
-    except:
-        print(red(bold('Error reading miniseed file: ' + msfn)))
-        return {}
-
-    # cleanup chan codes in miniseed
-    for tr in strm:
-        if tr.stats.channel in bhz_chan_list:
-            tr.stats.channel = 'BHZ'
-        elif tr.stats.channel in bhn_chan_list:
-            tr.stats.channel = 'BH1'
-        elif tr.stats.channel in bhe_chan_list:
-            tr.stats.channel = 'BH2'
-        else:
-            raise ValueError('Unknown channel code encoutnered: ' + tr.stats.channel)
-
-    # loop through metadata record with trace start/end time info
-    # and drop and channels without waveform 'wf' ot 'wf_ref' data
-    good_meta = collections.OrderedDict()
-    for chan, vals in meta.items():
-        wf = strm.select(channel=chan).copy().trim(starttime=vals['starttime'], endtime=vals['endtime'])
-        wf_ref = strm.select(channel=vals['ref_chan']).copy().trim(starttime=vals['starttime'], endtime=vals['endtime'])
-        # print('CHAN:', chan, wf)
-        # print('REF:', vals['ref_chan'], wf_ref)
-        if wf and wf_ref:
-            # print('GOOD FOR ', chan)
-            good_meta[chan] = vals
-            good_meta[chan]['wf'] = wf[0]
-            good_meta[chan]['wf_ref'] = wf_ref[0]
-            good_meta[chan]['wf'].stats.network = vals['network']
-            good_meta[chan]['wf'].stats.loc = vals['loc']
-            good_meta[chan]['wf'].stats.station = vals['station']
-            good_meta[chan]['wf_ref'].stats.network = vals['network']
-            good_meta[chan]['wf_ref'].stats.loc = vals['loc']
-            good_meta[chan]['wf_ref'].stats.station = vals['station']
-        else:
-            # print('BAD FOR ', chan)
-            if not wf:
-                print(red('No trace in {} for channel: {} during {} - {}'.format(msfn, chan,
-                                                                                 vals['starttime'], vals['endtime'])))
-            if not wf_ref:
-                print(red('No trace in {} for reference channel: {} during {} - {}'.format(msfn, vals['ref_chan'],
-                                                                                           vals['starttime'], vals['endtime'])))
-            print(red('Skipping {} record.'.format(chan)))
-
-    return good_meta
-
-def save_chan_traces(chancode, fn, strm):
-
-    try:
-        strm.write(fn, format='MSEED')
-    except:
-        return False
-    else:
-        return True
 
 def correlate_channel_traces(chan_trace, ref_trace, sample_rate, shake_m_per_volt, digi_sens_cnts_per_volt, **kwargs):
 
@@ -166,10 +73,10 @@ def correlate_channel_traces(chan_trace, ref_trace, sample_rate, shake_m_per_vol
     resp_file = 'RESP.{}.{}.{}.{}'.format(
         ref_trace.stats.network,
         ref_trace.stats.station,
-        ref_trace.stats.loc,
+        ref_trace.stats.location,
         ref_trace.stats.channel
     )
-    resp_filepath = os.path.join(resp_dir, resp_file)
+    resp_filepath = join(resp_dir, resp_file)
 
     fresp, f = evalresp(1/sample_rate,
                         ref_trace.stats.npts,
@@ -178,7 +85,7 @@ def correlate_channel_traces(chan_trace, ref_trace, sample_rate, shake_m_per_vol
                         station=ref_trace.stats.station,
                         channel=ref_trace.stats.channel,
                         network=ref_trace.stats.network,
-                        locid=ref_trace.stats.loc,
+                        locid=ref_trace.stats.location,
                         units='DIS', freq=True )
 
     # Convolving ref data with nominal response...
@@ -190,15 +97,15 @@ def correlate_channel_traces(chan_trace, ref_trace, sample_rate, shake_m_per_vol
     ref_wth_resp  = irfft(refdata_fft, npts)
     ref_wth_resp *= (shake_m_per_volt/digi_sens_cnts_per_volt)
 
-
     # trim 20 smaples off both ends.
     ref_wth_resp = ref_wth_resp[20:-20]
     outdata = chan_trace.data[20:-20].astype(float32)
 
-    if 'smoothing_factor' in kwargs:
-        sf = kwargs['smoothing_factor']
-    else:
-        sf = 0.5
+#    if 'smoothing_factor' in kwargs:
+#        sf = kwargs['smoothing_factor']
+#    else:
+#        sf = 0.5
+    sf = kwargs.get('smoothing_factor', 0.5)
     # noinspection PyTupleAssignmentBalance
     freqs, amp, pha, coh, psd1, psd2, _, _, _ = cross_correlate(sample_rate,
                                                                 outdata,
@@ -366,7 +273,7 @@ def shake_table_tf_plot(fignum, datadir, comp, freqs, amp, pha, coh, add_title_t
     plt.title('Shake Table TF: {} : {}'.format(datadir, comp) + add_title_text)
     plt.xlim(1e-1, 10)
     plt.ylim(floor(amp.min() * 100) / 100, ceil(amp.max() * 100) / 100)
-    axlim = plt.axis()
+#    axlim = plt.axis()
 
     plt.ylabel('TF Gain')
     plt.xlabel('Freq (Hz)')
@@ -393,16 +300,179 @@ def shake_table_tf_plot(fignum, datadir, comp, freqs, amp, pha, coh, add_title_t
 
 class ShakeConfig(object):
 
-    def __init__(self, fn):
+    # for cleanup of (mostly) past crud.
+    bhz_chan_list = ['UN1', 'BHZ', 'HHZ', 'HNZ']
+    bhn_chan_list = ['UN2', 'BHN', 'HHN', 'HHY', 'HNY', 'BH1']
+    bhe_chan_list = ['UN3', 'BHE', 'HHE', 'HHX', 'HNX', 'BH2']
+
+    def __init__(self, fn, shaketable_subdir='shaketable', debug=False, logger=None):
+
+        self.ok = True
+
+        if not logger:
+            self.logger = logging.getLogger('ShakeTable')
+            # set up wARN/ERROR handler
+            fmtr = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s: %(message)s')
+            hndlr = logging.StreamHandler()
+            hndlr.setFormatter(fmtr)
+            # set up log level
+            if debug:
+                hndlr.setLevel(logging.DEBUG)
+            else:
+                hndlr.setLevel(logging.WARN)
+            self.logger.addHandler(hndlr)
+        else:
+            self.logger = logger
+
+        self.shaketable_subdir = shaketable_subdir
+
+        self.stream = None
+        self.traces = {}
+
         self._config = yaml.load('')
         with open(fn, 'rt') as cfl:
             config_txt = cfl.read()
-
         try:
             self._config = yaml.load(config_txt)
         except:
-            print(red(bold('Error parsing config file: ' + fn)))
-            print(config_txt)
+            self._config = {}
+            self.logger.error('Error parsing YAML config file: ', fn)
+            self.ok = False
+        else:
+            self._process_config()
+
+    def _process_config(self):
+
+        # check ENV
+        if not os.environ.get('IDA_CAL_RAW_DIR'):
+            self.logger.error('The env var IDA_CAL_RAW_DIR must be set.')
+            self.ok = False
+        if not os.environ.get('IDA_CAL_ANALYSIS_DIR'):
+            self.logger.error('The env var IDA_CAL_ANALYSIS_DIR must be set.')
+            self.ok = False
+        if not os.environ.get('SEEDRESP'):
+            self.logger.error('The env var SEEDRESP must be set.')
+            self.ok = False
+
+        if 'shaketable_ms_filename' not in self._config:
+            self.ok = False
+            self.logger.error('Missing entry in configuration file: ' +
+                              'shaketable_ms_filename must contain the ' + 
+                              ' path the shake table miniseed file relative to ' +
+                              os.environ.get('IDA_CAL_RAW_DIR') + '/shaketable.')
+        else:
+            data_path = os.path.abspath(os.path.join(
+                os.environ.get('IDA_CAL_RAW_DIR', ''),
+                'shaketable',
+                self._config['shaketable_ms_filename']))
+            if not isfile(data_path) or not exists(data_path):
+                self.logger.error('Miniseed file {} not found.'.format(data_path))
+                self.ok = False
+            else:
+                self.ms_filename = data_path
+                self.data_dir = os.path.dirname(data_path).split(os.sep)[-1]
+                print(self.ms_filename)
+                print(self.data_dir)
+
+        if 'analysis_sample_rate' not in self._config:
+            self.ok = False
+            self.logger.error('Missing entry in configuration file: ' + 'sample_rate')
+        if 'digi_cnts_per_volt' not in self._config:
+            self.ok = False
+            self.logger.error('Missing entry in configuration file: ' + 'digi_cnts_per_volt')
+        if 'shaketable_hori_resp' not in self._config:
+            self.ok = False
+            self.logger.error('Missing entry in configuration file: ' + 'shaketable_hori_resp')
+        else:
+            if not isinstance(self._config['shaketable_hori_resp'], list):
+                self.ok = False
+                self.logger.error('Missing entry in configuration file: ' +
+                                  'shaketable_hori_resp must contain a list.')
+            else:
+                if 'startdate' not in self._config['shaketable_hori_resp'][0]:
+                    self.ok = False
+                    self.logger.error('Missing entry in configuration file: ' +
+                                'shaketable_hori_resp/startdate')
+                if 'enddate' not in self._config['shaketable_hori_resp'][0]:
+                    self.ok = False
+                    self.logger.error('Missing entry in configuration file: ' +
+                                'shaketable_hori_resp/enddate')
+                if 'meters_per_volt' not in self._config['shaketable_hori_resp'][0]:
+                    self.ok = False
+                    self.logger.error('Missing entry in configuration file: ' +
+                                'shaketable_hori_resp/meters_per_volt')
+
+        if 'shaketable_vert_resp' not in self._config:
+            self.ok = False
+            self.logger.error('Missing entry in configuration file: ' + 'shaketable_vert_resp')
+        else:
+            if not isinstance(self._config['shaketable_vert_resp'], list):
+                self.ok = False
+                self.logger.error('Missing entry in configuration file: ' +
+                                  'shaketable_vert_resp must contain a list.')
+            else:
+                if 'startdate' not in self._config['shaketable_vert_resp'][0]:
+                    self.ok = False
+                    self.logger.error('Missing entry in configuration file: ' +
+                                'shaketable_vert_resp/startdate')
+                if 'enddate' not in self._config['shaketable_vert_resp'][0]:
+                    self.ok = False
+                    self.logger.error('Missing entry in configuration file: ' +
+                                'shaketable_vert_resp/enddate')
+                if 'meters_per_volt' not in self._config['shaketable_vert_resp'][0]:
+                    self.ok = False
+                    self.logger.error('Missing entry in configuration file: ' +
+                                'shaketable_vert_resp/meters_per_volt')
+
+        if 'plot_settings' not in self._config:
+            self.ok = False
+            self.logger.error('Missing entry in configuration file: ' + 'plot_settings')
+        if 'smoothing_factor' not in self._config:
+            self.ok = False
+            self.logger.error('Missing entry in configuration file: ' + 'smoothing_factor')
+        if 'coherence_cutoff' not in self._config:
+            self.ok = False
+            self.logger.error('Missing entry in configuration file: ' + 'coherence_cutoff')
+
+    @property
+    def sample_rate(self):
+        return self._config['analysis_sample_rate']
+
+    @property
+    def table_h_resp(self):
+        return self._config['shaketable_hori_resp']
+
+    @property
+    def table_v_resp(self):
+        return self._config['shaketable_vert_resp']
+
+    @property
+    def plot_min_freq(self):
+        return self._config['plot_settings']['start_freq']
+
+    @property
+    def plot_max_freq(self):
+        return self._config['plot_settings']['end_freq']
+
+    @property
+    def coherence_cutoff(self):
+        return self._config['coherence_cutoff']
+
+    @property
+    def smoothing_factor(self):
+        return self._config['smoothing_factor']
+
+    @property
+    def components(self):
+        return self._config['components']
+
+    @property
+    def ref_sensor_network(self):
+        return self._config.get('ref_sensor_network', 'UNK')
+
+    @property
+    def ref_sensor_station(self):
+        return self._config.get('ref_sensor_station', 'NA')
 
     def digi_cnts_per_volt(self, digi_sn=None):
         return self._config['digi_cnts_per_volt']
@@ -413,36 +483,245 @@ class ShakeConfig(object):
             raise ValueError('Invalid component: ', comp)
 
         # noinspection PyUnresolvedReferences
-        if not isinstance(thedate, datetime.datetime):
+        if not isinstance(thedate, datetime):
             raise TypeError('Invalid date: ' + str(thedate))
 
-        datenum = int(thedate.strftime('%Y%j'))
+        dt = int(thedate.strftime('%Y%j'))
 
         res = 0
         if comp.upper() == 'Z':
-            for per in self._config['shaketable_vert_resp']:
-                if (datenum >= per['startdate']) and (datenum <= per['enddate']):
-                    res = per['meters_per_volt']
-                    break
+            periods = [p for p in self.table_v_resp if (dt>=p['startdate']) and (dt<=p['enddate'])]
+            if periods:
+                res = periods[0]['meters_per_volt']
         else:
-            for per in self._config['shaketable_hori_resp']:
-                if (datenum >= per['startdate']) and (datenum <= per['enddate']):
-                    res = per['meters_per_volt']
-                    break
+            periods = [p for p in self.table_h_resp if (dt>=p['startdate']) and (dt<=p['enddate'])]
+            if periods:
+                res = periods[0]['meters_per_volt']
 
         return res
 
-    def sample_rate(self):
-        return self._config['sample_rate']
+    def read_msfile(self):
 
-    def plot_min_freq(self):
-        return self._config['plots']['start_freq']
+        if exists(self.ms_filename) and isfile(self.ms_filename):
+            try:
+                self.stream = read(self.ms_filename)
+            except:
+                print(red(bold('Error reading miniseed file: ' + self.ms_filename)))
+            else:
+                for tr in self.stream:
+                    tr.stats.location = tr.stats.location.rjust(2, '0')
+        else:
+            print('ERROR: Miniseed file does not exist: ' + self.ms_filename)
 
-    def plot_max_freq(self):
-        return self._config['plots']['end_freq']
+        return self.stream
 
-    def plot_coh_min(self):
-        return self._config['plots']['coh_min']
+    def save_chan_traces(self, fn, strm):
 
-    def analysis_smoothing_factor(self):
-        return self._config['analysis']['smoothing_factor']
+        try:
+            strm.write(fn, format='MSEED')
+        except:
+            return False
+        else:
+            return True
+
+
+    def prepare_traces(self):
+
+        if self.stream:
+
+            # cleanup chan codes in miniseed
+            for tr in self.stream:
+                if tr.stats.channel in self.bhz_chan_list:
+                    tr.stats.channel = 'BHZ'
+                elif tr.stats.channel in self.bhn_chan_list:
+                    tr.stats.channel = 'BH1'
+                elif tr.stats.channel in self.bhe_chan_list:
+                    tr.stats.channel = 'BH2'
+                else:
+                    print(self.stream)
+                    raise ValueError('Unknown channel code encoutnered: ' + tr.stats.channel)
+
+            # loop through metadata record with trace start/end time info
+            # and drop and channels without waveform 'wf' ot 'wf_ref' data
+            self.traces = collections.OrderedDict()
+#            for chan, vals in meta.items():
+            for meta in self.components:
+                chan = meta['chan'].upper()
+                ref_chan = meta['ref_chan'].upper()
+                try:
+                    start = UTCDateTime(meta['starttime'])
+                except:
+                    raise ValueError('\nError parsing starttime: ' + meta['starttime'])
+                try:
+                    end = UTCDateTime(meta['endtime'])
+                except:
+                    raise ValueError('\nError parsing endtime: ' + meta['endtime'])
+                wf = self.stream.select(channel=chan).copy().trim(start, end)
+                wf_ref = self.stream.select(channel=ref_chan).copy().trim(start, end)
+                print('CHAN:', chan, wf)
+                print('REF: ', ref_chan, wf_ref)
+                if wf and wf_ref:
+                    # print('GOOD FOR ', chan)
+                    self.traces[chan] = {}
+                    self.traces[chan]['ref_chan'] = ref_chan
+                    self.traces[chan]['wf'] = wf[0]
+                    self.traces[chan]['wf_ref'] = wf_ref[0]
+                    self.traces[chan]['wf'].stats.network = self.ref_sensor_network
+                    #self.traces[chan]['wf'].stats.loc = vals['loc']
+                    self.traces[chan]['wf'].stats.station = self.ref_sensor_station
+                    self.traces[chan]['wf_ref'].stats.network = self.ref_sensor_network
+                    #self.traces[chan]['wf_ref'].stats.loc = vals['loc']
+                    self.traces[chan]['wf_ref'].stats.station = self.ref_sensor_station
+
+                    fn = self.ref_sensor_network + '_' + self.ref_sensor_station + '_' + \
+                            chan + '_' + wf[0].stats.location + '_shaketable.ms'
+                    if not self.save_chan_traces(fn, Stream([wf[0], wf_ref[0]])):
+                        print('Error writing shaketable traces for channel: {} to file: {}.'.format(chan, fn))
+                else:
+                    print(self.stream)
+                    if not wf:
+                        print(red('No trace in {} for channel: {} during {} - {}'.format(self.ms_filename,
+                                                                                         chan,
+                                                                                         meta['starttime'],
+                                                                                         meta['endtime'])))
+                    if not wf_ref:
+                        print(red('No trace in {} for reference channel: {} during {} - {}'.format(self.ms_filename,
+                                                                                                   meta['ref_chan'],
+                                                                                                   meta['starttime'],
+                                                                                                   meta['endtime'])))
+                    return False
+
+            return True
+
+        else:
+            raise Exception('Miniseed data not loaded. Did you call read_msfile?')
+
+    def save_header(self, resfl, analdate):
+        header = '#'*144 + '\n'
+        header += '# SHAKETABLE ANALYSIS PARAMETERS\n'
+        header += '# ==============================\n'
+        header += '#               analysis at: {}\n'.format(analdate)
+        header += '#                   dataset: {}\n'.format(self.data_dir)
+        header += '#        digi cnts per volt: {}\n'.format(self.digi_cnts_per_volt())
+        header += '#          sample rate (hz): {}\n'.format(self.sample_rate)
+        header += '#      coh smoothing factor: {}\n'.format(self.smoothing_factor)
+        header += '#                coh cutoff: {}\n'.format(self.coherence_cutoff)
+        chnzinfo = self.traces['BHZ']
+        header += '#       chan BHZ   ref chan: {}\n'.format(chnzinfo['ref_chan'])
+        header += '#       chan BHZ start time: {}\n'.format(chnzinfo['wf'].stats.starttime)
+        header += '#       chan BHZ   end time: {}\n'.format(chnzinfo['wf'].stats.endtime)
+        chn1info = self.traces['BH1']
+        header += '#       chan BH1   ref chan: {}\n'.format(chn1info['ref_chan'])
+        header += '#       chan BH1 start time: {}\n'.format(chn1info['wf'].stats.starttime)
+        header += '#       chan BH1   end time: {}\n'.format(chn1info['wf'].stats.endtime)
+        chn2info = self.traces['BH2']
+        header += '#       chan BH2   ref chan: {}\n'.format(chn2info['ref_chan'])
+        header += '#       chan BH2 start time: {}\n'.format(chn2info['wf'].stats.starttime)
+        header += '#       chan BH2   end time: {}\n'.format(chn2info['wf'].stats.endtime)
+
+        hori_sens = self.shake_table_meters_per_volt('1', chn1info['wf'].stats.starttime.datetime)
+        header += '# shake tbl hori sens (m/V): {}\n'.format(hori_sens)
+        vert_sens = self.shake_table_meters_per_volt('Z', chnzinfo['wf'].stats.starttime.datetime)
+        header += '# shake tbl vert sens (m/V): {}\n'.format(vert_sens)
+
+        header += '#  plot start freq (hz): {}\n'.format(self.plot_min_freq)
+        header += '#  plot   end freq (hz): {}\n'.format(self.plot_max_freq)
+        header += '#\n'
+
+        header += '#H {:<24} {:4} {:8} {:27} {:17} {:27} {:17}' \
+                 '{:>7} {:>8} {:>7} {:>8} ' \
+                '{:>7} {:>10} {}\n'.format(
+                     'data_dir','chan', 'ref_chan',
+                     'start_time', 'start_epoch', 'end_time', 'end_epoch',
+                     'ampmn', 'ampstd', 'phamn', 'phastd',
+                     'coh_cut', 'analyzedon', 'ms_file')
+        resfl.write(header)
+
+    def save_footer(self, resfl):
+        resfl.write('#'*144 + '\n')
+
+    def analyze(self):
+
+# TODO: Add header to results file with all parameters
+        resfn = self.data_dir + 'results.txt'
+        analdate = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        with open(resfn, 'at') as resfl:
+            self.save_header(resfl, analdate)
+
+        fignum = 0
+        for chan, chaninfo in self.traces.items():
+
+            wf = chaninfo['wf']
+            wf_ref = chaninfo['wf_ref']
+            starttime = wf.stats.starttime.datetime  # convert UTCDateTime to datetime.datetime
+
+            cross_res = correlate_channel_traces(wf,
+                                                 wf_ref,
+                                                 self.sample_rate,
+                                                 self.shake_table_meters_per_volt(chan[2],
+                                                                                    starttime),
+                                                 self.digi_cnts_per_volt(),
+                                                 smoothing_factor=self.smoothing_factor)
+
+            # get ndxs of good coh in freq_band
+            min_freq = self.plot_min_freq
+            max_freq = self.plot_max_freq
+            use_freqs = logical_and(less_equal(cross_res['freqs'], max_freq),
+                                    greater_equal(cross_res['freqs'], min_freq))
+
+            fr = cross_res['freqs'][use_freqs]
+            co = cross_res['coh'][use_freqs]
+            ps1 = cross_res['psd1'][use_freqs]
+            ps2 = cross_res['psd2'][use_freqs]
+            am = cross_res['amp'][use_freqs]
+            ph = cross_res['pha'][use_freqs]
+
+            fignum += 1
+            psd_fig = shake_table_psd_plot(fignum, self.data_dir, chan, fr, ps1, ps2, co)
+            psd_fig.savefig('{}_{}_psd_fig.png'.format(chan, self.data_dir), dpi=400)
+
+            fignum += 1
+            tf_fig_1 = shake_table_tf_plot(fignum, self.data_dir, chan, fr, am, ph, co)
+            tf_fig_1.savefig('{}_{}_tf_fig1.png'.format(chan, self.data_dir), dpi=400)
+
+            # detrend and take only "good" coh points
+            # now just coh >= coh_min
+            coh_min = self.coherence_cutoff
+            good_coh = greater(co, coh_min)
+            fr = fr[good_coh]
+            am = am[good_coh]
+            ph = ph[good_coh]
+            co = co[good_coh]
+
+            # and remove trend/time shift from phase
+            coeffs = polyfit(fr, ph, 1)
+            coeffs = (coeffs[0], 0)  # set y-intercept to 0
+            correction = polyval(coeffs, fr)
+            ph = subtract(ph, correction)
+
+            # construct plot with only good coh points
+            fignum += 1
+            tf_fig_2 = shake_table_tf_plot(fignum, self.data_dir, chan, fr, am, ph, co, 
+                                           '\n(coh**2 > {}; Phase de-trended)'.format(coh_min))
+            tf_fig_2.savefig('{}_{}_tf_fig2.png'.format(chan, self.data_dir), dpi=400)
+
+            # calculate overall values to save
+            amp_mn = am.mean()
+            amp_std = am.std()
+            pha_mn = ph.mean()
+            pha_std = ph.std()
+
+            res_txt = '   {:<24} {:4} {:8} {:27} {:17} {:27} {:17}' \
+                 '{:>7} {:>8} {:>7} {:>8} ' \
+                '{:>7} {:>10} {}\n'.format(
+                     self.data_dir, chan, chaninfo['ref_chan'],
+                     wf.stats.starttime.datetime, 'start_epoch',
+                     wf.stats.endtime.datetime, 'end_epoch',
+                     amp_mn, amp_std, pha_mn, pha_std,
+                     self.coherence_cutoff, 'analyzedon', self.ms_filename)
+            with open(resfn, 'at') as resfl:
+                resfl.write(res_txt + '\n')
+
+        with open(resfn, 'at') as resfl:
+            self.save_footer(resfl)
