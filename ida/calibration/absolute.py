@@ -190,7 +190,6 @@ class APSurvey(object):
 
     def __init__(self, fn, debug=False, logger=None):
 
-        self.errs = []
         self.ok = True
         if not logger:
             self.logger = logging.getLogger('APSurvey')
@@ -438,7 +437,7 @@ class APSurvey(object):
                     ))
                     self.ok = False
 
-
+    # if not using fabulous.color, don't really nee this abstraction
     def logmsg(self, loglevel, errmsg):
         if self.logger:
             if loglevel == logging.DEBUG:
@@ -565,6 +564,9 @@ class APSurvey(object):
 
         ref_z = self.trtpls[datatype][src1].z.copy()
         sensor_z = self.trtpls[datatype][src2].z.copy()
+
+        print(ref_z)
+        print(sensor_z)
 
         # need to interpolate if ref data sampling rate > sensor sampling rate
         if ref_z.stats.sampling_rate > sensor_z.stats.sampling_rate:
@@ -701,6 +703,7 @@ class APSurvey(object):
             self.streams[datatype][sensor] = read(outname + '.ms')
             self.streams[datatype][sensor].trim(starttime=self.starttime(datatype),
                                                 endtime=self.endtime(datatype))
+            self.streams[datatype][sensor].merge()
             gaps = self.streams[datatype][sensor].get_gaps()
             if gaps:
                 self.logmsg(logging.ERROR,
@@ -709,7 +712,6 @@ class APSurvey(object):
                 self.logmsg(logging.ERROR,
                             'Can not use {} sensor data in sensor comparisons.'.format(sensor))
                 return False
-            self.streams[datatype][sensor].merge()
             tr_z = self.streams[datatype][sensor].select(component='Z')[0] #  .copy()
             tr_1 = self.streams[datatype][sensor].select(component='1')[0] #  .copy()
             tr_2 = self.streams[datatype][sensor].select(component='2')[0] #  .copy()
