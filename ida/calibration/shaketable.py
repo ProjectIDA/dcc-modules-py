@@ -30,12 +30,12 @@ import logging
 from numpy import float32, logical_and, less_equal, greater_equal, greater, \
     polyfit, polyval, subtract, log10, ceil, floor
 from numpy.fft import rfft, irfft
-import matplotlib
-matplotlib.use('Qt4Agg')
+#import matplotlib
+#matplotlib.use('Qt4Agg')
 import matplotlib.pyplot as plt
-plt.ion()
+#plt.ion()
 
-from fabulous.color import red, bold
+#from fabulous.color import red, bold
 from obspy.core import read, Stream, UTCDateTime
 from obspy.signal.invsim import evalresp
 
@@ -55,74 +55,6 @@ def rename_chan(inchan):
         return 'BH2'
     else:
         return inchan
-
-def correlate_channel_traces(chan_trace, ref_trace, sample_rate, shake_m_per_volt, digi_sens_cnts_per_volt, **kwargs):
-
-    cross_results = {}
-    npts = ref_trace.stats.npts
-    # comp = chan_trace.stats.channel[2]
-    # ref_comp = ref_trace.stats.channel[2]
-    # thedate = chan_trace.stats.starttime
-    if not os.environ.get('SEEDRESP'):
-        print(red('Error: Can not find RESP files without SEEDRESP env var being set.'))
-        return False, cross_results
-    else:
-        resp_dir = os.environ.get('SEEDRESP')
-
-    # construct RESP file filename for ref_trace
-    resp_file = 'RESP.{}.{}.{}.{}'.format(
-        ref_trace.stats.network,
-        ref_trace.stats.station,
-        ref_trace.stats.location,
-        ref_trace.stats.channel
-    )
-    resp_filepath = join(resp_dir, resp_file)
-
-    fresp, f = evalresp(1/sample_rate,
-                        ref_trace.stats.npts,
-                        resp_filepath,
-                        ref_trace.stats.starttime,
-                        station=ref_trace.stats.station,
-                        channel=ref_trace.stats.channel,
-                        network=ref_trace.stats.network,
-                        locid=ref_trace.stats.location,
-                        units='DIS', freq=True )
-
-    # Convolving ref data with nominal response...
-    refdata    = ref_trace.data.astype(float32)
-    mean       = refdata.mean()
-    refdata   -= mean
-    refdata_fft    = rfft(refdata)
-    refdata_fft   *= fresp
-    ref_wth_resp  = irfft(refdata_fft, npts)
-    ref_wth_resp *= (shake_m_per_volt/digi_sens_cnts_per_volt)
-
-    # trim 20 smaples off both ends.
-    ref_wth_resp = ref_wth_resp[20:-20]
-    outdata = chan_trace.data[20:-20].astype(float32)
-
-#    if 'smoothing_factor' in kwargs:
-#        sf = kwargs['smoothing_factor']
-#    else:
-#        sf = 0.5
-    sf = kwargs.get('smoothing_factor', 0.5)
-    # noinspection PyTupleAssignmentBalance
-    freqs, amp, pha, coh, psd1, psd2, _, _, _ = cross_correlate(sample_rate,
-                                                                outdata,
-                                                                ref_wth_resp, smoothing_factor=sf)
-
-    cross_results = {
-        'freqs': freqs,
-        'amp': amp,
-        'pha': pha,
-        'coh': coh,
-        'psd1': psd1,
-        'psd2': psd2,
-        'cospect': [],
-        'quadspect': [],
-    }
-
-    return cross_results
 
 def shake_table_chan_plots(datadir, comp, cross_res_dict, coh_min=0.98, freq_band=(0.1, 10)):
 
@@ -308,9 +240,12 @@ class ShakeConfig(object):
     def __init__(self, fn, shaketable_subdir='shaketable', debug=False, logger=None):
 
         self.ok = True
+        self.plot_fns = []
+        self.ms_fns = []
+        self.resfn = ''
 
         if not logger:
-            self.logger = logging.getLogger('ShakeTable')
+            self.logger = logging.getLogger('Shaketable')
             # set up wARN/ERROR handler
             fmtr = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s: %(message)s')
             hndlr = logging.StreamHandler()
@@ -371,8 +306,8 @@ class ShakeConfig(object):
             else:
                 self.ms_filename = data_path
                 self.data_dir = os.path.dirname(data_path).split(os.sep)[-1]
-                print(self.ms_filename)
-                print(self.data_dir)
+                #print(self.ms_filename)
+                #print(self.data_dir)
 
         if 'analysis_sample_rate' not in self._config:
             self.ok = False
@@ -506,7 +441,7 @@ class ShakeConfig(object):
             try:
                 self.stream = read(self.ms_filename)
             except:
-                print(red(bold('Error reading miniseed file: ' + self.ms_filename)))
+                self.logger.critical('Error reading miniseed file: ' + self.ms_filename)
             else:
                 for tr in self.stream:
                     tr.stats.location = tr.stats.location.rjust(2, '0')
@@ -524,6 +459,74 @@ class ShakeConfig(object):
         else:
             return True
 
+
+    def correlate_channel_traces(self, chan_trace, ref_trace, sample_rate, shake_m_per_volt, digi_sens_cnts_per_volt, **kwargs):
+
+        cross_results = {}
+        npts = ref_trace.stats.npts
+        # comp = chan_trace.stats.channel[2]
+        # ref_comp = ref_trace.stats.channel[2]
+        # thedate = chan_trace.stats.starttime
+        if not os.environ.get('SEEDRESP'):
+            self.logger.critical('$SEEDRESP not set. RESP files are found in $SEEDRESP directory.')
+            return False, cross_results
+        else:
+            resp_dir = os.environ.get('SEEDRESP')
+
+        # construct RESP file filename for ref_trace
+        resp_file = 'RESP.{}.{}.{}.{}'.format(
+            ref_trace.stats.network,
+            ref_trace.stats.station,
+            ref_trace.stats.location,
+            ref_trace.stats.channel
+        )
+        resp_filepath = join(resp_dir, resp_file)
+
+        fresp, f = evalresp(1/sample_rate,
+                            ref_trace.stats.npts,
+                            resp_filepath,
+                            ref_trace.stats.starttime,
+                            station=ref_trace.stats.station,
+                            channel=ref_trace.stats.channel,
+                            network=ref_trace.stats.network,
+                            locid=ref_trace.stats.location,
+                            units='DIS', freq=True )
+
+        # Convolving ref data with nominal response...
+        refdata    = ref_trace.data.astype(float32)
+        mean       = refdata.mean()
+        refdata   -= mean
+        refdata_fft    = rfft(refdata)
+        refdata_fft   *= fresp
+        ref_wth_resp  = irfft(refdata_fft, npts)
+        ref_wth_resp *= (shake_m_per_volt/digi_sens_cnts_per_volt)
+
+        # trim 20 smaples off both ends.
+        ref_wth_resp = ref_wth_resp[20:-20]
+        outdata = chan_trace.data[20:-20].astype(float32)
+
+    #    if 'smoothing_factor' in kwargs:
+    #        sf = kwargs['smoothing_factor']
+    #    else:
+    #        sf = 0.5
+        sf = kwargs.get('smoothing_factor', 0.5)
+        # noinspection PyTupleAssignmentBalance
+        freqs, amp, pha, coh, psd1, psd2, _, _, _ = cross_correlate(sample_rate,
+                                                                    outdata,
+                                                                    ref_wth_resp, smoothing_factor=sf)
+
+        cross_results = {
+            'freqs': freqs,
+            'amp': amp,
+            'pha': pha,
+            'coh': coh,
+            'psd1': psd1,
+            'psd2': psd2,
+            'cospect': [],
+            'quadspect': [],
+        }
+
+        return cross_results
 
     def prepare_traces(self):
 
@@ -558,8 +561,8 @@ class ShakeConfig(object):
                     raise ValueError('\nError parsing endtime: ' + meta['endtime'])
                 wf = self.stream.select(channel=chan).copy().trim(start, end)
                 wf_ref = self.stream.select(channel=ref_chan).copy().trim(start, end)
-                print('CHAN:', chan, wf)
-                print('REF: ', ref_chan, wf_ref)
+                #print('CHAN:', chan, wf)
+                #print('REF: ', ref_chan, wf_ref)
                 if wf and wf_ref:
                     # print('GOOD FOR ', chan)
                     self.traces[chan] = {}
@@ -573,22 +576,24 @@ class ShakeConfig(object):
                     #self.traces[chan]['wf_ref'].stats.loc = vals['loc']
                     self.traces[chan]['wf_ref'].stats.station = self.ref_sensor_station
 
-                    fn = self.ref_sensor_network + '_' + self.ref_sensor_station + '_' + \
-                            chan + '_' + wf[0].stats.location + '_shaketable.ms'
+                    fn = chan + '_' + self.data_dir + '.ms'
                     if not self.save_chan_traces(fn, Stream([wf[0], wf_ref[0]])):
                         print('Error writing shaketable traces for channel: {} to file: {}.'.format(chan, fn))
+                    else:
+                        self.ms_fns.append(fn)
+                        self.logger.debug('Saved {} traces in: {}'.format(chan, fn))
                 else:
-                    print(self.stream)
+                    self.logger.debug(str(self.stream))
                     if not wf:
-                        print(red('No trace in {} for channel: {} during {} - {}'.format(self.ms_filename,
+                        self.logger.error('No trace in {} for channel: {} during {} - {}'.format(self.ms_filename,
                                                                                          chan,
                                                                                          meta['starttime'],
-                                                                                         meta['endtime'])))
+                                                                                         meta['endtime']))
                     if not wf_ref:
-                        print(red('No trace in {} for reference channel: {} during {} - {}'.format(self.ms_filename,
+                        self.logger.error('No trace in {} for reference channel: {} during {} - {}'.format(self.ms_filename,
                                                                                                    meta['ref_chan'],
                                                                                                    meta['starttime'],
-                                                                                                   meta['endtime'])))
+                                                                                                   meta['endtime']))
                     return False
 
             return True
@@ -601,7 +606,7 @@ class ShakeConfig(object):
         header += '# SHAKETABLE ANALYSIS PARAMETERS\n'
         header += '# ==============================\n'
         header += '#               analysis at: {}\n'.format(analdate)
-        header += '#                   dataset: {}\n'.format(self.data_dir)
+        header += '#  shaketable miniseed data: {}\n'.format(self.ms_filename)
         header += '#        digi cnts per volt: {}\n'.format(self.digi_cnts_per_volt())
         header += '#          sample rate (hz): {}\n'.format(self.sample_rate)
         header += '#      coh smoothing factor: {}\n'.format(self.smoothing_factor)
@@ -621,16 +626,17 @@ class ShakeConfig(object):
 
         hori_sens = self.shake_table_meters_per_volt('1', chn1info['wf'].stats.starttime.datetime)
         header += '# shake tbl hori sens (m/V): {}\n'.format(hori_sens)
+
         vert_sens = self.shake_table_meters_per_volt('Z', chnzinfo['wf'].stats.starttime.datetime)
         header += '# shake tbl vert sens (m/V): {}\n'.format(vert_sens)
 
-        header += '#  plot start freq (hz): {}\n'.format(self.plot_min_freq)
-        header += '#  plot   end freq (hz): {}\n'.format(self.plot_max_freq)
+        header += '#      plot start freq (hz): {}\n'.format(self.plot_min_freq)
+        header += '#      plot   end freq (hz): {}\n'.format(self.plot_max_freq)
         header += '#\n'
 
-        header += '#H {:<24} {:4} {:8} {:27} {:17} {:27} {:17}' \
-                 '{:>7} {:>8} {:>7} {:>8} ' \
-                '{:>7} {:>10} {}\n'.format(
+        header += '#H {:<20} {:4} {:8} {:27} {:17} {:27} {:17}' \
+                 '{:>9} {:>9} {:>9} {:>9} ' \
+                '{:>8} {:19} {}\n'.format(
                      'data_dir','chan', 'ref_chan',
                      'start_time', 'start_epoch', 'end_time', 'end_epoch',
                      'ampmn', 'ampstd', 'phamn', 'phastd',
@@ -643,26 +649,32 @@ class ShakeConfig(object):
     def analyze(self):
 
 # TODO: Add header to results file with all parameters
-        resfn = self.data_dir + 'results.txt'
-        analdate = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        resfn = self.data_dir + '_results.txt'
+        analdate = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
 
-        with open(resfn, 'at') as resfl:
-            self.save_header(resfl, analdate)
+        try:
+            resfl = open(resfn, 'wt')
+        except:
+            self.logger.critical('\nError opening results file: ' + resfn + '\n')
+            return self.plot_fns, self.ms_fns, ''
+
+        self.save_header(resfl, analdate)
 
         fignum = 0
         for chan, chaninfo in self.traces.items():
 
             wf = chaninfo['wf']
             wf_ref = chaninfo['wf_ref']
-            starttime = wf.stats.starttime.datetime  # convert UTCDateTime to datetime.datetime
+            starttime = wf.stats.starttime
+            endtime = wf.stats.endtime
 
-            cross_res = correlate_channel_traces(wf,
-                                                 wf_ref,
-                                                 self.sample_rate,
-                                                 self.shake_table_meters_per_volt(chan[2],
-                                                                                    starttime),
-                                                 self.digi_cnts_per_volt(),
-                                                 smoothing_factor=self.smoothing_factor)
+            cross_res = self.correlate_channel_traces(wf,
+                                                      wf_ref,
+                                                      self.sample_rate,
+                                                      self.shake_table_meters_per_volt(chan[2],
+                                                                                       starttime.datetime),
+                                                      self.digi_cnts_per_volt(),
+                                                      smoothing_factor=self.smoothing_factor)
 
             # get ndxs of good coh in freq_band
             min_freq = self.plot_min_freq
@@ -679,11 +691,17 @@ class ShakeConfig(object):
 
             fignum += 1
             psd_fig = shake_table_psd_plot(fignum, self.data_dir, chan, fr, ps1, ps2, co)
-            psd_fig.savefig('{}_{}_psd_fig.png'.format(chan, self.data_dir), dpi=400)
+            fig_fn = '{}_{}_psd_fig.png'.format(chan, self.data_dir)
+            psd_fig.savefig(fig_fn, dpi=400)
+            self.plot_fns.append(fig_fn)
+            self.logger.debug('{} PSD plot saved in: {}'.format(chan, fig_fn))
 
             fignum += 1
             tf_fig_1 = shake_table_tf_plot(fignum, self.data_dir, chan, fr, am, ph, co)
-            tf_fig_1.savefig('{}_{}_tf_fig1.png'.format(chan, self.data_dir), dpi=400)
+            fig_fn = '{}_{}_tf_fig1.png'.format(chan, self.data_dir)
+            tf_fig_1.savefig(fig_fn, dpi=400)
+            self.plot_fns.append(fig_fn)
+            self.logger.debug('{} TF plot saved in: {}'.format(chan, fig_fn))
 
             # detrend and take only "good" coh points
             # now just coh >= coh_min
@@ -702,9 +720,12 @@ class ShakeConfig(object):
 
             # construct plot with only good coh points
             fignum += 1
-            tf_fig_2 = shake_table_tf_plot(fignum, self.data_dir, chan, fr, am, ph, co, 
-                                           '\n(coh**2 > {}; Phase de-trended)'.format(coh_min))
-            tf_fig_2.savefig('{}_{}_tf_fig2.png'.format(chan, self.data_dir), dpi=400)
+            tf_fig_2 = shake_table_tf_plot(fignum, self.data_dir, chan, fr, am, ph, co,
+                                           '\n(coh**2 >= {}; Phase de-trended)'.format(coh_min))
+            fig_fn = '{}_{}_tf_fig2.png'.format(chan, self.data_dir)
+            tf_fig_2.savefig(fig_fn, dpi=400)
+            self.plot_fns.append(fig_fn)
+            self.logger.debug('{} TF (coh filtered) plot saved in: {}'.format(chan, fig_fn))
 
             # calculate overall values to save
             amp_mn = am.mean()
@@ -712,16 +733,19 @@ class ShakeConfig(object):
             pha_mn = ph.mean()
             pha_std = ph.std()
 
-            res_txt = '   {:<24} {:4} {:8} {:27} {:17} {:27} {:17}' \
-                 '{:>7} {:>8} {:>7} {:>8} ' \
-                '{:>7} {:>10} {}\n'.format(
+            res_txt = '   {:<20} {:4} {:8} {} {:17.6f} {} {:17.6f}' \
+                 '{:9.6f} {:9.6f} {:9.6f} {:9.6f} ' \
+                '{:8.3f} {:>19} {}'.format(
                      self.data_dir, chan, chaninfo['ref_chan'],
-                     wf.stats.starttime.datetime, 'start_epoch',
-                     wf.stats.endtime.datetime, 'end_epoch',
+                     starttime, starttime.timestamp,
+                     endtime, endtime.timestamp,
                      amp_mn, amp_std, pha_mn, pha_std,
-                     self.coherence_cutoff, 'analyzedon', self.ms_filename)
-            with open(resfn, 'at') as resfl:
-                resfl.write(res_txt + '\n')
+                     self.coherence_cutoff, analdate, self.ms_filename)
+            resfl.write(res_txt + '\n')
 
-        with open(resfn, 'at') as resfl:
-            self.save_footer(resfl)
+        self.save_footer(resfl)
+
+        self.logger.debug('Results saved to: ' + resfn)
+
+        return self.plot_fns, self.ms_fns, resfn
+
