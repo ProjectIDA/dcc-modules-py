@@ -1,24 +1,25 @@
-#######################################################################################################################
+#######################################################################################
 # Copyright (C) 2016  Regents of the University of California
 #
-# This is free software: you can redistribute it and/or modify it under the terms of the
-# GNU General Public License (GNU GPL) as published by the Free Software Foundation, either version 3 of the License,
-# or (at your option) any later version.
+# This is free software: you can redistribute it and/or modify it under the terms of
+# the GNU General Public License (GNU GPL) as published by the Free Software Foundation,
+# either version 3 of the License, or (at your option) any later version.
 #
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
-# without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-# See the GNU General Public License for more details.
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 #
-# A copy of the GNU General Public License can be found in LICENSE.TXT in the root of the source code repository.
-# Additionally, it can be found at http://www.gnu.org/licenses/.
+# A copy of the GNU General Public License can be found in LICENSE.TXT in the root of
+# the source code repository. It can also be found at http://www.gnu.org/licenses/.
 #
 # NOTES: Per GNU GPLv3 terms:
 #   * This notice must be kept in this source file
 #   * Changes to the source must be clearly noted with date & time of change
 #
-# If you use this software in a product, an explicit acknowledgment in the product documentation of the contribution
-# by Project IDA, Institute of Geophysics and Planetary Physics, UCSD would be appreciated but is not required.
-#######################################################################################################################
+# If you use this software in a product, an explicit acknowledgment in the product
+# documentation of the contribution by Project IDA, Institute of Geophysics and
+# Planetary Physics, UCSD would be appreciated but is not required.
+#######################################################################################
 import calendar
 import os.path
 import sys
@@ -27,9 +28,30 @@ import subprocess
 import glob
 import tempfile
 from pathlib import Path
+import yaml
+import logging
 
 from fabulous.color import red, bold
 
+
+def load_yaml_file(yamlfn):
+    ydict = {}
+    ok = False
+    try:
+        with open(yamlfn, 'rt') as cfl:
+            yaml_txt = cfl.read()
+            try:
+                ydict = yaml.load(yaml_txt)
+                ok = True
+            except yaml.YAMLError as exc:
+                logging.error('Error parsing YAML file [' + yamlfn + '].')
+                ok = False
+    except FileNotFoundError:
+        logging.error('YAML file not found: ' + yamlfn)
+    except:
+        logging.error('Error opening YAML file: ' + yamlfn)
+        
+    return ydict, ok
 
 def pimseed(sta, i10_fn, ms_fn):
 
