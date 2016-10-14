@@ -188,7 +188,10 @@ class APSurvey(object):
 
     ChanTpl = namedtuple('ChanTuple', 'z n e')
 
-    def __init__(self, fn, debug=False, logger=None):
+    def __init__(self, fn, ida_cal_raw_dir, seedrespdir, debug=False, logger=None):
+
+        self.ida_cal_raw_dir = ida_cal_raw_dir
+        self.resp_dir = seedrespdir
 
         self.ok = True
         if not logger:
@@ -283,23 +286,7 @@ class APSurvey(object):
         else:
             self._process_config()
 
-        self._config['resp_dir'] = os.environ.get('SEEDRESP') or ''
-
     def _process_config(self):
-
-        # check ENV
-        if not os.environ.get('IDA_CAL_ANALYSIS_DIR'):
-            self.logmsg(logging.ERROR, 'The env var IDA_CAL_ANALYSIS_DIR must be set.')
-            self.ok = False
-        if not os.environ.get('IDA_CAL_RAW_DIR'):
-            self.logmsg(logging.ERROR, 'The env var IDA_CAL_RAW_DIR must be set.')
-            self.ok = False
-        if not os.environ.get('IDA_ARCHIVE_RAW_DIR'):
-            self.logmsg(logging.ERROR, 'The env var IDA_ARCHIVE_RAW_DIR must be set.')
-            self.ok = False
-        if not os.environ.get('SEEDRESP'):
-            self.logmsg(logging.ERROR, 'The env var SEEDRESP must be set.')
-            self.ok = False
 
         if 'correlation_segment_size_secs' not in self._config:
             self.ok = False
@@ -378,12 +365,10 @@ class APSurvey(object):
 
 
         if self.ok:
-            self.analysis_output_path = os.path.join(os.environ['IDA_CAL_ANALYSIS_DIR'],
-                                                     self.station, 'APSurvey')
             # check azimuth settings
             if self.process_azimuth:
 
-                fpath = os.path.join(os.environ['IDA_CAL_RAW_DIR'], self._config['ref_azimuth_data']['ms_file'])
+                fpath = os.path.join(self.ida_cal_raw_dir, self._config['ref_azimuth_data']['ms_file'])
 
                 if not (os.path.exists(fpath) and os.path.isfile(fpath)):
                     self.logmsg(logging.ERROR, 'Azimuth file for reference sensor not found: {}'.format(fpath))
@@ -409,7 +394,7 @@ class APSurvey(object):
             # check absolute settings
             if self.process_absolute:
 
-                fpath = os.path.join(os.environ['IDA_CAL_RAW_DIR'], self._config['ref_absolute_data']['ms_file'])
+                fpath = os.path.join(self.config.ida_cal_raw_dir, self._config['ref_absolute_data']['ms_file'])
 
                 if not (os.path.exists(fpath) and os.path.isfile(fpath)):
                     self.logmsg(logging.ERROR, 'Absolute file for reference sensor not found: {}'.format(fpath))
@@ -514,7 +499,7 @@ class APSurvey(object):
 
     def respfilename(self, net, sta, chn, loc):
         resp_file = 'RESP.{}.{}.{}.{}'.format(net, sta, loc, chn)
-        return os.path.join(self._config['resp_dir'], resp_file)
+        return os.path.join(self.resp_dir, resp_file)
 
     def station_sensor_loc(self, sensor):
         if sensor == 'pri':
