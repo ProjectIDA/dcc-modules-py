@@ -192,6 +192,7 @@ class APSurvey(object):
 
         self.ida_cal_raw_dir = ida_cal_raw_dir
         self.resp_dir = seedrespdir
+        self.waveform_files = []
 
         self.ok = True
         if not logger:
@@ -694,6 +695,8 @@ class APSurvey(object):
             self.trtpls[datatype][sensor] = self.ChanTpl(z=tr_z, n=tr_1, e=tr_2)
             self.msfiles[datatype][sensor] = os.path.abspath(outname + '.ms')
             self.streams[datatype][sensor].write(self.msfiles[datatype][sensor], format='MSEED')
+            self.waveform_files.append(outname+'.i10')
+            self.waveform_files.append(outname+'.ms')
         except Exception as e:
             self.logmsg(logging.ERROR,
                         'Error reading data for sensor ({}/{})'.format(
@@ -1061,7 +1064,7 @@ class APSurvey(object):
 
                 self.save_footer(datatype, detf, sumf)
 
-        return sumfn, detfn
+        return sumfn, detfn, self.waveform_files
 
     def compare_streams(self, datatype, src1, src2):
         """
