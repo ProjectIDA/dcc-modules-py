@@ -40,6 +40,7 @@ from numpy import std, sqrt, dot, insert
 from numpy.fft import rfft, irfft
 import numpy.linalg as la
 import scipy.signal as ss
+from fabulous.color import red
 
 from ida.utils import i10get, pimseed
 from ida.signals.utils import time_offset, taper_high_freq_resp, \
@@ -188,21 +189,26 @@ class APSurvey(object):
 
     ChanTpl = namedtuple('ChanTuple', 'z n e')
 
-    def __init__(self, fn, ida_cal_raw_dir, seedrespdir, debug=False, logger=None):
+    def __init__(self, fn, data_type, ida_cal_raw_dir, seedrespdir, debug=False, logger=None):
 
+        self.data_type = data_type
         self.ida_cal_raw_dir = ida_cal_raw_dir
         self.resp_dir = seedrespdir
+        self.debug = debug
         self.waveform_files = []
 
         self.ok = True
+
         if not logger:
             self.logger = logging.getLogger('APSurvey')
+            self.logger.setLevel(logging.DEBUG)  # allow control via handler(s)
             # set up wARN/ERROR handler
+
             fmtr = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s: %(message)s')
             hndlr = logging.StreamHandler()
             hndlr.setFormatter(fmtr)
             # set up log level
-            if debug:
+            if self.debug:
                 hndlr.setLevel(logging.DEBUG)
             else:
                 hndlr.setLevel(logging.WARN)
@@ -282,10 +288,18 @@ class APSurvey(object):
             self._config_dir = Path(fn).parent
         except:
             self._config = {}
-            self.logmsg(logging.ERROR, 'Error parsing YAML config file: ' + fn)
+            print(red('Error parsing YAML config file: ' + fn))
             self.ok = False
         else:
             self._process_config()
+
+    def configure_logger(self):
+
+        filefmtr = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s: %(message)s')
+        fhndlr = logging.FileHandler(log_file)
+        fhndlr.setFormatter(filefmtr)
+        fhndlr.setLevel(logging.DEBUG)
+        self.logger.addHandler(fhndlr)
 
     def _process_config(self):
 
@@ -975,9 +989,10 @@ class APSurvey(object):
                         self.ms_filename(datatype, src1), self.ms_filename(datatype, src2))
                     detf.write(detres+'\n')
 
-    def analyze(self, datatype):
+    def analyze(self):
 
         sensors_available = 0  # need 2+ to do any comparisons
+        datatype = self.data_type
 
         data_ok = self.read_ref_data(datatype)
         compare_ref = data_ok
