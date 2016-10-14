@@ -244,7 +244,7 @@ class APSurvey(object):
             }
         }
         # in-memory responses for 2 or 3 sensors
-        # note that '_v_' responses are because responses have to accound for
+        # note that '_v_' responses are because responses have to account for
         # potentially different sample-rates  & nyquist freqs
         self.responses = {
             # responses for 'ref' sensor, adjusted for dif sampling rates of sta sensors
@@ -261,12 +261,6 @@ class APSurvey(object):
                 'pri': None
             },
         }
-        # decimation factors for each sensor
-#        self.decifactors = {
-#            'ref': [1],
-#            'pri': [1],
-#            'sec': [1]
-#        }
         # time correction flags so only do it once
         self.ref_clock_adjustment = 0.0
         self.ref_clock_adjusted = False
@@ -564,9 +558,6 @@ class APSurvey(object):
 
         ref_z = self.trtpls[datatype][src1].z.copy()
         sensor_z = self.trtpls[datatype][src2].z.copy()
-
-        print(ref_z)
-        print(sensor_z)
 
         # need to interpolate if ref data sampling rate > sensor sampling rate
         if ref_z.stats.sampling_rate > sensor_z.stats.sampling_rate:
