@@ -394,7 +394,7 @@ class APSurvey(object):
             # check absolute settings
             if self.process_absolute:
 
-                fpath = os.path.join(self.config.ida_cal_raw_dir, self._config['ref_absolute_data']['ms_file'])
+                fpath = os.path.join(self.ida_cal_raw_dir, self._config['ref_absolute_data']['ms_file'])
 
                 if not (os.path.exists(fpath) and os.path.isfile(fpath)):
                     self.logmsg(logging.ERROR, 'Absolute file for reference sensor not found: {}'.format(fpath))
