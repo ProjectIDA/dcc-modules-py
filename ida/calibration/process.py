@@ -22,7 +22,7 @@
 import logging
 from os.path import join
 
-from numpy import ndarray, complex128, pi, ceil, sin, cos, angle, abs, linspace, multiply, \
+from numpy import complex128, pi, ceil, sin, cos, angle, abs, linspace, multiply, \
     logical_and, less_equal, polyfit, polyval, \
     divide, subtract, concatenate
 from numpy.fft import rfft, irfft
