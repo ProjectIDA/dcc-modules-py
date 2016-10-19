@@ -82,8 +82,6 @@ def cross_correlate(sampling_rate, ts1, ts2, smoothing_factor=2.0):
     logging.debug('calling spcmat... complete (fft-len: ' + str(fft_usable_len) + ')')
 
     pwr = 0.5 * (sxy[0, 0] + sxy[fft_usable_len - 1, 0]) + (sxy[1:fft_usable_len - 2, 0]).sum()
-    # for ndx in range(1,ts_info['fft_usable_len']-1):
-    #     power += sxy[ndx, 0]
 
     const = ts1_var / (pwr * (sampling_rate * 0.5 / (fft_usable_len - 1)))
 
