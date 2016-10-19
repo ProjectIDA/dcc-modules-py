@@ -20,9 +20,7 @@
 # by Project IDA, Institute of Geophysics and Planetary Physics, UCSD would be appreciated but is not required.
 #######################################################################################################################
 
-from numpy import angle, pi, abs, asarray, median, \
-    less, less_equal, greater_equal, logical_and, \
-    polyfit, polyval
+from numpy import angle, pi, abs, asarray  #, less, greater_equal, polyfit, polyval
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
 import matplotlib.gridspec as gridspec
@@ -304,47 +302,38 @@ def apc_plot(sampling_freq, freqs, amp, pha, coh):
     plt.show()
 
 def cross_tf_plot(sta, loc, chn, sensor, ondate, cal_type,
-                  samp_rate, freqs, cr_amp, cr_pha, cr_coh,
+                  samp_rate, freqs, tf_amp, tf_pha, tf_coh,
                   green_tol_lims=None, grey_tol_lims=None,
                   plot_band_limit=0.9):
     """Python port of go_parker.m plots of coherence output"""
+
+    if not cal_type in [CALTYPE_RBLF, CALTYPE_RBHF]:
+       raise ValueError('cal_type must be CALTYPE_RBLF or CALTYPE_RBHF. [' + cal_type + ']')
 
     nyq = samp_rate * 0.5
     freq_limit = nyq * plot_band_limit
 
     freq_plt = asarray([f for f in freqs if f <= freq_limit])
-    amp_plt = cr_amp[:len(freq_plt)].copy()
-    pha_plt = cr_pha[:len(freq_plt)].copy()
-    coh_plt = cr_coh[:len(freq_plt)].copy()
+    amp_plt = tf_amp[:len(freq_plt)].copy()
+    pha_plt = tf_pha[:len(freq_plt)].copy()
+    coh_plt = tf_coh[:len(freq_plt)].copy()
 
     if cal_type == CALTYPE_RBLF:
         title_substr = 'LOW'
-        amp_corr_band_freq_lb = 0.0
-        amp_corr_band_freq_ub = 0.04
-        pha_corr_band_freq_ul = 0.375  # taken from go_parker.m, assumes 100Hz hf cal sample rate
+#        pha_corr_band_freq_ul = 0.375  # taken from go_parker.m, assumes 100Hz hf cal sample rate
     elif cal_type == CALTYPE_RBHF:
         title_substr = 'HIGH'
-        amp_corr_band_freq_lb = 0.5
-        amp_corr_band_freq_ub = 7.0
-        pha_corr_band_freq_ul = 37.5    # taken from go_parker.m, assumes 100Hz hf cal sample rate
-    else:
-        raise ValueError('Invalid cal_type: {}'.format(cal_type))
-
-    # find amp "nomalization" factor and adjust
-    # amp_adjust_ndxs = logical_and(freq_plt > (amp_corr_band_freq_lb),
-    #                               freq_plt < (amp_corr_band_freq_ub))
-    # amp_plt /= median(amp_plt[amp_adjust_ndxs])
-    # print('amp first/median/last: ', amp_plt[0], median(amp_plt[amp_adjust_ndxs]), amp_plt[-1])
+#        pha_corr_band_freq_ul = 37.5    # taken from go_parker.m, assumes 100Hz hf cal sample rate
 
     # fit trend line to phase over band with "good or better coh", which is
     # defined as median coh at freqs below pha_corr_band_factor_ul of nyquist
-    median_coh = median(cr_coh[less(freqs, pha_corr_band_freq_ul)])
-    good_cohs_ndxs = greater_equal(cr_coh, median_coh)
+#    median_coh = median(tf_coh[less(freqs, pha_corr_band_freq_ul)])
+#    good_cohs_ndxs = greater_equal(tf_coh, median_coh)
     # fit to straight line
-    pha_trend_coeffs = polyfit(freqs[good_cohs_ndxs], cr_pha[good_cohs_ndxs], 1)
-    ph_corr_vals = polyval(pha_trend_coeffs, freq_plt)
+#    pha_trend_coeffs = polyfit(freqs[good_cohs_ndxs], tf_pha[good_cohs_ndxs], 1)
+#    ph_corr_vals = polyval(pha_trend_coeffs, freq_plt)
     # correct pha for trend
-    pha_plt -= ph_corr_vals
+#    pha_plt -= ph_corr_vals
 
     fig = plt.figure(figsize=(8.5,11))
 
