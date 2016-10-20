@@ -35,6 +35,8 @@ from fabulous.color import red, bold
 
 
 def load_yaml_file(yamlfn):
+    """Load YAML file into python dict"""
+
     ydict = {}
     ok = False
     try:
@@ -43,17 +45,18 @@ def load_yaml_file(yamlfn):
             try:
                 ydict = yaml.load(yaml_txt)
                 ok = True
-            except yaml.YAMLError as exc:
+            except yaml.YAMLError:
                 logging.error('Error parsing YAML file [' + yamlfn + '].')
                 ok = False
     except FileNotFoundError:
         logging.error('YAML file not found: ' + yamlfn)
     except:
         logging.error('Error opening YAML file: ' + yamlfn)
-        
+
     return ydict, ok
 
 def pimseed(sta, i10_fn, ms_fn):
+    """Python wrapper for imseed c language binary"""
 
     if not (os.path.exists(i10_fn) and os.path.isfile(i10_fn)):
         print(red(bold('Error running imseed: IDA10 file not found: ' + i10_fn)))
@@ -66,7 +69,11 @@ def pimseed(sta, i10_fn, ms_fn):
             print(red(bold(res.stderr)))
 
 
-def i10get(sta, chan_list, startime, endtime, outfn=None, **kwargs):
+def i10get(i10_arc_dir, sta, chan_list, startime, endtime, outfn=None, **kwargs):
+    """Function to retrieve IDA10 data for specified sta, chanlos and days
+    from IDA10 Archive directory structure
+
+    Output is streamed supplied filename or to STDOUT if filename not supplied"""
 
     # get list of raw yr/day dirs for sta within tart/end dates
     arcrawdir = os.getenv('IDA_ARCHIVE_RAW_DIR')
@@ -74,7 +81,7 @@ def i10get(sta, chan_list, startime, endtime, outfn=None, **kwargs):
         print(red(bold('FATAL ERROR: IDA_ARCHIVE_RAW_DIR env var not set.')), file=sys.stderr)
         sys.exit(1)
 
-    gz_dirs = arc_raw_i10_dirs(arcrawdir, sta.lower(), startime, endtime)
+    gz_dirs = arc_raw_i10_dirs(i10_arc_dir, sta.lower(), startime, endtime)
 
     # keep track of gz files across days for each station to remove dupes
     gz_files_processed = set()
@@ -106,6 +113,7 @@ def i10get(sta, chan_list, startime, endtime, outfn=None, **kwargs):
 
 
 def mstrim(starttime=None, endtime=None, infn=None, outfn=None):
+    """Trim input miniseed data to start/end times supplied. Output to file or STDOUT"""
 
     from obspy import read, UTCDateTime
 
@@ -147,7 +155,8 @@ def mstrim(starttime=None, endtime=None, infn=None, outfn=None):
 
 
 def arc_raw_i10_dirs(raw_root_dir, sta, start_dt, end_dt):
-    """ Returns a list of fully qualified gz sta/year/day dir names having data between start_t and end_t inclusive"""
+    """ Returns a list of fully qualified gz sta/year/day dir names
+    having data between start_t and end_t inclusive"""
 
     start_year = start_dt.year
     start_jday = int(start_dt.strftime('%j'))
