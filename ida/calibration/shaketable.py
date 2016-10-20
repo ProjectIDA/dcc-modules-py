@@ -121,7 +121,7 @@ class ShakeConfig(object):
     bhe_chan_list = ['UN3', 'BHE', 'HHE', 'HHX', 'HNX', 'BH2']
 
     def __init__(self, fn, cal_raw_dir, respfile_dir,
-                 shaketable_subdir='shaketable', debug=False, logger=None):
+                 shaketable_subdir, debug=False, logger=None):
 
         self.ok = True
         self.plot_fns = []
