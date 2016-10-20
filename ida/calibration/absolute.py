@@ -189,11 +189,13 @@ class APSurvey(object):
 
     ChanTpl = namedtuple('ChanTuple', 'z n e')
 
-    def __init__(self, fn, data_type, ida_cal_raw_dir, seedrespdir, debug=False, logger=None):
+    def __init__(self, fn, data_type, ida_cal_raw_dir, seedrespdir, i10_arc_dir,
+                 debug=False, logger=None):
 
         self.data_type = data_type
         self.ida_cal_raw_dir = ida_cal_raw_dir
         self.resp_dir = seedrespdir
+        self.i10_arc_dir = i10_arc_dir
         self.debug = debug
         self.waveform_files = []
 
@@ -292,14 +294,6 @@ class APSurvey(object):
             self.ok = False
         else:
             self._process_config()
-
-    def configure_logger(self):
-
-        filefmtr = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s: %(message)s')
-        fhndlr = logging.FileHandler(log_file)
-        fhndlr.setFormatter(filefmtr)
-        fhndlr.setLevel(logging.DEBUG)
-        self.logger.addHandler(fhndlr)
 
     def _process_config(self):
 
@@ -686,7 +680,8 @@ class APSurvey(object):
         try:  # this is really too much in single try:
             if os.path.exists(outname+'.i10'): os.remove(outname+'.i10')
             if os.path.exists(outname+'.ms'): os.remove(outname+'.ms')
-            i10get(self.station,
+            i10get(self.i10_arc_dir,
+                   self.station,
                    self.chanloc_codes(sensor),
                    self.starttime(datatype), self.endtime(datatype),
                    outfn=outname+'.i10')
