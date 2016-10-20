@@ -76,11 +76,6 @@ def i10get(i10_arc_dir, sta, chan_list, startime, endtime, outfn=None, **kwargs)
     Output is streamed supplied filename or to STDOUT if filename not supplied"""
 
     # get list of raw yr/day dirs for sta within tart/end dates
-    arcrawdir = os.getenv('IDA_ARCHIVE_RAW_DIR')
-    if not arcrawdir:
-        print(red(bold('FATAL ERROR: IDA_ARCHIVE_RAW_DIR env var not set.')), file=sys.stderr)
-        sys.exit(1)
-
     gz_dirs = arc_raw_i10_dirs(i10_arc_dir, sta.lower(), startime, endtime)
 
     # keep track of gz files across days for each station to remove dupes
