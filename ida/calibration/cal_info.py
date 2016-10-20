@@ -52,7 +52,7 @@ class CalInfo():
     tui_indent = 4
     tui_indent_str = ' '*tui_indent
 
-    def __init__(self, cal_raw_dir, resp_cur_dir, resp_nom_dir, cal_analysis_dir):
+    def __init__(self, cal_raw_dir, resp_cur_dir, resp_nom_dir, cal_analysis_dir, db_dir=None, config_file=None):
         if cal_raw_dir and exists(abspath(cal_raw_dir)):
             self.cal_raw_dir = cal_raw_dir
         else:
@@ -87,6 +87,20 @@ class CalInfo():
                                  'Error: IDA Cal Analysis directory [' + cal_analysis_dir + '] unspecified or does not exist.'
                              )))
 
+        # if using datascope db, need db_dir and then to read stages into pandas dataframe
+        self.stages_df = None
+        self.db_dir = db_dir # this can be empty if using config file
+        if db_dir:
+            if exists(abspath(db_dir)):
+                self.db_dir = db_dir
+                _, self.stages_df = read('datascope', self.db_dir, 'stage')
+            else:
+                self.db_dir = None
+                raise ValueError(self.tui_indent_str +
+                                 bold(red(
+                                     'Error: Database directory [' + db_dir + '] does not exist.'
+                                 )))
+
         self._info = {
             'sta': None,
             'loc': None,
@@ -113,7 +127,7 @@ class CalInfo():
         self.omit_lf = False
         self.omit_hf = False
 
-        _, self.stages_df = read('datascope', 'stage')
+#        _, self.stages_df = read('datascope', self.db_dir, 'stage')
         self._lf_chn_stages = None
         self._hf_chn_stages = None
 
@@ -632,7 +646,7 @@ class CalInfo():
         pick_groups.append(sensor_fn_list)
         group_titles.append('Response on Date of Calibration')
 
-        nom_resps = nom_resp_for_model(self.sensor.lower())
+        nom_resps = nom_resp_for_model(self.resp_nom_dir, self.sensor.lower())
         nom_resps_names = sorted([Path(respfn).name for respfn in nom_resps])
         pick_groups.append(nom_resps_names)
         group_titles.append('Nominal Responses for sensor: ' + self.sensor.upper())
