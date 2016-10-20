@@ -181,9 +181,14 @@ class ShakeConfig(object):
                               ' path the shake table miniseed file relative to ' +
                               self.cal_raw_dir + '/' + self.shaketable_subdir)
         else:
-            data_path = os.path.abspath(os.path.join(self.cal_raw_dir,
-                                                     self.shaketable_subdir,
-                self._config['shaketable_ms_filename']))
+            if os.path.isabs(self._config['shaketable_ms_filename']):
+                data_path = os.path.normpath(self._config['shaketable_ms_filename'])
+            else:
+                data_path = os.path.abspath(
+                                os.path.join(self.cal_raw_dir,
+                                             self.shaketable_subdir,
+                                             self._config['shaketable_ms_filename']
+                                            ))
             if not isfile(data_path) or not exists(data_path):
                 self.logger.error('Miniseed file {} not found.'.format(data_path))
                 self.ok = False
