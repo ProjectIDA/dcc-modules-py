@@ -21,7 +21,7 @@
 #######################################################################################################################
 from ida.db import DB_TYPES
 
-def read(db_type, db_table):
+def read(db_type, db_dir, db_table):
 
     table_data = None
     result = False
@@ -32,7 +32,7 @@ def read(db_type, db_table):
         raise ValueError('Invalid DB_TYPE: ' + db_type)
     elif db_type == 'datascope':
         import ida.db.datascope.io
-        result, table_data = ida.db.datascope.io.read(db_table)
+        result, table_data = ida.db.datascope.io.read(db_dir, db_table)
 
     return result, table_data
 
