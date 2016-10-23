@@ -21,9 +21,11 @@
 #######################################################################################################################
 import glob
 from os import getcwd, environ
-from os.path import exists, abspath, join
+from os.path import exists, abspath, join, dirname
 from pathlib import Path
 import datetime
+import yaml
+#import pprint
 
 from fabulous.color import bold, blue, red, green
 from pandas.core.frame import DataFrame
@@ -52,54 +54,16 @@ class CalInfo():
     tui_indent = 4
     tui_indent_str = ' '*tui_indent
 
-    def __init__(self, cal_raw_dir, resp_cur_dir, resp_nom_dir, cal_analysis_dir, db_dir=None, config_file=None):
-        if cal_raw_dir and exists(abspath(cal_raw_dir)):
-            self.cal_raw_dir = cal_raw_dir
-        else:
-            self.cal_raw_dir = ''
-            raise ValueError(self.tui_indent_str +
-                             bold(red(
-                                 'Error: IDA Cal Raw directory [' + cal_raw_dir + '] unspecified or does not exist.'
-                             )))
+    def __init__(self, sta=None, loc=None,
+                 config_file=None, comp=None, chancode=None,
+                 cal_raw_dir=None, resp_cur_dir=None,
+                 resp_nom_dir=None, db_dir=None):
 
-        if resp_cur_dir and exists(abspath(resp_cur_dir)):
-            self.resp_cur_dir = resp_cur_dir
-        else:
-            raise ValueError(self.tui_indent_str +
-                             bold(red(
-                                 'Error: IDA Response directory [' + resp_cur_dir + '] unspecified or does not exist.'
-                             )))
-
-        if resp_nom_dir and exists(abspath(resp_nom_dir)):
-            self.resp_nom_dir = resp_nom_dir
-        else:
-            raise ValueError(self.tui_indent_str +
-                             bold(red(
-                                 'Error: IDA NOMINAL Response irectory [' + resp_nom_dir + '] unspecified or does not exist.'
-                             )))
-
-        if cal_analysis_dir and exists(abspath(cal_analysis_dir)):
-            self.cal_analysis_dir = cal_analysis_dir
-        else:
-            self.cal_analysis_dir = ''
-            raise ValueError(self.tui_indent_str +
-                             bold(red(
-                                 'Error: IDA Cal Analysis directory [' + cal_analysis_dir + '] unspecified or does not exist.'
-                             )))
-
-        # if using datascope db, need db_dir and then to read stages into pandas dataframe
-        self.stages_df = None
-        self.db_dir = db_dir # this can be empty if using config file
-        if db_dir:
-            if exists(abspath(db_dir)):
-                self.db_dir = db_dir
-                _, self.stages_df = read('datascope', self.db_dir, 'stage')
-            else:
-                self.db_dir = None
-                raise ValueError(self.tui_indent_str +
-                                 bold(red(
-                                     'Error: Database directory [' + db_dir + '] does not exist.'
-                                 )))
+        self.config_file = config_file
+        self.cal_raw_dir = cal_raw_dir
+        self.resp_nom_dir = resp_nom_dir
+        self.resp_cur_dir = resp_cur_dir
+        self.db_dir = db_dir
 
         self._info = {
             'sta': None,
@@ -122,14 +86,168 @@ class CalInfo():
             'newpaz': None,
             'lfpert': None,
             'hfpert': None,
+            # below 4 keys only used for CTBTO calculations
+            'q330_nom_sens': None,
+            'q330_calib_factor': None,
+            'sensor_nom_sens': None,
+            'sensor_calib_z': None,
+            'sensor_calib_1': None,
+            'sensor_calib_2': None,
         }
 
         self.omit_lf = False
         self.omit_hf = False
 
 #        _, self.stages_df = read('datascope', self.db_dir, 'stage')
+        self.stages_df = None
         self._lf_chn_stages = None
         self._hf_chn_stages = None
+
+        self.ok = True
+
+        if not config_file:
+            self.mode = 'interactive'
+            self.sta = sta
+            self.loc = loc
+            self.cal_raw_dir = cal_raw_dir
+            self.resp_nom_dir = resp_nom_dir
+            self.resp_cur_dir = resp_cur_dir
+            self.db_dir = db_dir
+
+            # if not using configuration file, must access datascopedb
+            # from db_dir and then to read stages into pandas dataframe
+            self.db_dir = db_dir
+            if db_dir:
+                if exists(abspath(db_dir)):
+                    self.db_dir = db_dir
+                    _, self.stages_df = read('datascope', self.db_dir, 'stage')
+                else:
+                    self.db_dir = None
+                    raise ValueError(self.tui_indent_str +
+                                     bold(red(
+                                         'Error: Database directory [' + db_dir + '] does not exist.'
+                                     )))
+        else:
+            self.mode = 'config-file'
+            with open(self.config_file, 'rt') as cfl:
+                config_txt = cfl.read()
+            try:
+                self._config = yaml.load(config_txt)
+                self._config_dir = Path(self.config_file).parent
+            except:
+                self._config = {}
+                print(red('Error parsing YAML config file: ' + self.config_file))
+                self.ok = False
+            else:
+                # check for any fatal error conditions in successfully parsed config file
+                self.ok = self.config_file_isvalid()
+                self.sta = self._config['station'].lower()
+                self.loc = self._config['loc']
+                self.run_comp = comp.lower()
+                self.run_chan = chancode
+                self.resp_nom_dir = self._config['nom_resp_dir']
+                self.resp_cur_dir = self._config['cur_resp_dir']
+
+    def config_file_isvalid(self):
+
+        if 'station' not in self._config:
+            print(red('Error in configuration file: "station" key is missing.'))
+            valid = False
+
+        if 'loc' not in self._config:
+            print(red('Error in configuration file: "loc" key is missing.'))
+            valid = False
+
+        valid = True
+        if 'process_lf' not in self._config:
+            print(red('Error in configuration file: "process_lf" key missing.'))
+            valid = False
+        else:
+            process_lf = self._config['process_lf']
+            if process_lf:
+                if 'lf_ms_file' not in self._config:
+                    print(red('Error in configuration file: "lf_ms_file" key is missing.'))
+                if 'lf_qcal_file' not in self._config:
+                    print(red('Error in configuration file: "lf_qcal_file" key is missing.'))
+                if 'lf_cal_date' not in self._config:
+                    print(red('Error in configuration file: "lf_cal_date" key is missing.'))
+        if 'process_hf' not in self._config:
+            print(red('Error in configuration file: "process_hf" key missing.'))
+            valid = False
+        else:
+            process_hf = self._config['process_hf']
+            if process_hf:
+                if 'hf_ms_file' not in self._config:
+                    print(red('Error in configuration file: "hf_ms_file" key is missing.'))
+                if 'hf_qcal_file' not in self._config:
+                    print(red('Error in configuration file: "hf_qcal_file" key is missing.'))
+                if 'hf_cal_date' not in self._config:
+                    print(red('Error in configuration file: "hf_cal_date" key is missing.'))
+            else:
+                if 'process_lf' in self._config and not process_lf:
+                    print(red('Error in configuration file: neither LF or HF procesing is enabled.'))
+                    valid = False
+
+        if 'sensor_code' not in self._config:
+            print(red('Error in configuration file: "sensor_code" key is missing.'))
+            valid = False
+
+        if 'sampling_rate' not in self._config:
+            print(red('Error in configuration file: "sampling_rate" key is missing.'))
+            valid = False
+
+        if 'ctbto_analysis' not in self._config:
+            print(red('Error in configuration file: "ctbto_analysis" key is missing.'))
+            valid = False
+        elif self._config['ctbto_analysis']:
+
+#           if 'q330_sensor_port' not in self._config:
+#               print(red('Error in configuration file: "q330_sensor_port" key is missing.'))
+#               valid = False
+
+            if 'sensor_nom_sens' not in self._config:
+                print(red('Error in configuration file: "sensor_nom_sens" key is missing.'))
+                valid = False
+
+            if 'q330_nom_sens' not in self._config:
+                print(red('Error in configuration file: "q330_nom_sens" key is missing.'))
+                valid = False
+
+            if 'q330_calib_factor' not in self._config:
+                print(red('Error in configuration file: "q330_calib_factor" key is missing.'))
+                valid = False
+
+            if 'sensor_calib_factor_z' not in self._config:
+                print(red('Error in configuration file: "sensor_calib_factor_z" key is missing.'))
+                valid = False
+
+            if 'sensor_calib_factor_1' not in self._config:
+                print(red('Error in configuration file: "sensor_calib_factor_1" key is missing.'))
+                valid = False
+
+            if 'sensor_calib_factor_2' not in self._config:
+                print(red('Error in configuration file: "sensor_calib_factor_2" key is missing.'))
+                valid = False
+
+        if 'nom_resp_dir' not in self._config:
+            print(red('Error in configuration file: "nom_resp_dir" key is missing.'))
+            valid = False
+        else:
+            if not exists(self._config['nom_resp_dir']):
+                print(red('Error in configuration: nom_resp_dir does not exist.' + \
+                          self._config['cur_resp_dir']))
+                valid = False
+
+        if 'cur_resp_dir' not in self._config:
+            print(red('Error in configuration file: "cur_resp_dir" key is missing.'))
+            valid = False
+        else:
+            if not exists(self._config['cur_resp_dir']):
+                print(red('Error in configuration: cur_resp_dir does not exist: ' + \
+                          self._config['cur_resp_dir']))
+                valid = False
+
+        return valid
 
     def reset(self, key_list):
         for key in key_list:
@@ -146,7 +264,32 @@ class CalInfo():
 
     def check_type(self, val, valtype, valname):
         if not isinstance(val, valtype):
-            raise TypeError('Invalid type for ' + valname + '. Should be ' + str(valtype))
+            raise TypeError('Invalid type for ' + valname + ':' + val + \
+                            'Should be ' + str(valtype))
+
+    def sensor_gnom(self):
+        if self.mode == 'interactive':
+            return self.chn_stages.iloc[0].gnom
+        elif self.mode == 'config-file':
+            return self._info['sensor_nom_sens']
+
+    def sensor_gcalib(self):
+        if self.mode == 'interactive':
+            return self.chn_stages.iloc[0].gcalib
+        elif self.mode == 'config-file':
+            return self._info['sensor_calib_'+ self.comp.lower()]
+
+    def q330_gnom(self):
+        if self.mode == 'interactive':
+            return self.chn_stages.iloc[2].gnom
+        elif self.mode == 'config-file':
+            return self._info['q330_nom_sens']
+
+    def q330_gcalib(self):
+        if self.mode == 'interactive':
+            return self.chn_stages.iloc[2].gcalib
+        elif self.mode == 'config-file':
+            return self._info['q330_calib_factor']
 
     @property
     def sta(self):
@@ -185,10 +328,13 @@ class CalInfo():
 
         if value:
             self.check_type(value, str, 'sensor')
-            self._info['sensor'] = value if exists(join(self.cal_raw_dir,
-                                                        self.sta,
-                                                        self.loc,
-                                                        value)) else None
+            if self.mode == 'config-file':
+                self._info['sensor'] = value
+            else:
+                self._info['sensor'] = value if exists(join(self.cal_raw_dir,
+                                                            self.sta,
+                                                            self.loc,
+                                                            value)) else None
         else:
             self._info['sensor'] = None
 
@@ -272,26 +418,30 @@ class CalInfo():
         if self.sta and self.loc and self.sensor:
             if value:
                 self.check_type(value, str, 'low freq cal date')
-                rbpath = join(self.cal_raw_dir,
-                              self.sta,
-                              self.loc,
-                              self.sensor,
-                              CALTYPE_RBLF,
-                              value)
-                if exists(rbpath):
-                    if self.lfdatedir != value:
-                        self.reset(['lffile'])
-
+                if self.mode == 'config-file':
+                    # really only the ISO date from config file, not a dir segment
                     self._info['lfdatedir'] = value
-                    self.reset(['lffile', 'respfn', 'fullpaz', 'lfpert', 'hfpert'])
+                else:
+                    rbpath = join(self.cal_raw_dir,
+                                  self.sta,
+                                  self.loc,
+                                  self.sensor,
+                                  CALTYPE_RBLF,
+                                  value)
+                    if exists(rbpath):
+                        if self.lfdatedir != value:
+                            self.reset(['lffile'])
 
-                    ms_files = glob.glob(join(rbpath, '*.ms'))
-                    log_files = glob.glob(join(rbpath, '*.log'))
-                    ms_stems = [Path(msfn).stem for msfn in ms_files]
-                    log_stems = [Path(logfn).stem for logfn in log_files]
-                    paired_files = [stem for stem in ms_stems if stem in log_stems]
-                    if len(paired_files) == 1:
-                        self.lffile = paired_files[0]
+                        self._info['lfdatedir'] = value
+                        self.reset(['lffile', 'respfn', 'fullpaz', 'lfpert', 'hfpert'])
+
+                        ms_files = glob.glob(join(rbpath, '*.ms'))
+                        log_files = glob.glob(join(rbpath, '*.log'))
+                        ms_stems = [Path(msfn).stem for msfn in ms_files]
+                        log_stems = [Path(logfn).stem for logfn in log_files]
+                        paired_files = [stem for stem in ms_stems if stem in log_stems]
+                        if len(paired_files) == 1:
+                            self.lffile = paired_files[0]
 
             else:
                 self._info['lfdatedir'] = None
@@ -309,29 +459,34 @@ class CalInfo():
     @hfdatedir.setter
     def hfdatedir(self, value):
 
+
         if self.sta and self.loc and self.sensor:
             if value:
                 self.check_type(value, str, 'high freq cal date')
-                rbpath = join(self.cal_raw_dir,
-                              self.sta,
-                              self.loc,
-                              self.sensor,
-                              CALTYPE_RBHF,
-                              value)
-                if exists(rbpath):
-                    if self.hfdatedir != value:
+                if self.mode == 'config-file':
+                    # really only the ISO date from config file, not a dir segment
+                    self._info['hfdatedir'] = value
+                else:
+                    rbpath = join(self.cal_raw_dir,
+                                  self.sta,
+                                  self.loc,
+                                  self.sensor,
+                                  CALTYPE_RBHF,
+                                  value)
+                    if exists(rbpath):
+                        if self.hfdatedir != value:
+                            self.reset(['hffile'])
+
+                        self._info['hfdatedir'] = value
                         self.reset(['hffile'])
 
-                    self._info['hfdatedir'] = value
-                    self.reset(['hffile'])
-
-                    ms_files = glob.glob(join(rbpath, '*.ms'))
-                    log_files = glob.glob(join(rbpath, '*.log'))
-                    ms_stems = [Path(msfn).stem for msfn in ms_files]
-                    log_stems = [Path(logfn).stem for logfn in log_files]
-                    paired_files = [stem for stem in ms_stems if stem in log_stems]
-                    if len(paired_files) == 1:
-                        self.hffile = paired_files[0]
+                        ms_files = glob.glob(join(rbpath, '*.ms'))
+                        log_files = glob.glob(join(rbpath, '*.log'))
+                        ms_stems = [Path(msfn).stem for msfn in ms_files]
+                        log_stems = [Path(logfn).stem for logfn in log_files]
+                        paired_files = [stem for stem in ms_stems if stem in log_stems]
+                        if len(paired_files) == 1:
+                            self.hffile = paired_files[0]
 
             else:
                 self._info['hfdatedir'] = None
@@ -339,23 +494,38 @@ class CalInfo():
 
     @property
     def lffile(self):
-        return self._info['lffile']if self._info['lffile'] else ''
+        return self._info['lffile'] if self._info['lffile'] else ''
 
     @lffile.setter
     def lffile(self, value):
 
         if self.sta and self.loc and self.sensor and self.lfdatedir:
-
             if value:
                 self.check_type(value, str, 'low freq cal data filename')
-                fpath = join(self.cal_raw_dir, self.sta, self.loc, self.sensor,
-                             CALTYPE_RBLF, self.lfdatedir)
-                if exists(join(fpath, value + '.ms')):
-                    self._info['lffile'] = value
-                    self._info['lfpath'] = fpath
+                if self.mode == 'config-file':
+                    # value is full path if coming from config file
+                    value = abspath(value)
+                    if exists(value):
+                        self._info['lffile'] = Path(value).stem
+                        self._info['lfpath'] = dirname(value)
+                    else:
+                        print(red('Error: LF file does not exist: ' + value))
+                        print(red('Disabling LF analysis.'))
+                        self.omit_lf = True
+                        self._info['lffile'] = None
+                        self._info['lfpath'] = None
+
+                    print('lffile:', self._info['lffile'])
+                    print('lfpath:', self._info['lfpath'])
                 else:
-                    self._info['lffile'] = None
-                    self._info['lfpath'] = None
+                    fpath = join(self.cal_raw_dir, self.sta, self.loc, self.sensor,
+                                 CALTYPE_RBLF, self.lfdatedir)
+                    if exists(join(fpath, value + '.ms')):
+                        self._info['lffile'] = value
+                        self._info['lfpath'] = fpath
+                    else:
+                        self._info['lffile'] = None
+                        self._info['lfpath'] = None
             else:
                 self._info['lffile'] = None
                 self._info['lfpath'] = None
@@ -374,14 +544,28 @@ class CalInfo():
         if self.sta and self.loc and self.sensor and self.hfdatedir:
             if value:
                 self.check_type(value, str, 'high freq cal data filename')
-                fpath = join(self.cal_raw_dir, self.sta, self.loc, self.sensor,
-                             CALTYPE_RBHF, self.hfdatedir)
-                if exists(join(fpath, value + '.ms')):
-                    self._info['hffile'] = value
-                    self._info['hfpath'] = fpath
+                if self.mode == 'config-file':
+                    # value is full path if coming from config file
+                    value = abspath(value)
+                    print(red('HF FILE:'), value)
+                    if exists(value):
+                        self._info['hffile'] = Path(value).stem
+                        self._info['hfpath'] = dirname(value)
+                    else:
+                        print(red('Error: HF file does not exist: ' + value))
+                        print(red('Disabling HF analysis.'))
+                        self.omit_hf = True
+                        self._info['hffile'] = None
+                        self._info['hfpath'] = None
                 else:
-                    self._info['hffile'] = None
-                    self._info['hfpath'] = None
+                    fpath = join(self.cal_raw_dir, self.sta, self.loc, self.sensor,
+                                 CALTYPE_RBHF, self.hfdatedir)
+                    if exists(join(fpath, value + '.ms')):
+                        self._info['hffile'] = value
+                        self._info['hfpath'] = fpath
+                    else:
+                        self._info['hffile'] = None
+                        self._info['hfpath'] = None
             else:
                 self._info['hffile'] = None
                 self._info['hfpath'] = None
@@ -495,14 +679,21 @@ class CalInfo():
 
     def select_component(self):
 
+        if self.mode == 'interactive':
+            prompt = 'Enter selection ("q" => quit, "b" => back): '
+            allow_back = True
+        elif self.mode == 'config-file':
+            prompt = 'Enter selection ("q" => quit): '
+            allow_back = False
+
         complist = [('Z', 'Vertical'),
                     ('1', '1'),
                     ('2', '2')]
-        result, _, user_choice_groups, _ = select([complist],
-                                                  title='Select Component',
-                                                  prompt='Enter selection ("q" => quit, "b" => back): ',
-                                                  implicit_quit_q=True, implicit_back_b=True,
-                                                  menu_on_error=True, err_message='Invalid choice. Please try again',
+        result, _, user_choice_groups, _ = select([complist], title='Select Component',
+                                                  prompt=prompt, implicit_quit_q=True,
+                                                  implicit_back_b=allow_back,
+                                                  menu_on_error=True,
+                                                  err_message='Invalid choice. Please try again',
                                                   indent_width=self.tui_indent)
 
         if result == SelectResult.ok:
@@ -839,6 +1030,12 @@ class CalInfo():
 
         if not done and self.ctbto:
             self.ctbto = None
+            self._info['q330_nom_sens'] = None
+            self._info['q330_calib_factor'] = None
+            self._info['sensor_nom_sens'] = None
+            self._info['sensor_calib_z'] = None
+            self._info['sensor_calib_1'] = None
+            self._info['sensor_calib_2'] = None
             done = True
 
         # if not done and self.hfpert:
@@ -896,25 +1093,43 @@ class CalInfo():
         col_msg = ''
 
         if not self.sensor:
-            col_res, col_msg = self.select_raw_cal_sensordir()
+            if self.mode == 'config-file':
+                self.sensor = self._config['sensor_code'].lower()
+                col_res = SelectResult.ok
+            else:   # 'interactive':
+                col_res, col_msg = self.select_raw_cal_sensordir()
 
         elif not self.lfdatedir and not self.omit_lf:
-            col_res, col_msg = self.select_raw_cal_date(CALTYPE_RBLF)
-            if col_res == SelectResult.goback:
-                self.collect_backup()
-                col_res = SelectResult.ok
-            elif col_res == SelectResult.ok:
+            if self.mode == 'config-file':
+                self.omit_lf = not self._config['process_lf']
                 if not self.omit_lf:
-                    col_res, col_msg = self.find_qcal_files(CALTYPE_RBLF)
+                    self.lfdatedir = self._config['lf_cal_date']
+                    self.lffile = abspath(self._config['lf_ms_file'])
+                col_res = SelectResult.ok
+            else:
+                col_res, col_msg = self.select_raw_cal_date(CALTYPE_RBLF)
+                if col_res == SelectResult.goback:
+                    self.collect_backup()
+                    col_res = SelectResult.ok
+                elif col_res == SelectResult.ok:
+                    if not self.omit_lf:
+                        col_res, col_msg = self.find_qcal_files(CALTYPE_RBLF)
 
         elif not self.hfdatedir and not self.omit_hf:
-            col_res, col_msg = self.select_raw_cal_date(CALTYPE_RBHF)
-            if col_res == SelectResult.goback:
-                self.collect_backup()
-                col_res = SelectResult.ok
-            elif col_res == SelectResult.ok:
+            if self.mode == 'config-file':
+                self.omit_hf = not self._config['process_hf']
                 if not self.omit_hf:
-                    col_res, col_msg = self.find_qcal_files(CALTYPE_RBHF)
+                    self.hfdatedir = self._config['hf_cal_date']
+                    self.hffile = abspath(self._config['hf_ms_file'])
+                col_res = SelectResult.ok
+            else:
+                col_res, col_msg = self.select_raw_cal_date(CALTYPE_RBHF)
+                if col_res == SelectResult.goback:
+                    self.collect_backup()
+                    col_res = SelectResult.ok
+                elif col_res == SelectResult.ok:
+                    if not self.omit_hf:
+                        col_res, col_msg = self.find_qcal_files(CALTYPE_RBHF)
 
 
         elif self.omit_lf and self.omit_hf:
@@ -923,56 +1138,79 @@ class CalInfo():
             self.omit_hf = False
             col_res = SelectResult.ok
 
-        # elif not self.lffile and not self.omit_lf:
-        #     col_res, col_msg = self.find_qcal_files(CALTYPE_RBLF)
-        #
-        # elif not self.hffile and not self.omit_hf:
-        #     col_res, col_msg = self.find_qcal_files(CALTYPE_RBHF)
-        #
         elif not self.comp:
-            col_res = self.select_component()
-            if col_res == SelectResult.goback:
-                self.collect_backup()
+            if self.mode == 'config-file':
+                self.comp = self.run_comp
                 col_res = SelectResult.ok
+            else:
+                col_res = self.select_component()
+                if col_res == SelectResult.goback:
+                    self.collect_backup()
+                    col_res = SelectResult.ok
 
         elif not self.chan:
-            col_res = self.enter_chan()
-            if col_res == SelectResult.goback:
-                self.collect_backup()
+            if self.mode == 'config-file':
+                self.chan = self.run_chan
                 col_res = SelectResult.ok
-            elif col_res == SelectResult.ok:
-                # good channel, see if we can pull sample rate out of DB, if available
-                if isinstance(self.stages_df, DataFrame):
-                    if not self.omit_lf:
-                        self._lf_chn_stages = get_stages(self.stages_df, self.sta, self.loc, self.chan, self.lfdatedir)
-                    elif not self.omit_hf:
-                        self._hf_chn_stages = get_stages(self.stages_df, self.sta, self.loc, self.chan, self.hfdatedir)
+            else:
+                col_res = self.enter_chan()
+                if col_res == SelectResult.goback:
+                    self.collect_backup()
+                    col_res = SelectResult.ok
+                elif col_res == SelectResult.ok:
+                    # good channel, see if we can pull sample rate out of DB, if available
+                    if isinstance(self.stages_df, DataFrame):
+                        if not self.omit_lf:
+                            self._lf_chn_stages = get_stages(self.stages_df, self.sta, self.loc, self.chan, self.lfdatedir)
+                        elif not self.omit_hf:
+                            self._hf_chn_stages = get_stages(self.stages_df, self.sta, self.loc, self.chan, self.hfdatedir)
 
-                    if isinstance(self.chn_stages, DataFrame) and not (len(self.chn_stages) < 3):
-                        # get channel freq from stage 3 srate column
-                        # ToDo: bury the srate ref in public acces method to make db independent
-                        try:
-                            self.opsr = round(float(self.chn_stages.iloc[2].srate))
-                        except:
-                            pass
+                        if isinstance(self.chn_stages, DataFrame) and not (len(self.chn_stages) < 3):
+                            # get channel freq from stage 3 srate column
+                            # ToDo: bury the srate ref in public acces method to make db independent
+                            try:
+                                self.opsr = round(float(self.chn_stages.iloc[2].srate))
+                            except:
+                                pass
 
         elif not self.opsr:
-            col_res = self.enter_opsr()
-            if col_res == SelectResult.goback:
-                self.collect_backup()
+            if self.mode == 'config-file':
+                self.opsr = self._config['sampling_rate']
                 col_res = SelectResult.ok
+            else:
+                col_res = self.enter_opsr()
+                if col_res == SelectResult.goback:
+                    self.collect_backup()
+                    col_res = SelectResult.ok
 
         elif not self.respfn:
+            if self.mode == 'config-file':
+                # for 'config-file' mode,print info after incorporating config file
+                self.print_info()
+
             col_res, col_msg = self.select_starting_response_file()
             if col_res == SelectResult.goback:
                 self.collect_backup()
                 col_res = SelectResult.ok
 
         elif not self.ctbto:
-            col_res= self.select_ctbto_flag()
-            if col_res == SelectResult.goback:
-                self.collect_backup()
+            if self.mode == 'config-file':
+                self.ctbto = 'Y' if self._config['ctbto_analysis'] else 'N'
                 col_res = SelectResult.ok
+                if self.is_ctbto():
+#                    self._info['q330_sensor_port'] = self._config['q330_sensor_port']
+# TODO: add KEY checks here
+                    self._info['q330_nom_sens'] = self._config['q330_nom_sens']
+                    self._info['q330_calib_factor'] = self._config['q330_calib_factor']
+                    self._info['sensor_nom_sens'] = self._config['sensor_nom_sens']
+                    self._info['sensor_calib_z'] = self._config['sensor_calib_factor_z']
+                    self._info['sensor_calib_1'] = self._config['sensor_calib_factor_1']
+                    self._info['sensor_calib_2'] = self._config['sensor_calib_factor_2']
+            else:
+                col_res= self.select_ctbto_flag()
+                if col_res == SelectResult.goback:
+                    self.collect_backup()
+                    col_res = SelectResult.ok
 
         return col_res, col_msg
 
