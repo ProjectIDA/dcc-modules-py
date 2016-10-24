@@ -33,7 +33,7 @@ from numpy.fft import rfft, irfft
 #import matplotlib
 #matplotlib.use('Qt4Agg')
 import matplotlib.pyplot as plt
-#plt.ion()
+plt.ion()
 
 #from fabulous.color import red, bold
 from obspy.core import read, Stream, UTCDateTime
@@ -56,127 +56,10 @@ def rename_chan(inchan):
     else:
         return inchan
 
-def shake_table_chan_plots(datadir, comp, cross_res_dict, coh_min=0.98, freq_band=(0.1, 10)):
-
-    freqs = cross_res_dict['freqs']
-    amp = cross_res_dict['amp']
-    pha = cross_res_dict['pha']
-    coh = cross_res_dict['coh']
-    psd1 = cross_res_dict['psd1']
-    psd2 = cross_res_dict['psd2']
-
-    # get ndxs of good coh in freq_band
-    use_freqs = logical_and(less_equal(freqs, freq_band[1]), greater_equal(freqs, freq_band[0]))
-
-    fr = freqs[use_freqs]
-    co = coh[use_freqs]
-    ps1 = psd1[use_freqs]
-    ps2 = psd2[use_freqs]
-    am = amp[use_freqs]
-    ph = pha[use_freqs]
-
-    # comp = 'Z'
-    fig_ndx = 0
-    if comp == 'BHZ':
-        fig_ndx = 0
-    elif comp == 'BH1':
-        fig_ndx = 10
-    elif comp == 'BH2':
-        fig_ndx = 30
+def shake_table_psd_plot(figid, datadir, comp, freqs, psd1, psd2, coh, add_title_text=''):
 
     # plot psd for both time series
-    fig1 = plt.figure(fig_ndx + 1, figsize=(8.5, 11))
-    plt.subplot(311)
-    plt.title('Fig 1: {} : {}'.format(datadir, comp))
-    plt.suptitle('Big Title')
-    plt.xlim(1e-1, 10)
-    # plt.ylim(75, 110)
-    plt.ylabel('PSD (dB)')
-    plt.xlabel('Freq (Hz)')
-    plt.grid(which='both')
-    plt.semilogx(fr, 10 * log10(ps1))
-    plt.semilogx(fr, 10 * log10(ps2))
-
-    plt.subplot(312)
-    plt.xlim(1e-1, 10)
-    plt.ylim(0.97, 1.01)
-    plt.ylabel('Coh**2')
-    plt.xlabel('Freq (Hz)')
-    plt.grid(which='both')
-    plt.semilogx(fr, co)
-
-    fig2 = plt.figure(fig_ndx + 2, figsize=(8.5, 11))
-    plt.subplot(311)
-    plt.title('Fig 2: {} : {}'.format(datadir, comp))
-    plt.xlim(1e-1, 10)
-    # plt.ylim(0.99, 1.01)
-    plt.ylabel('TF Gain')
-    plt.xlabel('Freq (Hz)')
-    plt.grid(which='both')
-    plt.semilogx(fr, am)
-
-    plt.subplot(312)
-    plt.xlim(1e-1, 10)
-    plt.ylim(-10, 5)
-    plt.ylabel('TF Phase')
-    plt.xlabel('Freq (Hz)')
-    plt.grid(which='both')
-    plt.semilogx(fr, ph)
-
-    plt.subplot(313)
-    plt.xlim(1e-1, 10)
-    plt.ylim(0.97, 1.01)
-    plt.xlabel('Freq (Hz)')
-    plt.ylabel('Coh**2')
-    plt.grid(which='both')
-    plt.semilogx(fr, co)
-
-    # now just coh >= coh_min
-    good_coh = greater(co, coh_min)
-    fr = fr[good_coh]
-    am = am[good_coh]
-    ph = ph[good_coh]
-    co = co[good_coh]
-
-    # and remove trend/time shift from phase
-    coeffs = polyfit(fr, ph, 1)
-    # set y-intercept to 0
-    coeffs = (coeffs[0], 0)
-    correction = polyval(coeffs, fr)
-    ph = subtract(ph, correction)
-
-    fig3 = plt.figure(fig_ndx + 3, figsize=(8.5, 11))
-    plt.subplot(311)
-    plt.title('Fig 3: {} : {}'.format(datadir, comp))
-    plt.xlim(1e-1, 10)
-    # plt.ylim(0.99, 1.01)
-    plt.ylabel('TF Gain')
-    plt.xlabel('Freq (Hz)')
-    plt.grid(which='both')
-    plt.semilogx(fr, am)
-
-    plt.subplot(312)
-    plt.xlim(1e-1, 10)
-    # plt.ylim(-10, 5)
-    plt.ylabel('TF Phase')
-    plt.xlabel('Freq (Hz)')
-    plt.grid(which='both')
-    plt.semilogx(fr, ph)
-
-    plt.subplot(313)
-    plt.xlim(1e-1, 10)
-    plt.ylim(0.97, 1.01)
-    plt.xlabel('Freq (Hz)')
-    plt.ylabel('Coh**2')
-    plt.grid(which='both')
-    plt.semilogx(fr, co)
-
-    return fig1, fig2, fig3
-
-def shake_table_psd_plot(fignum, datadir, comp, freqs, psd1, psd2, coh, add_title_text=''):
-
-    # plot psd for both time series
-    fig = plt.figure(fignum, figsize=(8.5, 11))
+    fig = plt.figure(figid, figsize=(8.5, 11))
     plt.subplot(311)
     plt.title('Shake Table PSDs: {} : {}'.format(datadir, comp) + add_title_text)
     plt.xlim(1e-1, 10)
@@ -198,9 +81,9 @@ def shake_table_psd_plot(fignum, datadir, comp, freqs, psd1, psd2, coh, add_titl
 
     return fig
 
-def shake_table_tf_plot(fignum, datadir, comp, freqs, amp, pha, coh, add_title_text=''):
+def shake_table_tf_plot(figid, datadir, comp, freqs, amp, pha, coh, add_title_text=''):
 
-    fig = plt.figure(fignum, figsize=(8.5, 11))
+    fig = plt.figure(figid, figsize=(8.5, 11))
     plt.subplot(311)
     plt.title('Shake Table TF: {} : {}'.format(datadir, comp) + add_title_text)
     plt.xlim(1e-1, 10)
@@ -237,7 +120,8 @@ class ShakeConfig(object):
     bhn_chan_list = ['UN2', 'BHN', 'HHN', 'HHY', 'HNY', 'BH1']
     bhe_chan_list = ['UN3', 'BHE', 'HHE', 'HHX', 'HNX', 'BH2']
 
-    def __init__(self, fn, shaketable_subdir='shaketable', debug=False, logger=None):
+    def __init__(self, fn, cal_raw_dir, respfile_dir,
+                 shaketable_subdir, debug=False, logger=None):
 
         self.ok = True
         self.plot_fns = []
@@ -261,6 +145,18 @@ class ShakeConfig(object):
 
         self.shaketable_subdir = shaketable_subdir
 
+        # check ENV
+        if not exists(cal_raw_dir):
+            self.logger.error('The IDA CAL RAW directory not found: ' + cal_raw_dir)
+            self.ok = False
+        else:
+            self.cal_raw_dir = cal_raw_dir
+        if not exists(respfile_dir):
+            self.logger.error('The RESP file directory not found:' + respfile_dir)
+            self.ok = False
+        else:
+            self.respfile_dir = respfile_dir
+
         self.stream = None
         self.traces = {}
 
@@ -278,28 +174,21 @@ class ShakeConfig(object):
 
     def _process_config(self):
 
-        # check ENV
-        if not os.environ.get('IDA_CAL_RAW_DIR'):
-            self.logger.error('The env var IDA_CAL_RAW_DIR must be set.')
-            self.ok = False
-        if not os.environ.get('IDA_CAL_ANALYSIS_DIR'):
-            self.logger.error('The env var IDA_CAL_ANALYSIS_DIR must be set.')
-            self.ok = False
-        if not os.environ.get('SEEDRESP'):
-            self.logger.error('The env var SEEDRESP must be set.')
-            self.ok = False
-
         if 'shaketable_ms_filename' not in self._config:
             self.ok = False
             self.logger.error('Missing entry in configuration file: ' +
-                              'shaketable_ms_filename must contain the ' + 
+                              'shaketable_ms_filename must contain the ' +
                               ' path the shake table miniseed file relative to ' +
-                              os.environ.get('IDA_CAL_RAW_DIR') + '/shaketable.')
+                              self.cal_raw_dir + '/' + self.shaketable_subdir)
         else:
-            data_path = os.path.abspath(os.path.join(
-                os.environ.get('IDA_CAL_RAW_DIR', ''),
-                'shaketable',
-                self._config['shaketable_ms_filename']))
+            if os.path.isabs(self._config['shaketable_ms_filename']):
+                data_path = os.path.normpath(self._config['shaketable_ms_filename'])
+            else:
+                data_path = os.path.abspath(
+                                os.path.join(self.cal_raw_dir,
+                                             self.shaketable_subdir,
+                                             self._config['shaketable_ms_filename']
+                                            ))
             if not isfile(data_path) or not exists(data_path):
                 self.logger.error('Miniseed file {} not found.'.format(data_path))
                 self.ok = False
@@ -464,14 +353,6 @@ class ShakeConfig(object):
 
         cross_results = {}
         npts = ref_trace.stats.npts
-        # comp = chan_trace.stats.channel[2]
-        # ref_comp = ref_trace.stats.channel[2]
-        # thedate = chan_trace.stats.starttime
-        if not os.environ.get('SEEDRESP'):
-            self.logger.critical('$SEEDRESP not set. RESP files are found in $SEEDRESP directory.')
-            return False, cross_results
-        else:
-            resp_dir = os.environ.get('SEEDRESP')
 
         # construct RESP file filename for ref_trace
         resp_file = 'RESP.{}.{}.{}.{}'.format(
@@ -480,7 +361,7 @@ class ShakeConfig(object):
             ref_trace.stats.location,
             ref_trace.stats.channel
         )
-        resp_filepath = join(resp_dir, resp_file)
+        resp_filepath = join(self.respfile_dir, resp_file)
 
         fresp, f = evalresp(1/sample_rate,
                             ref_trace.stats.npts,
@@ -547,7 +428,6 @@ class ShakeConfig(object):
             # loop through metadata record with trace start/end time info
             # and drop and channels without waveform 'wf' ot 'wf_ref' data
             self.traces = collections.OrderedDict()
-#            for chan, vals in meta.items():
             for meta in self.components:
                 chan = meta['chan'].upper()
                 ref_chan = meta['ref_chan'].upper()
@@ -576,7 +456,7 @@ class ShakeConfig(object):
                     #self.traces[chan]['wf_ref'].stats.loc = vals['loc']
                     self.traces[chan]['wf_ref'].stats.station = self.ref_sensor_station
 
-                    fn = chan + '_' + self.data_dir + '.ms'
+                    fn = '{}_{}.ms'.format(self.data_dir, chan)
                     if not self.save_chan_traces(fn, Stream([wf[0], wf_ref[0]])):
                         print('Error writing shaketable traces for channel: {} to file: {}.'.format(chan, fn))
                     else:
@@ -660,7 +540,6 @@ class ShakeConfig(object):
 
         self.save_header(resfl, analdate)
 
-        fignum = 0
         for chan, chaninfo in self.traces.items():
 
             wf = chaninfo['wf']
@@ -689,16 +568,14 @@ class ShakeConfig(object):
             am = cross_res['amp'][use_freqs]
             ph = cross_res['pha'][use_freqs]
 
-            fignum += 1
-            psd_fig = shake_table_psd_plot(fignum, self.data_dir, chan, fr, ps1, ps2, co)
-            fig_fn = '{}_{}_psd_fig.png'.format(chan, self.data_dir)
+            fig_fn = '{}_{}_psd_fig.png'.format(self.data_dir, chan)
+            psd_fig = shake_table_psd_plot(fig_fn, self.data_dir, chan, fr, ps1, ps2, co)
             psd_fig.savefig(fig_fn, dpi=400)
             self.plot_fns.append(fig_fn)
             self.logger.debug('{} PSD plot saved in: {}'.format(chan, fig_fn))
 
-            fignum += 1
-            tf_fig_1 = shake_table_tf_plot(fignum, self.data_dir, chan, fr, am, ph, co)
-            fig_fn = '{}_{}_tf_fig1.png'.format(chan, self.data_dir)
+            fig_fn = '{}_{}_tf_fig1.png'.format(self.data_dir, chan)
+            tf_fig_1 = shake_table_tf_plot(fig_fn, self.data_dir, chan, fr, am, ph, co)
             tf_fig_1.savefig(fig_fn, dpi=400)
             self.plot_fns.append(fig_fn)
             self.logger.debug('{} TF plot saved in: {}'.format(chan, fig_fn))
@@ -719,10 +596,9 @@ class ShakeConfig(object):
             ph = subtract(ph, correction)
 
             # construct plot with only good coh points
-            fignum += 1
-            tf_fig_2 = shake_table_tf_plot(fignum, self.data_dir, chan, fr, am, ph, co,
+            fig_fn = '{}_{}_tf_fig2.png'.format(self.data_dir, chan)
+            tf_fig_2 = shake_table_tf_plot(fig_fn, self.data_dir, chan, fr, am, ph, co,
                                            '\n(coh**2 >= {}; Phase de-trended)'.format(coh_min))
-            fig_fn = '{}_{}_tf_fig2.png'.format(chan, self.data_dir)
             tf_fig_2.savefig(fig_fn, dpi=400)
             self.plot_fns.append(fig_fn)
             self.logger.debug('{} TF (coh filtered) plot saved in: {}'.format(chan, fig_fn))

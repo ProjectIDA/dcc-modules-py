@@ -216,21 +216,27 @@ CALTYPE_RBHF_SAMPLERATE = 100.0
 CALTYPE_RBLF_SAMPLERATE = 1.0
 
 # obtained from DB stage 1 rec
-# INSTRUMENT_NOMINAL_GAINS = {
-#     SEISTYPE_KS54A: 2400,
-#     SEISTYPE_KS54B: 2400,
-#
-#     SEISTYPE_STS2: 1500,
-#     SEISTYPE_STS25: 1500,
-#     SEISTYPE_STS25F: 1500,
-#     SEISTYPE_STS5A: 1500,
-#
-#     SEISTYPE_TR12PA: 1200,
-#     SEISTYPE_TR12PB: 1200,
-#     SEISTYPE_TR240: 1200,
-#     SEISTYPE_TR360: 1200,
-#
-# }
+INSTRUMENT_NOMINAL_GAINS = {
+    SEISTYPE_KS54A: 2400,
+    SEISTYPE_KS54B: 2400,
+
+    SEISTYPE_STS1E3: 2400,
+    SEISTYPE_STS1: 2400,
+    SEISTYPE_STS2: 1500,
+    SEISTYPE_STS25: 1500,
+    SEISTYPE_STS25F: 1500,
+    SEISTYPE_STS5A: 1500,
+
+    SEISTYPE_TR12PA: 1200,
+    SEISTYPE_TR12PB: 1200,
+    SEISTYPE_TR240: 1200,
+    SEISTYPE_TR360: 1200,
+
+    SEISTYPE_CMG3T: 1500,
+    SEISTYPE_3ESPC: 20000,
+
+    SEISTYPE_M2166: 2400,
+}
 
 # obtained from IDA filter file q330.40/20 May/Aug 2016
 Q330_40_FIR_FILTER_DELAY = 17.218
@@ -260,12 +266,21 @@ Q330_FIR_COEFFS = {
 
 # obtained from IDA database. This value is specific to each Q330-Seis_Model combination
 # and is in the IDA database as gcalib from stage 3 rec
-# Q330_GCALIB_FOR_SEIS = {
-#     SEISTYPE_KS54000: .9953,
-#     SEISTYPE_STS25: .9911,  # value for Q330/STS2.5 combination
-#     SEISTYPE_STS25F: .9911,  # value for Q330/STS2.5 combination
-#     SEISTYPE_TR120PH: 1.0011
-# }
+Q330_GCALIB_FOR_SEIS = {
+    SEISTYPE_KS54A: 0.9953,
+    SEISTYPE_KS54B: 0.9953,
+    SEISTYPE_STS1E3: 0.9481,
+    SEISTYPE_STS1: 0.9481,
+    SEISTYPE_STS25: 0.9911,  # value for Q330/STS2.5 combination
+    SEISTYPE_STS25F: 0.9911,  # value for Q330/STS2.5 combination
+    SEISTYPE_TR12PA: 1.0011,
+    SEISTYPE_TR12PB: 1.0011,
+    SEISTYPE_TR240: 1.0011,
+    SEISTYPE_TR360: 1.0011,
+    SEISTYPE_CMG3T: 1.0011,
+    SEISTYPE_3ESPC: 1.0011,
+    SEISTYPE_M2166: 0.9481
+}
 
 
 # compute_response_fir(Q330_40_FIR_COEFFS,...)
@@ -286,6 +301,8 @@ Q330_FIR_GAIN_1HZ = {
 }
 
 # get from stages rec 3 gnom
-# Q330_NOMINAL_GAIN = 1.67e6
-
+Q330_NOMINAL_GAIN = {
+    'A': 1.67e6,
+    'B': 4.175e5
+}
 ComponentsTpl = namedtuple('Components', ['north', 'east', 'vertical'])

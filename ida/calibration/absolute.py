@@ -189,32 +189,19 @@ class APSurvey(object):
 
     ChanTpl = namedtuple('ChanTuple', 'z n e')
 
-    def __init__(self, fn, data_type, ida_cal_raw_dir, seedrespdir, debug=False, logger=None):
+    def __init__(self, fn, ida_cal_raw_dir, seedrespdir, i10_arc_dir,
+                 debug=False, logger=None):
 
-        self.data_type = data_type
+        self.analdate = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         self.ida_cal_raw_dir = ida_cal_raw_dir
         self.resp_dir = seedrespdir
+        self.i10_arc_dir = i10_arc_dir
         self.debug = debug
         self.waveform_files = []
 
         self.ok = True
 
-        if not logger:
-            self.logger = logging.getLogger('APSurvey')
-            self.logger.setLevel(logging.DEBUG)  # allow control via handler(s)
-            # set up wARN/ERROR handler
-
-            fmtr = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s: %(message)s')
-            hndlr = logging.StreamHandler()
-            hndlr.setFormatter(fmtr)
-            # set up log level
-            if self.debug:
-                hndlr.setLevel(logging.DEBUG)
-            else:
-                hndlr.setLevel(logging.WARN)
-            self.logger.addHandler(hndlr)
-        else:
-            self.logger = logger
+        self.logger = logging.getLogger(__name__)
 
         # in-memory streams and source miniseed data
         self.streams = {
@@ -292,14 +279,6 @@ class APSurvey(object):
             self.ok = False
         else:
             self._process_config()
-
-    def configure_logger(self):
-
-        filefmtr = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s: %(message)s')
-        fhndlr = logging.FileHandler(log_file)
-        fhndlr.setFormatter(filefmtr)
-        fhndlr.setLevel(logging.DEBUG)
-        self.logger.addHandler(fhndlr)
 
     def _process_config(self):
 
@@ -382,8 +361,10 @@ class APSurvey(object):
         if self.ok:
             # check azimuth settings
             if self.process_azimuth:
-
-                fpath = os.path.join(self.ida_cal_raw_dir, self._config['ref_azimuth_data']['ms_file'])
+                if os.path.isabs(self._config['ref_azimuth_data']['ms_file']):
+                    fpath = os.path.norm(self._config['ref_azimuth_data']['ms_file'])
+                else:
+                    fpath = os.path.join(self.ida_cal_raw_dir, self._config['ref_azimuth_data']['ms_file'])
 
                 if not (os.path.exists(fpath) and os.path.isfile(fpath)):
                     self.logmsg(logging.ERROR, 'Azimuth file for reference sensor not found: {}'.format(fpath))
@@ -408,8 +389,10 @@ class APSurvey(object):
 
             # check absolute settings
             if self.process_absolute:
-
-                fpath = os.path.join(self.ida_cal_raw_dir, self._config['ref_absolute_data']['ms_file'])
+                if os.path.isabs(self._config['ref_absolute_data']['ms_file']):
+                    fpath = os.path.norm(self._config['ref_absolute_data']['ms_file'])
+                else:
+                    fpath = os.path.join(self.ida_cal_raw_dir, self._config['ref_absolute_data']['ms_file'])
 
                 if not (os.path.exists(fpath) and os.path.isfile(fpath)):
                     self.logmsg(logging.ERROR, 'Absolute file for reference sensor not found: {}'.format(fpath))
@@ -472,6 +455,14 @@ class APSurvey(object):
     @property
     def process_absolute(self):
         return self._config['ref_absolute_data']['process']
+
+    def dataset_enabled(self, dataset):
+        if dataset.lower() == 'azi':
+            return self.process_azimuth
+        elif dataset.lower() == 'abs':
+            return self.process_absolute
+        else:
+            return False
 
     @property
     def pri_sensor_installed(self):
@@ -598,10 +589,6 @@ class APSurvey(object):
                 self.logmsg(logging.WARN, 'Processing Azimuth data is not enabled.')
                 return False
 
-        if self.streams[datatype]['ref']:
-            self.logmsg(logging.INFO, 'Using REF sensor {} data already in memory.'.format(datatype.upper()))
-            return True
-
         self.logmsg(logging.INFO, 'Reading REF sensor {} data...'.format(datatype.upper()))
 
         try:
@@ -654,12 +641,6 @@ class APSurvey(object):
         azi/abs time periods
         """
 
-        # see if data previously read in...
-        if self.streams[datatype][sensor]:
-            self.logmsg(logging.INFO, 'Using {} sensor {} data already in memory'.format(
-                sensor.upper(), datatype.upper()))
-            return True
-
         datatype = datatype.lower()
         sensor = sensor.lower()
 
@@ -668,6 +649,12 @@ class APSurvey(object):
 
         if datatype not in ['azi', 'abs']:
             raise ValueError('read_sensor_data: datatype must be "azi" or "abs".')
+
+        # see if data previously read in...
+        if self.streams[datatype][sensor]:
+            self.logmsg(logging.INFO, 'Using {} sensor {} data already in memory'.format(
+                sensor.upper(), datatype.upper()))
+            return True
 
         if (sensor == 'pri') and not self.pri_sensor_installed:
             return False
@@ -686,7 +673,8 @@ class APSurvey(object):
         try:  # this is really too much in single try:
             if os.path.exists(outname+'.i10'): os.remove(outname+'.i10')
             if os.path.exists(outname+'.ms'): os.remove(outname+'.ms')
-            i10get(self.station,
+            i10get(self.i10_arc_dir,
+                   self.station,
                    self.chanloc_codes(sensor),
                    self.starttime(datatype), self.endtime(datatype),
                    outfn=outname+'.i10')
@@ -905,11 +893,10 @@ class APSurvey(object):
 
 
     def save_header(self, datatype, sumf, detf):
-        analdate = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         header = '#'*144 + '\n'
         header += '# ANALYSIS PARAMETERS\n'
         header += '# =====================\n'
-        header += '#          analysis at: {}\n'.format(analdate)
+        header += '#          analysis at: {}\n'.format(self.analdate)
         header += '#              dataset: {}\n'.format(datatype.upper())
         header += '#              station: {}\n'.format(self.station.upper())
         header += '#           pri sensor: {}\n'.format(self.pri_sensor_installed)
@@ -989,10 +976,10 @@ class APSurvey(object):
                         self.ms_filename(datatype, src1), self.ms_filename(datatype, src2))
                     detf.write(detres+'\n')
 
-    def analyze(self):
+    def analyze(self, datatype):
 
+        self.waveform_files = []
         sensors_available = 0  # need 2+ to do any comparisons
-        datatype = self.data_type
 
         data_ok = self.read_ref_data(datatype)
         compare_ref = data_ok
@@ -1228,9 +1215,7 @@ class APSurvey(object):
             matinv = mat.transpose()
             solution, resid, _, _ = la.lstsq(matinv, tr2_cnv)
             w = arctan2(solution[2], solution[1])
-            #if w < 0:
-            #    w += 2*pi
-            #w_deg = w*180/pi
+
             amp_ratio =  sqrt(solution[1]*solution[1] + solution[2]*solution[2])
 
             lrms = log10(sqrt(multiply(tr2_cnv, tr2_cnv).sum() / len(tr2_cnv)))
@@ -1291,17 +1276,9 @@ class APSurvey(object):
             tr1_seg = tr1_seg[trim_cnt:-trim_cnt]
             trim_cnt = round(tr2_sr * self.segment_size_trim)
             tr2_cnv = tr2_cnv[trim_cnt:-trim_cnt]
-#            if dbg_cnt == 1: #  in range(10, 10):
-#                plt.plot(tr1_seg)
-#                plt.plot(tr2_cnv, 'm')
-#                plt.show()
 
             tr1_seg = ss.resample(tr1_seg, round(len(tr1_seg) / (tr1_sr / self.analysis_sample_rate)))
             tr2_cnv = ss.resample(tr2_cnv, round(len(tr2_cnv) / (tr2_sr / self.analysis_sample_rate)))
-#            if dbg_cnt == 1: #  in range(10, 10):
-#                plt.plot(tr1_seg)
-#                plt.plot(tr2_cnv, 'm')
-#                plt.show()
 
             tr1_seg = ss.detrend(tr1_seg, type='linear')
             tr2_cnv = ss.detrend(tr2_cnv, type='linear')
@@ -1310,10 +1287,6 @@ class APSurvey(object):
             taper = tukey(len(tr1_seg), fraction * 2, sym=True)
             tr1_seg *= taper
             tr2_cnv *= taper
-#            if dbg_cnt == 1: #  in range(10, 10):
-#                plt.plot(tr1_seg)
-#                plt.plot(tr2_cnv, 'm')
-#                plt.show()
 
             tr1_seg = osf.bandpass(tr1_seg, 0.1, 0.3, self.analysis_sample_rate, zerophase=True)
             tr2_cnv = osf.bandpass(tr2_cnv, 0.1, 0.3, self.analysis_sample_rate, zerophase=True)

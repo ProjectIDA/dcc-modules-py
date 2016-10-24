@@ -22,12 +22,10 @@
 import glob
 import os.path
 
-from ida import IDA_RESPONSES_NOM_DIR
+def nom_resp_for_model(resp_dir, seis_model):
 
-def nom_resp_for_model(seis_model):
-
-    nom_resps = glob.glob(os.path.join(IDA_RESPONSES_NOM_DIR, (seis_model+'_*').lower()))
-    nom_resps.extend(glob.glob(os.path.join(IDA_RESPONSES_NOM_DIR, (seis_model+'.*').lower())))
+    nom_resps = glob.glob(os.path.join(resp_dir, (seis_model+'_*').lower()))
+    nom_resps.extend(glob.glob(os.path.join(resp_dir, (seis_model+'.*').lower())))
 
     return nom_resps
 

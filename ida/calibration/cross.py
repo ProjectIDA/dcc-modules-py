@@ -19,12 +19,11 @@
 # If you use this software in a product, an explicit acknowledgment in the product documentation of the contribution
 # by Project IDA, Institute of Geophysics and Planetary Physics, UCSD would be appreciated but is not required.
 #######################################################################################################################
-import datetime
-from math import floor, atan2, sqrt
+from math import floor
 import logging
-from numpy import ndarray, full, pi, sqrt, square, array, arange, zeros, float64, concatenate, \
-    unwrap, sign, add, subtract, rad2deg, max, min, arctan2
-from numpy.fft import fft, rfft
+from numpy import ndarray, full, sqrt, square, array, arange, zeros, float64, concatenate, \
+    unwrap, rad2deg, arctan2
+from numpy.fft import fft
 
 """Python port of subst of cross.f Fortran code tailored with IDA-specific
 parameter values.
