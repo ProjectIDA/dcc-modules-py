@@ -301,6 +301,8 @@ Q330_FIR_GAIN_1HZ = {
 }
 
 # get from stages rec 3 gnom
-# Q330_NOMINAL_GAIN = 1.67e6
-
+Q330_NOMINAL_GAIN = {
+    'A': 1.67e6,
+    'B': 4.175e5
+}
 ComponentsTpl = namedtuple('Components', ['north', 'east', 'vertical'])
