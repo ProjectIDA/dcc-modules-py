@@ -32,7 +32,7 @@ from pandas.core.frame import DataFrame
 
 from ida.tui import select, SelectResult
 from ida.instruments import CALTYPE_RBLF, CALTYPE_RBHF, SEISMOMETER_MODELS
-from ida.calibration import nom_resp_for_model, local_resp_files
+from ida.calibration import nom_resp_for_model, cur_resp_for_model_station_comp, local_resp_files
 from ida.signals.paz import PAZ
 from ida.db.io import read
 from ida.db.query import get_stages
@@ -147,8 +147,6 @@ class CalInfo():
                 self.run_chan = chancode
                 self.resp_nom_dir = self._config['nom_resp_dir']
                 self.resp_cur_dir = self._config['cur_resp_dir']
-                print('resp_nom_dir:', self.resp_nom_dir)
-                print('resp_cur_dir:', self.resp_cur_dir)
 
     def config_file_isvalid(self):
 
@@ -824,17 +822,21 @@ class CalInfo():
         pick_groups = []
         group_titles = []
 
-        if isinstance(self.chn_stages, DataFrame):
-            resp_file = self.chn_stages.iloc[0].dfile
-            if resp_file:
-                sensor_fn_list = [resp_file]
-            else:
-                sensor_fn_list = []
-        else:
-            sensor_fn_list = []
-
-        pick_groups.append(sensor_fn_list)
-        group_titles.append('Response on Date of Calibration')
+        sensor_fn_list = []
+        if self.mode == 'interactive':
+            if isinstance(self.chn_stages, DataFrame):
+                resp_file = self.chn_stages.iloc[0].dfile
+                if resp_file:
+                    sensor_fn_list = [resp_file]
+            pick_groups.append(sensor_fn_list)
+            group_titles.append('Response on Date of Calibration')
+        elif self.mode == 'config-file':
+            sensor_fn_list = cur_resp_for_model_station_comp(self.resp_cur_dir,
+                                                             self.sensor.lower(),
+                                                            self.sta,
+                                                            self.comp)
+            pick_groups.append(sensor_fn_list)
+            group_titles.append('Existing Responses for Station, Sensor, Component')
 
         nom_resps = nom_resp_for_model(self.resp_nom_dir, self.sensor.lower())
         nom_resps_names = sorted([Path(respfn).name for respfn in nom_resps])
