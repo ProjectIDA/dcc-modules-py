@@ -29,6 +29,14 @@ def nom_resp_for_model(resp_dir, seis_model):
 
     return nom_resps
 
+def cur_resp_for_model_station_comp(resp_dir, seis_model, sta, comp):
+
+    sta = sta.lower()
+    comp = comp.upper()
+    cur_resps = glob.glob(os.path.join(resp_dir,
+                                       (seis_model + '_*' + sta + '_*' + comp + '.ipaz')))
+
+    return cur_resps
 
 def local_resp_files():
 
