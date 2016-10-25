@@ -261,7 +261,7 @@ class APSurvey(object):
         # time correction flags so only do it once
         self.ref_clock_adjustment = 0.0
         self.ref_clock_adjusted = False
-        self.ref_clock_adjment_sensor = 'n/a'
+        self.ref_clock_adjustment_sensor = 'n/a'
 
         self.ref_data_unusable = False  # assume will be ok, set True if probs on first read
         self.pri_data_unusable = False  # assume will be ok, set True if probs on first read
@@ -362,7 +362,7 @@ class APSurvey(object):
             # check azimuth settings
             if self.process_azimuth:
                 if os.path.isabs(self._config['ref_azimuth_data']['ms_file']):
-                    fpath = os.path.norm(self._config['ref_azimuth_data']['ms_file'])
+                    fpath = os.path.normpath(self._config['ref_azimuth_data']['ms_file'])
                 else:
                     fpath = os.path.join(self.ida_cal_raw_dir, self._config['ref_azimuth_data']['ms_file'])
 
@@ -390,7 +390,7 @@ class APSurvey(object):
             # check absolute settings
             if self.process_absolute:
                 if os.path.isabs(self._config['ref_absolute_data']['ms_file']):
-                    fpath = os.path.norm(self._config['ref_absolute_data']['ms_file'])
+                    fpath = os.path.normpath(self._config['ref_absolute_data']['ms_file'])
                 else:
                     fpath = os.path.join(self.ida_cal_raw_dir, self._config['ref_absolute_data']['ms_file'])
 
@@ -665,11 +665,12 @@ class APSurvey(object):
         if datatype == 'abs' and not self.process_absolute:
             return False
 
-        self.logmsg(logging.INFO, 'Retrieving {} sensor {} data from archive...'.format(
-            sensor.upper(), datatype.upper()))
         outname = './{}_{}_{}'.format(self.station,
                                       self.station_sensor_loc(sensor),
                                       datatype)
+        self.logmsg(logging.INFO, 'Retrieving {} sensor {} data from archive' \
+                    ' and saving in {}'.format(
+            sensor.upper(), datatype.upper(), outname))
         try:  # this is really too much in single try:
             if os.path.exists(outname+'.i10'): os.remove(outname+'.i10')
             if os.path.exists(outname+'.ms'): os.remove(outname+'.ms')
@@ -705,8 +706,8 @@ class APSurvey(object):
                             datatype, sensor))
             self.logmsg(logging.ERROR,
                         'Can not use {} sensor data in sensor comparisons.'.format(sensor))
-            print()
-            print(e)
+#            print()
+#            print(e)
             return False
 
 
@@ -847,16 +848,16 @@ class APSurvey(object):
     def chanloc_codes(self, sensor):
 
         if sensor == 'pri':
-            chans = self._config.get('pri_sensor_chans', '').split(',')
-            loc = self._config.get('pri_sensor_loc', '')
+            chans = self._config.get('pri_sensor_chans', '').lower().split(',')
+            loc = self._config.get('pri_sensor_loc', '').upper()
             if chans :
                 return ','.join([chan+loc for chan in chans])
             else:
                 return ''
 
         elif sensor == 'sec':
-            chans = self._config.get('sec_sensor_chans', '').split(',')
-            loc = self._config.get('sec_sensor_loc', '')
+            chans = self._config.get('sec_sensor_chans', '').lower().split(',')
+            loc = self._config.get('sec_sensor_loc', '').upper()
             if chans :
                 return ','.join([chan+loc for chan in chans])
             else:
