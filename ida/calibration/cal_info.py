@@ -147,6 +147,8 @@ class CalInfo():
                 self.run_chan = chancode
                 self.resp_nom_dir = self._config['nom_resp_dir']
                 self.resp_cur_dir = self._config['cur_resp_dir']
+                print('resp_nom_dir:', self.resp_nom_dir)
+                print('resp_cur_dir:', self.resp_cur_dir)
 
     def config_file_isvalid(self):
 
@@ -515,8 +517,6 @@ class CalInfo():
                         self._info['lffile'] = None
                         self._info['lfpath'] = None
 
-                    print('lffile:', self._info['lffile'])
-                    print('lfpath:', self._info['lfpath'])
                 else:
                     fpath = join(self.cal_raw_dir, self.sta, self.loc, self.sensor,
                                  CALTYPE_RBLF, self.lfdatedir)
@@ -547,7 +547,6 @@ class CalInfo():
                 if self.mode == 'config-file':
                     # value is full path if coming from config file
                     value = abspath(value)
-                    print(red('HF FILE:'), value)
                     if exists(value):
                         self._info['hffile'] = Path(value).stem
                         self._info['hfpath'] = dirname(value)
