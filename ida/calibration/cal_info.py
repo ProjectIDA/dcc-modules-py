@@ -56,13 +56,13 @@ class CalInfo():
 
     def __init__(self, sta=None, loc=None,
                  config_file=None, comp=None, chancode=None,
-                 cal_raw_dir=None, resp_cur_dir=None,
-                 resp_nom_dir=None, db_dir=None):
+                 cal_raw_dir=None, cur_paz_dir=None,
+                 nom_paz_dir=None, db_dir=None):
 
         self.config_file = config_file
         self.cal_raw_dir = cal_raw_dir
-        self.resp_nom_dir = resp_nom_dir
-        self.resp_cur_dir = resp_cur_dir
+        self.nom_paz_dir = nom_paz_dir
+        self.cur_paz_dir = cur_paz_dir
         self.db_dir = db_dir
 
         self._info = {
@@ -110,8 +110,8 @@ class CalInfo():
             self.sta = sta
             self.loc = loc
             self.cal_raw_dir = cal_raw_dir
-            self.resp_nom_dir = resp_nom_dir
-            self.resp_cur_dir = resp_cur_dir
+            self.nom_paz_dir = nom_paz_dir
+            self.cur_paz_dir = cur_paz_dir
             self.db_dir = db_dir
 
             # if not using configuration file, must access datascopedb
@@ -145,8 +145,8 @@ class CalInfo():
                 self.loc = self._config['loc']
                 self.run_comp = comp.lower()
                 self.run_chan = chancode
-                self.resp_nom_dir = self._config['nom_resp_dir']
-                self.resp_cur_dir = self._config['cur_resp_dir']
+                self.nom_paz_dir = self._config['nom_paz_dir']
+                self.cur_paz_dir = self._config['cur_paz_dir']
 
     def config_file_isvalid(self):
 
@@ -229,22 +229,22 @@ class CalInfo():
                 print(red('Error in configuration file: "sensor_calib_factor_2" key is missing.'))
                 valid = False
 
-        if 'nom_resp_dir' not in self._config:
-            print(red('Error in configuration file: "nom_resp_dir" key is missing.'))
+        if 'nom_paz_dir' not in self._config:
+            print(red('Error in configuration file: "nom_paz_dir" key is missing.'))
             valid = False
         else:
-            if not exists(self._config['nom_resp_dir']):
-                print(red('Error in configuration: nom_resp_dir does not exist.' + \
-                          self._config['cur_resp_dir']))
+            if not exists(self._config['nom_paz_dir']):
+                print(red('Error in configuration: nom_paz_dir does not exist.' + \
+                          self._config['nom_paz_dir']))
                 valid = False
 
-        if 'cur_resp_dir' not in self._config:
-            print(red('Error in configuration file: "cur_resp_dir" key is missing.'))
+        if 'cur_paz_dir' not in self._config:
+            print(red('Error in configuration file: "cur_paz_dir" key is missing.'))
             valid = False
         else:
-            if not exists(self._config['cur_resp_dir']):
-                print(red('Error in configuration: cur_resp_dir does not exist: ' + \
-                          self._config['cur_resp_dir']))
+            if not exists(self._config['cur_paz_dir']):
+                print(red('Error in configuration: cur_paz_dir does not exist: ' + \
+                          self._config['cur_paz_dir']))
                 valid = False
 
         return valid
@@ -831,14 +831,14 @@ class CalInfo():
             pick_groups.append(sensor_fn_list)
             group_titles.append('Response on Date of Calibration')
         elif self.mode == 'config-file':
-            sensor_fn_list = cur_resp_for_model_station_comp(self.resp_cur_dir,
+            sensor_fn_list = cur_resp_for_model_station_comp(self.cur_paz_dir,
                                                              self.sensor.lower(),
                                                             self.sta,
                                                             self.comp)
             pick_groups.append(sensor_fn_list)
             group_titles.append('Existing Responses for Station, Sensor, Component')
 
-        nom_resps = nom_resp_for_model(self.resp_nom_dir, self.sensor.lower())
+        nom_resps = nom_resp_for_model(self.nom_paz_dir, self.sensor.lower())
         nom_resps_names = sorted([Path(respfn).name for respfn in nom_resps])
         pick_groups.append(nom_resps_names)
         group_titles.append('Nominal Responses for sensor: ' + self.sensor.upper())
@@ -859,9 +859,9 @@ class CalInfo():
             if result == SelectResult.ok:
                 fn = pick_groups[choice_tpls[0][0]][choice_tpls[0][1]]
                 if choice_tpls[0][0] == 0:     #  first group is single current resp file as in DB
-                    self.respfn = join(self.resp_cur_dir, fn)
+                    self.respfn = join(self.cur_paz_dir, fn)
                 elif choice_tpls[0][0] == 1:   #  second group are files from nominal response dir
-                    self.respfn = join(self.resp_nom_dir, fn)
+                    self.respfn = join(self.nom_paz_dir, fn)
                 elif choice_tpls[0][0] == 2:   #  third group are respo files found in cwd
                     self.respfn = join(getcwd(), fn)
 
