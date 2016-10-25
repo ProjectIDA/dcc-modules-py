@@ -189,13 +189,10 @@ class APSurvey(object):
 
     ChanTpl = namedtuple('ChanTuple', 'z n e')
 
-    def __init__(self, fn, ida_cal_raw_dir, seedrespdir, i10_arc_dir,
-                 debug=False, logger=None):
+    def __init__(self, fn, debug=False):
 
         self.analdate = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        self.ida_cal_raw_dir = ida_cal_raw_dir
-        self.resp_dir = seedrespdir
-        self.i10_arc_dir = i10_arc_dir
+        self.ida_cal_raw_dir = os.environ.get('IDA_CAL_RAW_DIR', '')
         self.debug = debug
         self.waveform_files = []
 
@@ -357,6 +354,21 @@ class APSurvey(object):
                                     'Missing key in configuration file: ' +
                                     '{}/endtime_iso'.format(sect))
 
+        if 'arc_raw_dir' not in self._config:
+            self.ok = False
+            self.logmsg(logging.ERROR, 'Missing key in configuration file: ' + 'arc_raw_dir')
+        else:
+            fpath = self._config['arc_raw_dir']
+            if not (os.path.exists(fpath) or not os.path.isdir(fpath)):
+                self.logmsg(logging.ERROR, 'Raw Archive directory does not exist: {}'.format(fpath))
+
+        if 'resp_file_dir' not in self._config:
+            self.ok = False
+            self.logmsg(logging.ERROR, 'Missing key in configuration file: ' + 'resp_file_dir')
+        else:
+            fpath = self._config['resp_file_dir']
+            if not (os.path.exists(fpath) or not os.path.isdir(fpath)):
+                self.logmsg(logging.ERROR, 'RESP file directory does not exist: {}'.format(fpath))
 
         if self.ok:
             # check azimuth settings
@@ -413,6 +425,7 @@ class APSurvey(object):
                         self._config['ref_absolute_data']['endtime_iso']
                     ))
                     self.ok = False
+
 
     # if not using fabulous.color, don't really nee this abstraction
     def logmsg(self, loglevel, errmsg):
@@ -505,13 +518,20 @@ class APSurvey(object):
 
     def respfilename(self, net, sta, chn, loc):
         resp_file = 'RESP.{}.{}.{}.{}'.format(net, sta, loc, chn)
-        return os.path.join(self.resp_dir, resp_file)
+        return os.path.join(self.resp_file_dir, resp_file)
 
     def station_sensor_loc(self, sensor):
         if sensor == 'pri':
             return self._config['pri_sensor_loc']
         elif sensor == 'sec':
             return self._config['sec_sensor_loc']
+    @property
+    def arc_raw_dir(self):
+        return self._config['arc_raw_dir']
+
+    @property
+    def resp_file_dir(self):
+        return self._config['resp_file_dir']
 
     def correct_ref_time(self, datatype, src1, src2):
 
@@ -674,7 +694,7 @@ class APSurvey(object):
         try:  # this is really too much in single try:
             if os.path.exists(outname+'.i10'): os.remove(outname+'.i10')
             if os.path.exists(outname+'.ms'): os.remove(outname+'.ms')
-            i10get(self.i10_arc_dir,
+            i10get(self.arc_raw_dir,
                    self.station,
                    self.chanloc_codes(sensor),
                    self.starttime(datatype), self.endtime(datatype),
@@ -700,14 +720,12 @@ class APSurvey(object):
             self.streams[datatype][sensor].write(self.msfiles[datatype][sensor], format='MSEED')
             self.waveform_files.append(outname+'.i10')
             self.waveform_files.append(outname+'.ms')
-        except Exception as e:
+        except:
             self.logmsg(logging.ERROR,
                         'Error reading data for sensor ({}/{})'.format(
                             datatype, sensor))
             self.logmsg(logging.ERROR,
                         'Can not use {} sensor data in sensor comparisons.'.format(sensor))
-#            print()
-#            print(e)
             return False
 
 
