@@ -75,6 +75,9 @@ def i10get(i10_arc_dir, sta, chan_list, startime, endtime, outfn=None, **kwargs)
 
     Output is streamed supplied filename or to STDOUT if filename not supplied"""
 
+    # idagrep requires lowercase chan codes
+    chan_list = chan_list.lower()
+
     # get list of raw yr/day dirs for sta within tart/end dates
     gz_dirs = arc_raw_i10_dirs(i10_arc_dir, sta.lower(), startime, endtime)
 
