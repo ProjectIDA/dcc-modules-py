@@ -634,11 +634,13 @@ class APSurvey(object):
 
         self.streams[datatype]['ref'].merge()
 
-        if self._config.get('ref_kit_metadata'):
-            for tr in self.streams[datatype]['ref']:
-                tr.stats.channel = rename_chan(tr.stats.channel)
+        for tr in self.streams[datatype]['ref']:
+            tr.stats.channel = rename_chan(tr.stats.channel)
+            if self._config['ref_kit_metadata']['network'].strip():
                 tr.stats.network = self._config['ref_kit_metadata']['network']
+            if self._config['ref_kit_metadata']['station'].strip():
                 tr.stats.station = self._config['ref_kit_metadata']['station']
+            if self._config['ref_kit_metadata']['location'].strip():
                 tr.stats.location = self._config['ref_kit_metadata']['location']
         try:
             tr_z = self.streams[datatype]['ref'].select(component='Z')[0]
