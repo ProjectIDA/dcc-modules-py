@@ -43,9 +43,9 @@ from ida.calibration.cross import cross_correlate
 
 def rename_chan(inchan):
 
-    bhz_chan_list = ['UN1', 'BHZ', 'HHZ', 'HNZ']
-    bhn_chan_list = ['UN2', 'BHN', 'HHN', 'HHY', 'HNY', 'BH1']
-    bhe_chan_list = ['UN3', 'BHE', 'HHE', 'HHX', 'HNX', 'BH2']
+    bhz_chan_list = ['UN1', 'BHZ', 'HHZ', 'HNZ', 'MHZ', 'SHZ']
+    bhn_chan_list = ['UN2', 'BHN', 'HHN', 'HHY', 'HNY', 'BH1', 'MHN', 'MH1', 'SHN', 'SH1']
+    bhe_chan_list = ['UN3', 'BHE', 'HHE', 'HHX', 'HNX', 'BH2', 'MHE', 'MH2', 'SHE', 'SH2']
 
     if inchan in bhz_chan_list:
         return 'BHZ'
