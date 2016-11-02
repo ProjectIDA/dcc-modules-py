@@ -46,10 +46,15 @@ def time_offset(trace1, trace2, bpfreqmin=0.1, bpfreqmax=1.0, winsize=1000):
     """ Timeseries time offset computed using correlation computation.
 
         Timeseries will be checked for gaps. Any gaps will prevent the computation
-
         correlation performed by shifting timeseries +/- winsize samples
-        Returns offset in seconds that needs to be applied to trace2 for it to be in sync with
-        trace1. So, >0 if trace1 ahead of trace2, i.e. add offset to trace2 timestamps
+
+        xcorr() does not look at start/end times, just aligns the samples starting at 0th sample.
+
+        If offset > 0, events in trace1 later in the timeseries than in trace2
+
+        Returns offset in seconds that when added to trace2 the actual time of events
+        will be the same.
+
     """
     if trace1.stats.sampling_rate != trace2.stats.sampling_rate:
         print(red(bold('The supplied traces must have the same sampling rate. Cannot compute time_offset.')))
