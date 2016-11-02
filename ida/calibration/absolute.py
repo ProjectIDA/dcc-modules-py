@@ -27,7 +27,11 @@ from pathlib import Path # , PurePath
 import yaml
 from collections import namedtuple
 import logging
-# import matplotlib.pyplot as plt
+
+import matplotlib
+matplotlib.use('Qt4Agg')
+import matplotlib.pyplot as plt
+plt.ion()
 
 #from fabulous.color import red, green, blue, bold
 from obspy import read, UTCDateTime, Stream  # Trace
@@ -575,8 +579,8 @@ class APSurvey(object):
             sensor_z.interpolate(ref_z.stats.sampling_rate, method='linear')
 
         if sensor_z and ref_z:
-            ref_z.filter('bandpass', freqmin=self.bp_start, freqmax=self.bp_stop)
-            sensor_z.filter('bandpass', freqmin=self.bp_start, freqmax=self.bp_stop)
+            ref_z.filter('bandpass', freqmin=self.bp_start, freqmax=2.0) # self.bp_stop)
+            sensor_z.filter('bandpass', freqmin=self.bp_start, freqmax=2.0) # self.bp_stop)
             # take middle for time series correlation
             dur = sensor_z.stats.endtime - sensor_z.stats.starttime
             start_t = sensor_z.stats.starttime + dur/2 - self.correlation_segment_size/2
@@ -588,6 +592,7 @@ class APSurvey(object):
             if src1 == 'ref':
                 for tr in self.streams[datatype][src1]:
                     tr.stats.starttime = tr.stats.starttime + offset
+                    # print('Adjusting REF start time by: ', offset)
             else:
                 print('{}/{} Offset: {}'.format(src1, src2, offset))
 
@@ -966,7 +971,7 @@ class APSurvey(object):
         if results:
             for compres in results:
                 if compres.usable_count == 0:
-                    sumres = '{:<4} {}/{} {}: {} No usable segments. {} {}'.format(
+                    sumres = '{:<4} {}/{} : {} No usable segments. {} {}'.format(
                         self.station.upper(), src1.upper(), src2.upper(),
                         compres.component, self.msfiles[datatype][src1],
                         self.msfiles[datatype][src2])
@@ -1229,6 +1234,16 @@ class APSurvey(object):
                                    self.bp_start, self.bp_stop,
                                    self.analysis_sample_rate, zerophase=True)
 
+            if self.debug and (dbg_cnt == 5):
+                fig = plt.figure(figsize=(8.5, 11))
+
+                plt.plot(tr2_cnv)
+                plt.plot(tr1_n_seg)
+                plt.plot(tr1_e_seg)
+                plt.show()
+                input('hit any ley')
+
+
             # set up matrix to solve for cos(w) & sin(w) where w is angle of tr2_cnv from North
             # set up with [N, E] so solution comes out [cos, sin]
             dc = ones(len(tr1_n_seg), dtype=float64)  # to take care of any non-zero means
@@ -1309,8 +1324,8 @@ class APSurvey(object):
             tr1_seg *= taper
             tr2_cnv *= taper
 
-            tr1_seg = osf.bandpass(tr1_seg, 0.1, 0.3, self.analysis_sample_rate, zerophase=True)
-            tr2_cnv = osf.bandpass(tr2_cnv, 0.1, 0.3, self.analysis_sample_rate, zerophase=True)
+            tr1_seg = osf.bandpass(tr1_seg, self.bp_start, self.bp_stop, self.analysis_sample_rate, zerophase=True)
+            tr2_cnv = osf.bandpass(tr2_cnv, self.bp_start, self.bp_stop, self.analysis_sample_rate, zerophase=True)
 
             amp_ratio = tr2_cnv.std() / tr1_seg.std()
             lrms = log10(sqrt(multiply(tr2_cnv, tr2_cnv).sum() / len(tr2_cnv)))
