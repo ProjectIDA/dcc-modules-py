@@ -106,10 +106,15 @@ TRIAXIAL_SEIS_MODELS = [
 
 # need set of these transform for each supported triaxial sensor
 STS2_XYZ2UVW = [
-    [-sqrt(6)/3,  sqrt(6)/6,   sqrt(6)/6],
-    [         0,  sqrt(2)/2,  -sqrt(2)/2],
-    [ sqrt(3)/3,  sqrt(3)/3,  sqrt(3)/3]
+    [-sqrt(2/3),  0,         sqrt(1/3)],
+    [ sqrt(1/6),  sqrt(1/2), sqrt(1/3)],
+    [ sqrt(1/6),  -sqrt(1/2), sqrt(1/3)]
 ]
+# STS2_XYZ2UVW = [
+#     [-sqrt(6)/3,  sqrt(6)/6,   sqrt(6)/6],
+#     [         0,  sqrt(2)/2,  -sqrt(2)/2],
+#     [ sqrt(3)/3,  sqrt(3)/3,  sqrt(3)/3]
+# ]
 # from UVW back to ENZ, but ABS values, so all going in same direction at same time to maximize signal
 STS2_UVW2ENZ_ABS = [
     [ sqrt(2/3), sqrt(1/6), sqrt(1/6)],
@@ -206,7 +211,7 @@ CTBTO_SEIS_MODELS = [
     SEISTYPE_STS25F
 ]
 
-SEIS_INVERT_CAL_CHAN = [SEISTYPE_GS13, SEISTYPE_TR12PA, SEISTYPE_TR12PB]
+SEIS_INVERT_CAL_CHAN = [SEISTYPE_GS13, SEISTYPE_TR12PA, SEISTYPE_TR12PB, SEISTYPE_TR240]
 SEIS_INVERT_NORTH_CHAN = [SEISTYPE_STS1E3, SEISTYPE_STS1]
 SEIS_INVERT_EAST_CHAN = [SEISTYPE_STS1E3, SEISTYPE_STS1]
 
