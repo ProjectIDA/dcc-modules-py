@@ -27,12 +27,17 @@ from numpy import complex128, pi, ceil, sin, cos, angle, abs, linspace, multiply
     divide, subtract, concatenate
 from numpy.fft import rfft, irfft
 from scipy.signal import tukey
+import scipy.signal as ss
+
 from scipy.optimize import least_squares
+import obspy.signal.filter as osf
 
 import ida.calibration.qcal_utils
 from ida.signals.paz import PAZ
 import ida.signals.utils
 from ida.instruments import *
+
+#import matplotlib.pyplot as plt
 
 """utility functions for processing of IDA Random Binary calibration data"""
 
@@ -232,7 +237,7 @@ def analyze_cal_component(fullpaz, lfpertndxs, hfpertndxs, opsr, lftf_f, lf_tf, 
     return new_paz
 
 
-def prepare_cal_data(lfpath, lffile, hfpath, hffile, sensor, comp, fullpaz):
+def prepare_cal_data(lfpath, lffile, hfpath, hffile, sensor, comp, fullpaz, opsr):
     """Prepares cal input and measured (output) timeseries for analysis.
 
 
@@ -316,28 +321,41 @@ def prepare_cal_data(lfpath, lffile, hfpath, hffile, sensor, comp, fullpaz):
         resp_tmp_lf = ida.signals.utils.compute_response(freqs_lf, lf_fit_paz, mode='acc')
         resp_lf, _, _ = ida.signals.utils.normalize_response(resp_tmp_lf, freqs_lf, 0.05)
 
-        # Convolving LF input with nominal response...
-        input_fft           = rfft(multiply(cal_lf_tpl.input.data[:npts_lf], taper_lf))
-        inp_freqs_cnv_resp  = multiply(input_fft, resp_lf)
-        lf_inp_wth_resp     = irfft(inp_freqs_cnv_resp, npts_lf)
-        lf_inp_wth_resp     = lf_inp_wth_resp[taper_bin_cnt_lf:-taper_bin_cnt_lf]
-        lf_inp_wth_resp.__itruediv__(lf_inp_wth_resp.std())
-        lf_inp_wth_resp.__isub__(lf_inp_wth_resp.mean())
-
         # prep output channels
         if comp == 'Z':
-            lf_out = cal_lf_tpl.vertical.data.copy()[taper_bin_cnt_lf:-taper_bin_cnt_lf]
+            lf_out = cal_lf_tpl.vertical.data.copy()#[taper_bin_cnt_lf:-taper_bin_cnt_lf]
         elif comp == '1':
-            lf_out = cal_lf_tpl.one.data.copy()[taper_bin_cnt_lf:-taper_bin_cnt_lf]
+            lf_out = cal_lf_tpl.one.data.copy()#[taper_bin_cnt_lf:-taper_bin_cnt_lf]
         elif comp == '2':
-            lf_out = cal_lf_tpl.two.data.copy()[taper_bin_cnt_lf:-taper_bin_cnt_lf]
+            lf_out = cal_lf_tpl.two.data.copy()#[taper_bin_cnt_lf:-taper_bin_cnt_lf]
         else:
             raise ValueError('Invalid component: ' + comp)
+
+        # new filtering
+        # lf_out.__isub__(lf_out.mean())
+        # lf_out = multiply(lf_out, taper_lf)
+        # lf_out = osf.lowpass(lf_out, 0.01, samp_rate_lf, zerophase=True)
+        lf_out = lf_out[taper_bin_cnt_lf:-taper_bin_cnt_lf]
 
         lf_out.__itruediv__(lf_out.std())
         lf_out.__isub__(lf_out.mean())
 
+
+        # Convolving LF input with nominal response...
+        input_fft           = rfft(multiply(cal_lf_tpl.input.data[:npts_lf], taper_lf))
+        inp_freqs_cnv_resp  = multiply(input_fft, resp_lf)
+        lf_inp_wth_resp     = irfft(inp_freqs_cnv_resp, npts_lf)
+
+        # new filtering
+        # lf_inp_wth_resp.__isub__(lf_inp_wth_resp.mean())
+        # lf_inp_wth_resp = osf.lowpass(lf_inp_wth_resp, 0.01, samp_rate_lf, zerophase=True)
+
+        lf_inp_wth_resp     = lf_inp_wth_resp[taper_bin_cnt_lf:-taper_bin_cnt_lf]
+        lf_inp_wth_resp.__itruediv__(lf_inp_wth_resp.std())
+        lf_inp_wth_resp.__isub__(lf_inp_wth_resp.mean())
+
         lf_snr = 1/subtract(lf_inp_wth_resp, lf_out).std()
+        print('lf snr:', lf_snr)
 
     else:
         samp_rate_lf, start_time_lf, lf_inp_wth_resp, lf_out, freqs_lf, lf_snr = None, None, None, None, None, None
@@ -377,28 +395,48 @@ def prepare_cal_data(lfpath, lffile, hfpath, hffile, sensor, comp, fullpaz):
         resp_tmp_hf = ida.signals.utils.compute_response(freqs_hf, hf_fit_paz, mode='acc')
         resp_hf, _, _ = ida.signals.utils.normalize_response(resp_tmp_hf, freqs_hf, 0.05)
 
-        # Convolving HF input with nominal response...
-        input_fft           = rfft(multiply(cal_hf_tpl.input.data, taper_hf))
-        inp_freqs_cnv_resp  = multiply(input_fft, resp_hf)
-        hf_inp_wth_resp     = irfft(inp_freqs_cnv_resp, npts_hf)
-        hf_inp_wth_resp     = hf_inp_wth_resp[taper_bin_cnt_hf:-taper_bin_cnt_hf]
-        hf_inp_wth_resp.__itruediv__(hf_inp_wth_resp.std())
-        hf_inp_wth_resp.__isub__(hf_inp_wth_resp.mean())
-
         # prep output channels
         if comp == 'Z':
-            hf_out = cal_hf_tpl.vertical.data.copy()[taper_bin_cnt_hf:-taper_bin_cnt_hf]
+            hf_out = cal_hf_tpl.vertical.data.copy()# [taper_bin_cnt_hf:-taper_bin_cnt_hf]
         elif comp == '1':
-            hf_out = cal_hf_tpl.one.data.copy()[taper_bin_cnt_hf:-taper_bin_cnt_hf]
+            hf_out = cal_hf_tpl.one.data.copy()#[taper_bin_cnt_hf:-taper_bin_cnt_hf]
         elif comp == '2':
-            hf_out = cal_hf_tpl.two.data.copy()[taper_bin_cnt_hf:-taper_bin_cnt_hf]
+            hf_out = cal_hf_tpl.two.data.copy()#[taper_bin_cnt_hf:-taper_bin_cnt_hf]
         else:
             raise ValueError('Invalid component: ' + comp)
 
-        hf_out.__itruediv__(hf_out.std())
+        # new filtering
         hf_out.__isub__(hf_out.mean())
+        hf_out = multiply(hf_out, taper_hf)
+        hf_out = osf.bandpass(hf_out, 0.45, opsr/2, samp_rate_hf, zerophase=True)
+        hf_out = hf_out[taper_bin_cnt_hf:-taper_bin_cnt_hf]
+
+        hf_out.__itruediv__(hf_out.std())
+        hf_out = ss.detrend(hf_out, type='constant')
+
+        cal_hf_tpl.input.data = ss.detrend(cal_hf_tpl.input.data, type='constant')
+
+        input_tapered       = multiply(cal_hf_tpl.input.data, taper_hf)
+        input_fft           = rfft(input_tapered)
+        inp_freqs_cnv_resp  = multiply(input_fft, resp_hf)
+        hf_inp_wth_resp     = irfft(inp_freqs_cnv_resp, npts_hf)
+
+        # new filtering
+        hf_inp_wth_resp.__isub__(hf_inp_wth_resp.mean())
+        hf_inp_wth_resp = osf.bandpass(hf_inp_wth_resp, 0.45, opsr/2, samp_rate_hf, zerophase=True)
+        hf_inp_wth_resp     = hf_inp_wth_resp[taper_bin_cnt_hf:-taper_bin_cnt_hf]
+
+        hf_inp_wth_resp.__itruediv__(hf_inp_wth_resp.std())
+        hf_inp_wth_resp = ss.detrend(hf_inp_wth_resp, type='constant')
+
+        # plt.figure(111, figsize=(12, 8))
+        # plt.plot(hf_inp_wth_resp[50000:52000], 'g')
+        # plt.plot(hf_out[50000:52000])
+        # plt.plot(hf_inp_wth_resp[50000:52000]-hf_out[50000:52000])
+        # plt.show()
 
         hf_snr = 1/subtract(hf_inp_wth_resp, hf_out).std()
+        print('hf snr:', hf_snr)
 
     else:
         samp_rate_hf, start_time_hf, hf_inp_wth_resp, hf_out, freqs_hf, hf_snr = None, None, None, None, None, None
