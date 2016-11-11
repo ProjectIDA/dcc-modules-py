@@ -1328,11 +1328,14 @@ class APSurvey(object):
             tr2_cnv = osf.bandpass(tr2_cnv, self.bp_start, self.bp_stop, self.analysis_sample_rate, zerophase=True)
 
             amp_ratio = tr2_cnv.std() / tr1_seg.std()
+
             lrms = log10(sqrt(multiply(tr2_cnv, tr2_cnv).sum() / len(tr2_cnv)))
+
             syn  = tr1_seg * amp_ratio
+            coh = dot(tr2_cnv, syn) / sqrt(dot(tr2_cnv, tr2_cnv) * dot(syn, syn))
+
             res = tr2_cnv - syn
             myvar = res.std() / tr2_cnv.std()
-            coh = dot(tr2_cnv, syn) / sqrt(dot(tr2_cnv, tr2_cnv) * dot(syn, syn))
 
             results.add_segment(APSurveySegmentResult(start_t, 0.0, 0.0, amp_ratio,
                                                       lrms, myvar,
