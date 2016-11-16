@@ -37,7 +37,7 @@ from ida.signals.paz import PAZ
 import ida.signals.utils
 from ida.instruments import *
 
-#import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 
 """utility functions for processing of IDA Random Binary calibration data"""
 
@@ -431,8 +431,8 @@ def prepare_cal_data(lfpath, lffile, hfpath, hffile, sensor, comp, fullpaz, opsr
 
         # plt.figure(111, figsize=(12, 8))
         # plt.plot(hf_inp_wth_resp[50000:52000], 'g')
-        # plt.plot(hf_out[50000:52000])
-        # plt.plot(hf_inp_wth_resp[50000:52000]-hf_out[50000:52000])
+        # plt.plot(hf_out[50000:52000], 'b')
+        # plt.plot(hf_inp_wth_resp[50000:52000]-hf_out[50000:52000], 'r')
         # plt.show()
 
         hf_snr = 1/subtract(hf_inp_wth_resp, hf_out).std()
