@@ -46,6 +46,7 @@ import numpy.linalg as la
 import scipy.signal as ss
 from fabulous.color import red
 
+from ida import IDA_PKG_VERSION_HASH_STR, IDA_PKG_VERSION_DATETIME
 from ida.utils import i10get, pimseed
 from ida.signals.utils import time_offset, taper_high_freq_resp, \
         dynlimit_resp_min
@@ -922,6 +923,8 @@ class APSurvey(object):
         header = '#'*144 + '\n'
         header += '# ANALYSIS PARAMETERS\n'
         header += '# =====================\n'
+        header += '#   ida module version: {} ({})\n'.format(IDA_PKG_VERSION_HASH_STR,
+                                                             IDA_PKG_VERSION_DATETIME)
         header += '#          analysis at: {}\n'.format(self.analdate)
         header += '#              dataset: {}\n'.format(datatype.upper())
         header += '#              station: {}\n'.format(self.station.upper())
