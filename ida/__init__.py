@@ -19,3 +19,21 @@
 # If you use this software in a product, an explicit acknowledgment in the product documentation of the contribution
 # by Project IDA, Institute of Geophysics and Planetary Physics, UCSD would be appreciated but is not required.
 #######################################################################################################################
+from git import Repo
+import os
+
+IDA_PKG_VERSION_HASH_STR = 'unknown'
+IDA_PKG_VERSION_DATETIME = 'unknown'
+
+py_module_paths = os.environ['PYTHONPATH']
+if py_module_paths:
+    first_path = py_module_paths.split(':')[0]
+    try:
+        repo = Repo(first_path)
+        master = repo.heads.master
+        IDA_PKG_VERSION_HASH_STR = str(master.commit)
+        IDA_PKG_VERSION_DATETIME = master.commit.committed_datetime
+    except:
+        pass
+
+
