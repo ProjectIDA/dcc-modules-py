@@ -39,6 +39,7 @@ plt.ion()
 from obspy.core import read, Stream, UTCDateTime
 from obspy.signal.invsim import evalresp
 
+from ida import IDA_PKG_VERSION_HASH_STR, IDA_PKG_VERSION_DATETIME
 from ida.calibration.cross import cross_correlate
 
 def rename_chan(inchan):
@@ -485,6 +486,8 @@ class ShakeConfig(object):
         header = '#'*144 + '\n'
         header += '# SHAKETABLE ANALYSIS PARAMETERS\n'
         header += '# ==============================\n'
+        header += '#        ida module version: {} ({})\n'.format(IDA_PKG_VERSION_HASH_STR,
+                                                             IDA_PKG_VERSION_DATETIME)
         header += '#               analysis at: {}\n'.format(analdate)
         header += '#  shaketable miniseed data: {}\n'.format(self.ms_filename)
         header += '#        digi cnts per volt: {}\n'.format(self.digi_cnts_per_volt())
