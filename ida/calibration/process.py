@@ -294,12 +294,15 @@ def prepare_cal_data(lfpath, lffile, hfpath, hffile, sensor, comp, fullpaz, opsr
 
         # trim settling and trailing times from traces
         ida.signals.utils.trim_stream(strm_lf, left=log_lf['settling_time'], right=log_lf['trailing_time'])
-        # for those seismometers that are funky...
+
+        # reverse polarity for those seismometers that are funky...
         ida.signals.utils.check_and_fix_polarities(strm_lf, sensor.upper())
 
-        # split cal data into enzi, 21zi (one, two, vertical, input)
+        # split cal data into enzi, 21zi (one, two, vertical, input) tuple
         cal_lf = ida.calibration.qcal_utils.split_qcal_traces(strm_lf)
 
+        # for triaxial sensors, rotate to UVW, then back the 12Z with
+        # horizontal amplitudes combined using absolute magnitudes
         if sensor.upper() in TRIAXIAL_SEIS_MODELS:
             cal_lf_tpl = triaxial_horizontal_magnitudes(cal_lf, sensor.upper())
         else:
@@ -318,7 +321,9 @@ def prepare_cal_data(lfpath, lffile, hfpath, hffile, sensor, comp, fullpaz, opsr
         lf_fit_paz.h0 = 1.0
 
         freqs_lf = linspace(0, samp_rate_lf/2, npts_lf//2 + 1)  # count is to match behavior of np.fft.rfft below
+        # compute frequency response in ACC units
         resp_tmp_lf = ida.signals.utils.compute_response(freqs_lf, lf_fit_paz, mode='acc')
+        # normalize ferquency response
         resp_lf, _, _ = ida.signals.utils.normalize_response(resp_tmp_lf, freqs_lf, 0.05)
 
         # prep output channels
@@ -331,29 +336,25 @@ def prepare_cal_data(lfpath, lffile, hfpath, hffile, sensor, comp, fullpaz, opsr
         else:
             raise ValueError('Invalid component: ' + comp)
 
-        # new filtering
-        # lf_out.__isub__(lf_out.mean())
-        # lf_out = multiply(lf_out, taper_lf)
-        # lf_out = osf.lowpass(lf_out, 0.01, samp_rate_lf, zerophase=True)
+        # trim of amount used to input time-series
         lf_out = lf_out[taper_bin_cnt_lf:-taper_bin_cnt_lf]
 
+        # normalize and de-mean
         lf_out.__itruediv__(lf_out.std())
         lf_out.__isub__(lf_out.mean())
 
-
-        # Convolving LF input with nominal response...
+        # Multiply input with taper and with starting frequency response...
         input_fft           = rfft(multiply(cal_lf_tpl.input.data[:npts_lf], taper_lf))
         inp_freqs_cnv_resp  = multiply(input_fft, resp_lf)
         lf_inp_wth_resp     = irfft(inp_freqs_cnv_resp, npts_lf)
 
-        # new filtering
-        # lf_inp_wth_resp.__isub__(lf_inp_wth_resp.mean())
-        # lf_inp_wth_resp = osf.lowpass(lf_inp_wth_resp, 0.01, samp_rate_lf, zerophase=True)
-
+        # remove taper region, normalize and de-mean
         lf_inp_wth_resp     = lf_inp_wth_resp[taper_bin_cnt_lf:-taper_bin_cnt_lf]
         lf_inp_wth_resp.__itruediv__(lf_inp_wth_resp.std())
         lf_inp_wth_resp.__isub__(lf_inp_wth_resp.mean())
 
+        # compute an 'snr' to get sense of quality of 'starting' response.
+        # imperically, values over ~75 will lead to a successful 'fitting' process
         lf_snr = 1/subtract(lf_inp_wth_resp, lf_out).std()
         print('lf snr:', lf_snr)
 
@@ -421,11 +422,12 @@ def prepare_cal_data(lfpath, lffile, hfpath, hffile, sensor, comp, fullpaz, opsr
         inp_freqs_cnv_resp  = multiply(input_fft, resp_hf)
         hf_inp_wth_resp     = irfft(inp_freqs_cnv_resp, npts_hf)
 
-        # new filtering
+        # apply bandpass filter
         hf_inp_wth_resp.__isub__(hf_inp_wth_resp.mean())
         hf_inp_wth_resp = osf.bandpass(hf_inp_wth_resp, 0.45, opsr/2, samp_rate_hf, zerophase=True)
-        hf_inp_wth_resp     = hf_inp_wth_resp[taper_bin_cnt_hf:-taper_bin_cnt_hf]
 
+        # remove taper region, normalize and de-mean
+        hf_inp_wth_resp     = hf_inp_wth_resp[taper_bin_cnt_hf:-taper_bin_cnt_hf]
         hf_inp_wth_resp.__itruediv__(hf_inp_wth_resp.std())
         hf_inp_wth_resp = ss.detrend(hf_inp_wth_resp, type='constant')
 

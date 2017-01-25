@@ -1247,8 +1247,11 @@ class APSurvey(object):
                 input('hit any ley')
 
 
-            # set up matrix to solve for cos(w) & sin(w) where w is angle of tr2_cnv from North
-            # set up with [N, E] so solution comes out [cos, sin]
+            # set up matrix to solve for cos(wn) & cos(we) where:
+            #   wn is angle of tr2_cnv from ref North
+            #   we is angle of tr2_cnv from ref East
+            # Treat cos(we) as sin(pi/2 - we) where pi/2 - we is angle with North,
+            # then take arctan cos(wn)/cos(we)
             dc = ones(len(tr1_n_seg), dtype=float64)  # to take care of any non-zero means
             mat = array([dc, tr1_n_seg, tr1_e_seg])
             matinv = mat.transpose()
