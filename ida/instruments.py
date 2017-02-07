@@ -78,7 +78,7 @@ SEISMOMETER_MODELS = [
     SEISTYPE_TR12PA,
     SEISTYPE_TR12PB,
     SEISTYPE_TR240,
-    # SEISTYPE_TR360,
+    SEISTYPE_TR360,
     # SEISTYPE_GS13,
     # SEISTYPE_3ESPC,
     SEISTYPE_KS54A,
@@ -171,6 +171,18 @@ TR240_UVW2ENZ_ABS = [
     [sqrt(3) / 3, sqrt(3) / 3, sqrt(3) / 3]
 ]
 
+TR360_XYZ2UVW = [
+    [ sqrt(6) / 3,  0,           sqrt(3) / 3],
+    [-sqrt(6) / 6,  sqrt(2) / 2, sqrt(3) / 3],
+    [-sqrt(6) / 6, -sqrt(2) / 2, sqrt(3) / 3]
+]
+# from UVW back to ENZ, but ABS values, so all going in same direction at same time to maximize signal
+TR360_UVW2ENZ_ABS = [
+    [sqrt(6) / 3, sqrt(6) / 6, sqrt(6) / 6],
+    [          0, sqrt(2) / 2, sqrt(2) / 2],
+    [sqrt(3) / 3, sqrt(3) / 3, sqrt(3) / 3]
+]
+
 
 XFRM_TYPE_XYZ2UVW = 'XYZ2UVW'
 XFRM_TYPE_UVW2ENZ_ABS = 'UVW2ENZ_ABS'
@@ -204,6 +216,11 @@ TRIAXIAL_TRANSFORMS = {
         XFRM_TYPE_XYZ2UVW: TR240_XYZ2UVW,
         XFRM_TYPE_UVW2ENZ_ABS: TR240_UVW2ENZ_ABS
     },
+    SEISTYPE_TR360: {
+        XFRM_TYPE_XYZ2UVW: TR360_XYZ2UVW,
+        XFRM_TYPE_UVW2ENZ_ABS: TR360_UVW2ENZ_ABS
+    }
+
 }
 
 CTBTO_SEIS_MODELS = [
