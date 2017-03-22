@@ -440,7 +440,7 @@ class APSurvey(object):
             elif loglevel == logging.INFO:
                 self.logger.info(errmsg)
             elif loglevel == logging.WARN:
-                self.logger.warn(errmsg)
+                self.logger.warning(errmsg)
             elif loglevel == logging.ERROR:
                 self.logger.error(errmsg)
             elif loglevel == logging.CRITICAL:
@@ -551,20 +551,20 @@ class APSurvey(object):
             raise ValueError('read_sensor_data: datatype must be "azi" or "abs".')
 
         if (src2 == 'pri') and not self.pri_sensor_installed:
-            raise ValueError('Primary sensor processing not enabled. ' \
-                             ' Can not use it to correct reference clock. ' \
+            raise ValueError('Primary sensor processing not enabled. ' +
+                             ' Can not use it to correct reference clock. ' +
                              ' Check configuration.')
         if (src2 == 'sec') and not self.sec_sensor_installed:
-            raise ValueError('Secondary sensor processing not enabled. ' \
-                             ' Can not use it to correct reference clock. ' \
+            raise ValueError('Secondary sensor processing not enabled. ' +
+                             ' Can not use it to correct reference clock. ' +
                              ' Check configuration.')
         if (datatype == 'azi') and not self.process_azimuth:
-            raise ValueError('Azimuth data processing not enabled. ' \
-                             ' Can not use it to correct reference clock. ' \
+            raise ValueError('Azimuth data processing not enabled. ' +
+                             ' Can not use it to correct reference clock. ' +
                              ' Check configuration.')
         if (datatype == 'abs') and not self.process_absolute:
-            raise ValueError('Absolute data processing not enabled. ' \
-                             ' Can not use it to correct reference clock. ' \
+            raise ValueError('Absolute data processing not enabled. ' +
+                             ' Can not use it to correct reference clock. ' +
                              ' Check configuration.')
 
         offset = 0
@@ -693,22 +693,44 @@ class APSurvey(object):
         if datatype == 'abs' and not self.process_absolute:
             return False
 
-        outname = './{}_{}_{}'.format(self.station,
-                                      self.station_sensor_loc(sensor),
-                                      datatype)
-        self.logmsg(logging.INFO, 'Retrieving {} sensor {} data from archive' \
-                    ' and saving in {}'.format(
-            sensor.upper(), datatype.upper(), outname))
-        try:  # this is really too much in single try:
-            if os.path.exists(outname+'.i10'): os.remove(outname+'.i10')
-            if os.path.exists(outname+'.ms'): os.remove(outname+'.ms')
-            i10get(self.arc_raw_dir,
-                   self.station,
-                   self.chanloc_codes(sensor),
-                   self.starttime(datatype), self.endtime(datatype),
-                   outfn=outname+'.i10')
-            pimseed(self.station, outname+'.i10', outname+'.ms')
-            self.streams[datatype][sensor] = read(outname + '.ms')
+        if os.path.isfile(self.arc_raw_dir):
+            #assume miniseed file with ONLY needed channels and time period
+            ms_name = self.arc_raw_dir
+            self.waveform_files.append(ms_name)
+
+        else:
+            outname = './{}_{}_{}'.format(self.station,
+                                          self.station_sensor_loc(sensor),
+                                          datatype)
+            ms_name = outname + '.ms'
+            i10_name = outname + '.i10'
+            if os.path.exists(i10_name): os.remove(i10_name)
+            if os.path.exists(ms_name): os.remove(ms_name)
+
+            self.waveform_files.append(i10_name)
+            self.waveform_files.append(ms_name)
+
+            self.logmsg(logging.INFO, 'Retrieving {} sensor {} data from archive' \
+                        ' and saving in {}'.format(sensor.upper(), 
+                                                   datatype.upper(),
+                                                   ms_name))
+
+            try:  # this is really too much in single try:
+                i10get(self.arc_raw_dir,
+                       self.station,
+                       self.chanloc_codes(sensor),
+                       self.starttime(datatype), self.endtime(datatype),
+                       outfn=i10_name)
+                pimseed(self.station, i10_name, ms_name)
+            except:
+                self.logmsg(logging.ERROR,
+                            'Error reading and converting IDA10 data for sensor ({}/{})'.format(datatype, sensor))
+                self.logmsg(logging.ERROR,
+                            'Can not use {} sensor data in sensor comparisons.'.format(sensor))
+                return False
+
+        try:
+            self.streams[datatype][sensor] = read(ms_name)
             self.streams[datatype][sensor].trim(starttime=self.starttime(datatype),
                                                 endtime=self.endtime(datatype))
             self.streams[datatype][sensor].merge()
@@ -724,14 +746,11 @@ class APSurvey(object):
             tr_1 = self.streams[datatype][sensor].select(component='1')[0] #  .copy()
             tr_2 = self.streams[datatype][sensor].select(component='2')[0] #  .copy()
             self.trtpls[datatype][sensor] = self.ChanTpl(z=tr_z, n=tr_1, e=tr_2)
-            self.msfiles[datatype][sensor] = os.path.abspath(outname + '.ms')
+            self.msfiles[datatype][sensor] = os.path.abspath(ms_name)
             self.streams[datatype][sensor].write(self.msfiles[datatype][sensor], format='MSEED')
-            self.waveform_files.append(outname+'.i10')
-            self.waveform_files.append(outname+'.ms')
         except:
             self.logmsg(logging.ERROR,
-                        'Error reading data for sensor ({}/{})'.format(
-                            datatype, sensor))
+                        'Error reading processing miniseed data for sensor ({}/{})'.format(datatype, sensor))
             self.logmsg(logging.ERROR,
                         'Can not use {} sensor data in sensor comparisons.'.format(sensor))
             return False
@@ -755,15 +774,15 @@ class APSurvey(object):
         sectpl = self.trtpls['azi']['sec'] if self.trtpls['azi']['sec'] else self.trtpls['abs']['sec']
 
         if (sens1 == 'ref') and (not reftpl):
-            self.logmsg(logging.ERROR, 'Can not retrieve REFERENCE sensor ' \
+            self.logmsg(logging.ERROR, 'Can not retrieve REFERENCE sensor ' + 
                            'response before reading reference data.')
             return False, False
         if ((sens1 == 'pri') or (sens2 == 'pri')) and (not pritpl):
-            self.logmsg(logging.ERROR, 'Can not retrieve PRIMARY sensor ' \
+            self.logmsg(logging.ERROR, 'Can not retrieve PRIMARY sensor ' + 
                            'response before reading primary sensor data.')
             return False, False
         if ((sens1 == 'sec') or (sens2 == 'sec')) and (not sectpl):
-            self.logmsg(logging.ERROR, 'Can not retrieve SECONDARY sensor ' \
+            self.logmsg(logging.ERROR, 'Can not retrieve SECONDARY sensor ' + 
                            'response before reading secondary sensor data.')
             return False, False
 
