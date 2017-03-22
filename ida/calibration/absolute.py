@@ -364,7 +364,7 @@ class APSurvey(object):
             self.logmsg(logging.ERROR, 'Missing key in configuration file: ' + 'arc_raw_dir')
         else:
             fpath = self._config['arc_raw_dir']
-            if not (os.path.exists(fpath) or not os.path.isdir(fpath)):
+            if not (os.path.exists(fpath)):  # or (not os.path.isdir(fpath)):
                 self.logmsg(logging.ERROR, 'Raw Archive directory does not exist: {}'.format(fpath))
 
         if 'resp_file_dir' not in self._config:
