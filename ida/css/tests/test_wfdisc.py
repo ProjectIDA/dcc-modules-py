@@ -79,5 +79,5 @@ def test_wfdisc_convert_raw_wf_s3():
     
     data = b'\x00\x17\xa6\x00\x17\xa2\x00\x17\x9a\x00\x17\x8b\xFF\x17\x82'
     newdata = ida.css.wfdisc.WfdiscSegment.convert_s3(data)
-    assert list(newdata) == [6054, 6050, 6042, 6027, 16717698]
+    assert list(newdata) == [6054, 6050, 6042, 6027, -59518]
 

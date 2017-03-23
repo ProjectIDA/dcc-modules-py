@@ -272,7 +272,10 @@ class WfdiscSegment(object):
         wfdata = []
 
         for ndx in range(0, len(rawdata), 3):
-            wfdata.append((rawdata[ndx] << 16) + (rawdata[ndx + 1] << 8) + (rawdata[ndx + 2]))
+            val = (rawdata[ndx] << 16) + (rawdata[ndx + 1] << 8) + (rawdata[ndx + 2])
+            if val > pow(2, 23):
+                val -= pow(2, 24) 
+            wfdata.append(val)
 
         return np.array(wfdata, dtype=np.int32)
 
