@@ -91,15 +91,21 @@ def shake_table_tf_plot(figid, datadir, comp, freqs, amp, pha, coh, add_title_te
     plt.ylim(floor(amp.min() * 100) / 100, ceil(amp.max() * 100) / 100)
 #    axlim = plt.axis()
 
-    plt.ylabel('TF Gain')
+    plt.ylabel('TF Gain (relative)')
     plt.xlabel('Freq (Hz)')
     plt.grid(which='both')
     plt.semilogx(freqs, amp)
 
     plt.subplot(312)
     plt.xlim(1e-1, 10)
-    # plt.ylim(-10, 5)
-    plt.ylabel('TF Phase')
+    # prevent ylims from being less than +/- 0.5 degrees
+    ymin = min(floor(pha.min() * 100) / 100, -0.5)
+    ymax = max(ceil(pha.max() * 100) / 100, +0.5)
+    plt.ylim(ymin, ymax)
+    # plt.ylim(floor(amp.min() * 100) / 100, ceil(amp.max() * 100) / 100)
+    # scaleplt.ylim(-10, 5)
+    
+    plt.ylabel('TF Phase (degrees)')
     plt.xlabel('Freq (Hz)')
     plt.grid(which='both')
     plt.semilogx(freqs, pha)
