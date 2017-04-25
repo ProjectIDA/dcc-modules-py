@@ -116,8 +116,20 @@ def analyze_cal_component(fullpaz, lfpertndxs, hfpertndxs, opsr, lftf_f, lf_tf, 
 
     """
 
-
     def resp_cost(p, paz_partial_flags, freqs, normfreq, tf_target, resp_pert0):
+        """
+        
+        Args:
+            p (list): initial values of poles and zeros in list form 
+            paz_partial_flags (list): flags identifying which poles and zeros to perturb
+            freqs (list): list of frequencies used in frequnecy response calc 
+            normfreq (float): frequency of normalization 
+            tf_target (list): list of real followed by imag components of target TF 
+            resp_pert0 (list(complex)): initial frequency response of paz to be perturbed 
+
+        Returns:
+            resid (list): array of difference between target and new TF fit with real followed by imag components
+        """
 
         # pack up into PAZ instances
         paz_pert = ida.signals.utils.pack_paz(p, paz_partial_flags)
@@ -155,14 +167,14 @@ def analyze_cal_component(fullpaz, lfpertndxs, hfpertndxs, opsr, lftf_f, lf_tf, 
         # Setting paz perturbation map and splitting...
         lf_paz_pert = fullpaz.make_partial(lfpertndxs, lf_norm_freq)
 
-        # computing response of perturbed paz...
+        # computing frequency response of perturbed paz...
         # initial response of paz_pert over freq_band of interest
         lf_resp0 = ida.signals.utils.compute_response(lfmeas_f_t, lf_paz_pert)
 
         lf_paz_pert_flat, lf_paz_pert_flags = ida.signals.utils.unpack_paz(lf_paz_pert,
                                                                            (list(range(0, lf_paz_pert.num_poles)),
                                                                             list(range(0, lf_paz_pert.num_zeros))))
-
+        # set upper/lower bounds for fitting algorithm
         lf_pazpert_lb = lf_paz_pert_flat - 0.5 * abs(lf_paz_pert_flat)
         lf_pazpert_ub = lf_paz_pert_flat + 0.5 * abs(lf_paz_pert_flat)
 
@@ -187,6 +199,7 @@ def analyze_cal_component(fullpaz, lfpertndxs, hfpertndxs, opsr, lftf_f, lf_tf, 
                                verbose=0)
         print(lf_res.message)
 
+        # re-combine perturbed poles/zeros into full set of poles and zeros
         new_lf_paz_pert = ida.signals.utils.pack_paz(lf_res.x, lf_paz_pert_flags)
         new_paz.merge_paz_partial(new_lf_paz_pert, lfpertndxs, hf_norm_freq)
 
@@ -199,7 +212,7 @@ def analyze_cal_component(fullpaz, lfpertndxs, hfpertndxs, opsr, lftf_f, lf_tf, 
         # Setting paz perturbation map and splitting...
         hf_paz_pert = fullpaz.make_partial(hfpertndxs, hf_norm_freq)
 
-        # computing response of perturbed paz...
+        # computing frequency response of perturbed paz...
         # initial response of paz_pert over freq_band of interest
         hf_resp0 = ida.signals.utils.compute_response(hfmeas_f_t, hf_paz_pert)
 
@@ -207,6 +220,7 @@ def analyze_cal_component(fullpaz, lfpertndxs, hfpertndxs, opsr, lftf_f, lf_tf, 
                                                                            (list(range(0, hf_paz_pert.num_poles)),
                                                                             list(range(0, hf_paz_pert.num_zeros))))
 
+        # set upper/lower bounds for fitting algorithm
         hf_pazpert_lb = hf_paz_pert_flat - 0.5 * abs(hf_paz_pert_flat)
         hf_pazpert_ub = hf_paz_pert_flat + 0.5 * abs(hf_paz_pert_flat)
 
@@ -231,6 +245,7 @@ def analyze_cal_component(fullpaz, lfpertndxs, hfpertndxs, opsr, lftf_f, lf_tf, 
                                verbose=0)
         print(hf_res.message)
 
+        # re-combine perturbed poles/zeros into full set of poles and zeros
         new_hf_paz_pert = ida.signals.utils.pack_paz(hf_res.x, hf_paz_pert_flags)
         new_paz.merge_paz_partial(new_hf_paz_pert, hfpertndxs, hf_norm_freq)
 
@@ -328,11 +343,11 @@ def prepare_cal_data(lfpath, lffile, hfpath, hffile, sensor, comp, fullpaz, opsr
 
         # prep output channels
         if comp == 'Z':
-            lf_out = cal_lf_tpl.vertical.data.copy()#[taper_bin_cnt_lf:-taper_bin_cnt_lf]
+            lf_out = cal_lf_tpl.vertical.data.copy()
         elif comp == '1':
-            lf_out = cal_lf_tpl.one.data.copy()#[taper_bin_cnt_lf:-taper_bin_cnt_lf]
+            lf_out = cal_lf_tpl.one.data.copy()
         elif comp == '2':
-            lf_out = cal_lf_tpl.two.data.copy()#[taper_bin_cnt_lf:-taper_bin_cnt_lf]
+            lf_out = cal_lf_tpl.two.data.copy()
         else:
             raise ValueError('Invalid component: ' + comp)
 
@@ -398,11 +413,11 @@ def prepare_cal_data(lfpath, lffile, hfpath, hffile, sensor, comp, fullpaz, opsr
 
         # prep output channels
         if comp == 'Z':
-            hf_out = cal_hf_tpl.vertical.data.copy()# [taper_bin_cnt_hf:-taper_bin_cnt_hf]
+            hf_out = cal_hf_tpl.vertical.data.copy()
         elif comp == '1':
-            hf_out = cal_hf_tpl.one.data.copy()#[taper_bin_cnt_hf:-taper_bin_cnt_hf]
+            hf_out = cal_hf_tpl.one.data.copy()
         elif comp == '2':
-            hf_out = cal_hf_tpl.two.data.copy()#[taper_bin_cnt_hf:-taper_bin_cnt_hf]
+            hf_out = cal_hf_tpl.two.data.copy()
         else:
             raise ValueError('Invalid component: ' + comp)
 
