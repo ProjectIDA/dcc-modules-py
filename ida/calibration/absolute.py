@@ -22,8 +22,7 @@
 #######################################################################################
 from datetime import datetime
 import os.path
-# from os import remove
-from pathlib import Path # , PurePath
+from pathlib import Path
 import yaml
 from collections import namedtuple
 import logging
@@ -33,12 +32,10 @@ matplotlib.use('Qt4Agg')
 import matplotlib.pyplot as plt
 plt.ion()
 
-#from fabulous.color import red, green, blue, bold
-from obspy import read, UTCDateTime, Stream  # Trace
+from obspy import read, UTCDateTime, Stream
 from obspy.signal.invsim import evalresp
 import obspy.signal.filter as osf
 from scipy.signal import tukey
-# from numpy import array, cos, sin, subtract, angle, complex128, absolute, less
 from numpy import array, ones, pi, arctan2, float64, multiply, divide, log10
 from numpy import std, sqrt, dot, insert
 from numpy.fft import rfft, irfft
@@ -53,8 +50,19 @@ from ida.signals.utils import time_offset, taper_high_freq_resp, \
 from ida.calibration.shaketable import rename_chan
 
 class APSurveyComponentResult(object):
+    """
+    Class representing the results for a single component (Z12).
+    It accumulates individual APSurveySegmentResult objects that each hold 
+    for an individual segment
+    """
 
     def __init__(self, comp):
+        """
+        Constructor for APSurveyComponentResult
+        
+        Args:
+            comp (str): 'Z', '1', or '2' 
+        """
         self.component = comp
         self.seg_results = []
         self._amp_mean = None
@@ -68,12 +76,28 @@ class APSurveyComponentResult(object):
         self._usable_count = 0
 
     def add_segment(self, apssegres):
+        """
+        Adds an individual segment result object to accumulating component result
+        and keeps track of number of 'usable' segments
+        
+        Args:
+            apssegres (APSurveySegmentResult): Segment result object to add  
+
+        Returns: None
+
+        """
         self.seg_results.append(apssegres)
         self._recalc_needed = True
         if apssegres.can_use:
             self._usable_count += 1
 
     def _recalc(self):
+        """
+        Recalculate overall compionent results from individual segment results.
+        
+        Returns: None
+
+        """
         if self.usable_count > 0:
             self._amp_mean = array([seg.amp for seg in self.seg_results if seg.can_use]).mean()
             self._amp_std = array([seg.amp for seg in self.seg_results if seg.can_use]).std()
@@ -93,30 +117,64 @@ class APSurveyComponentResult(object):
 
     @property
     def amp_mean(self):
+        """
+        Property returning the overall mean relative amplitude of the individual segments for this component
+        
+        Returns: (float) Mean relative amplitude 
+
+        """
         if self._recalc_needed:
             self._recalc()
         return self._amp_mean
 
     @property
     def amp_std(self):
+        """
+        Property returning the standard deviation of the relative amplitude of the 
+        individual segments for this component
+        
+        Returns: (float) STD deviations of the segment relative amplitude values 
+
+        """
         if self._recalc_needed:
             self._recalc()
         return self._amp_std
 
     @property
     def ang_mean(self):
+        """
+        Property returning the overall mean relative angle of the individual segments for this component
+        WITH RESPECT to the NORTH component of the baseline sensor
+
+        Returns: (float) Mean relative angle 
+
+        """
         if self._recalc_needed:
             self._recalc()
         return self._ang_mean
 
     @property
     def ang_std(self):
+        """
+        Property returning the standard deviation of the relative angle of the 
+        individual segments for this component WITH RESPECT to the NORTH component of the baseline sensor
+
+        Returns: (float) STD deviations of the segment relative angle values 
+
+        """
         if self._recalc_needed:
             self._recalc()
         return self._ang_std
 
     @property
     def ang_resid(self):
+        """
+        Property returning the standard deviation of the relative angle of the 
+        individual segments for this component WITH RESPECT to the NORTH component of the baseline sensor
+
+        Returns: (float) STD deviations of the segment relative angle values 
+
+        """
         if self._recalc_needed:
             self._recalc()
         return self._ang_resid
@@ -191,6 +249,89 @@ class APSurveySegmentResult(object):
         return self._use_segment
 
 class APSurvey(object):
+    """
+    Performs relative azimuth and sensitivity calculations for two or more sensors in pairs. Structured on 
+    IDA historical approach that can analysze both 2 sensors for a station at one time wrt to one or two sets 
+    of reference sensor data obtained with the Azimuth Pointing System Kit, Compact Trillium portable sensor and 
+    Taurus and Centaur portable digitizers.
+    
+    In addition to measuring azimuth and sensitivity of each station sensor wrt to the reference sensor data,
+    the second (loc=10) sensor is also compared against the first (loc=00) sensor. The relative reslts can then
+    be examined to see that the results of the three pairs fo sensors are internally consistent.
+    
+    A typical IDA APS calibration in the field will opbtain data for two lengthy time periods (15+ hours). 
+        1) 'Azimuth' data, with the reference sensor in a known orientation (from APS GPS infomation. This generally can only 
+    be done in open air, and does not permit the most accurate sensitivity comparisons between the reference sensor 
+    and the station sensors. 
+        2) 'Absolute' data is acquired with the reference sensor very near the station sensors,
+    on the same pier, for example. In this instance, the azimuth and clock on the reference sensor will not be 
+    very well known, but the location allows for a better comparison of sensitivities. 
+    
+    When both sets of data can be obtained, the first is used to compute the relative azimuth of the 
+    station sensors with the reference sensor, adn teh second is ude to compute the relative sensitivities.
+    
+    The analysis process is driven by a YAML configuration file that is supplied to the APSurvey constructor. 
+    The configuration file contains the following information (represented with Python data structures):
+    
+         {
+         # segment size. The entire timeseries is split into segments of this length. Analysis is performed on
+         each one and the results aggregated for an overall result,
+         'correlation_segment_size_secs': 7200,
+
+         # filtering bandpass used in analysis of each segment
+         'analysis_bandpass_hz': [0.1, 0.3],
+
+         # sample rate that both segments are decimated to before analysis
+         'analysis_sample_rate_hz': 5,
+
+         # size of individual segments 
+         'segment_size_secs': 1024,
+
+         # trim/taper size used at each end when deconvolving/convolving responses.
+         'segment_size_trim_secs': 128,
+
+         # coherence cutoff. If the pari of segments don't have a coherence of this value or greater 
+         # they are not used in the overall calculation for htat component. Start at 0.99 and go as low as 0.95
+         # for noisy data.
+         'coherence_cutoff': 0.99,
+
+          # station sensor meta data used to retrieve data from IDA archives
+          # and to find the correct sensor RESP file for convolution/deconvolution
+         'station': 'DGAR'
+         'pri_sensor_installed': True,
+         # channels should be in Z, 1, 2 order
+         'pri_sensor_chans': 'BHZ,BH1,BH2',
+         'pri_sensor_loc': '00',
+         'pri_sensor_installed': True,
+         'sec_sensor_chans': 'BHZ,BH1,BH2',
+         'sec_sensor_loc': '10',
+
+         # location and timeseries start/end info. Time ar used when retrieving station sensor data from IDA archives.
+         # the 'process' flag indicates whether to include the dataset in the analysis. One of the two must always 
+         # be set to True
+         'ref_absolute_data': {'endtime_iso': '',
+                               'ms_file': '',
+                               'process': False,
+                               'starttime_iso': ''},
+         'ref_azimuth_data': {'endtime_iso': '2016-12-03 02:00:00',
+                              'ms_file': '/ida/cal/raw/dgar/apsurvey/2016-12-02-azi2/STN01_centaur-3_0831_20161202_030400.seed',
+                              'process': True,
+                              'starttime_iso': '2016-12-02 05:15:00'},
+
+         # to override Trillium reference sensor timeseries metadata if metadata does not confirm to IDA conventions.
+         'ref_kit_metadata': {'location': '01', 'network': 'II', 'station': 'TRI'},
+
+         # location of root of IDA IDA10 archives
+         'arc_raw_dir': '/ida/archive/raw',
+         # NOTE: This may also be a MINISEED file, if a non-IDA sensor is being analyzed. 
+         # in this case, the metadata from the 'pri_sensor' above is used in output of results'
+
+         # location of RESP files used for comuting sensors responses
+         'resp_file_dir': '/ida/dcc/response/RESP',
+         
+         }
+                
+    """
 
     ChanTpl = namedtuple('ChanTuple', 'z n e')
 
@@ -205,7 +346,7 @@ class APSurvey(object):
 
         self.logger = logging.getLogger(__name__)
 
-        # in-memory streams and source miniseed data
+        # in-memory streams
         self.streams = {
             'abs': {
                 'ref': Stream(),
@@ -218,6 +359,7 @@ class APSurvey(object):
                 'sec': Stream()
             }
         }
+        # source miniseed data
         self.msfiles = {
             'abs': {
                 'ref': '',
@@ -230,6 +372,7 @@ class APSurvey(object):
                 'sec': ''
             }
         }
+        # 3-component ChanTpl's. 'abs' or 'azi' may be left empty if not running both analyses
         self.trtpls= {
             'abs': {
                 'ref': None,
@@ -246,17 +389,22 @@ class APSurvey(object):
         # note that '_v_' responses are because responses have to account for
         # potentially different sample-rates  & nyquist freqs
         self.responses = {
-            # responses for 'ref' sensor, adjusted for dif sampling rates of sta sensors
+            # responses for 'ref' sensor adjusted for dif sampling rates of sta sensors
+            # these are used to convolve reference response into station sensor timeseries
             'ref': {
                 'pri': None,
                 'sec': None,
             },
             'sec': {
-                'pri': None, # resp of SEC sta sensor adjusted for dif sampling rate of PRI
-                'sec': None  # regular response for SEC station sensor
+                # response for 'sec' sensor (if it exists) adjusted for dif sampling rates of pri sensor
+                # used to convolve sec response into pri timeseries when comparing pri sensors against sec.
+                'pri': None,
+
+                # regular response for sec station sensor used to deconvolve sta sensor response
+                'sec': None
             },
-            # now do regular responses for PRI station sensors
             'pri': {
+                # regular response for sec station sensor used to deconvolve sta sensor response
                 'pri': None
             },
         }
@@ -268,6 +416,8 @@ class APSurvey(object):
         self.ref_data_unusable = False  # assume will be ok, set True if probs on first read
         self.pri_data_unusable = False  # assume will be ok, set True if probs on first read
         self.sec_data_unusable = False  # assume will be ok, set True if probs on first read
+
+        # will be a ChanTpl containing a APSurveyComponentResults for each Z12 component
         self.results = None
 
         with open(fn, 'rt') as cfl:
@@ -283,6 +433,16 @@ class APSurvey(object):
             self._process_config()
 
     def _process_config(self):
+        """
+        Checks for existance of keys and some existance of some file/directory values 
+        in parsed yaml config file.
+        
+        Sets self.ok flag to False if it runs into any problems. 
+        Flag needs to be check from calling code
+        
+        Returns: None
+
+        """
 
         if 'correlation_segment_size_secs' not in self._config:
             self.ok = False
@@ -431,8 +591,7 @@ class APSurvey(object):
                     ))
                     self.ok = False
 
-
-    # if not using fabulous.color, don't really nee this abstraction
+    # TODO: if not using fabulous.color, don't really need this abstraction
     def logmsg(self, loglevel, errmsg):
         if self.logger:
             if loglevel == logging.DEBUG:
@@ -474,14 +633,6 @@ class APSurvey(object):
     def process_absolute(self):
         return self._config['ref_absolute_data']['process']
 
-    def dataset_enabled(self, dataset):
-        if dataset.lower() == 'azi':
-            return self.process_azimuth
-        elif dataset.lower() == 'abs':
-            return self.process_absolute
-        else:
-            return False
-
     @property
     def pri_sensor_installed(self):
         return self._config['pri_sensor_installed']
@@ -502,7 +653,6 @@ class APSurvey(object):
     def coherence_cutoff(self):
         return self._config['coherence_cutoff']
 
-
     def starttime(self, datatype):
         if datatype == 'azi':
             return self._config['ref_azimuth_data']['starttime_iso']
@@ -515,13 +665,27 @@ class APSurvey(object):
         elif datatype == 'abs':
             return self._config['ref_absolute_data']['endtime_iso']
 
-    def starttime_datetime(self, datatype):
-        return self.starttime(datatype).datetime
+    def starttime_datetime(self, dataset):
+        return self.starttime(dataset).datetime
 
-    def endtime_datetime(self, datatype):
-        return self.endtime(datatype).datetime
+    def endtime_datetime(self, dataset):
+        return self.endtime(dataset).datetime
 
-    def respfilename(self, net, sta, chn, loc):
+    def _respfilename(self, net, sta, chn, loc):
+        """
+        Construct the absolute or relative path of RESP file for given net, sta, chn, loc 
+        using RESP directory supplied in config variable resp_file_dir
+        
+        Args:
+            net (str): Network code 
+            sta (str): Station code
+            chn (str): Channel code
+            loc (str): Location code
+
+        Returns:
+            (str): Absolute path of RESP file
+
+        """
         resp_file = 'RESP.{}.{}.{}.{}'.format(net, sta, loc, chn)
         return os.path.join(self.resp_file_dir, resp_file)
 
@@ -538,31 +702,76 @@ class APSurvey(object):
     def resp_file_dir(self):
         return self._config['resp_file_dir']
 
-    def correct_ref_time(self, datatype, src1, src2):
+    def dataset_enabled(self, dataset):
+        """
+        Called externally to make sure dataset is enabled in config file before try calling self.analyze(dataset)
 
-        datatype = datatype.lower()
-        src1 = src1.lower()
-        src2 = src2.lower()
+        Args:
+            dataset (str): 'azi' or 'abs' 
 
-        if src2 not in ['pri', 'sec']:
-            raise ValueError('read_sensor_data: sensor must be "pri" or "sec".')
+        Returns:
+            (bool): True if data set 'dataset' is enabled in the configuration. False otherwise.
 
-        if datatype not in ['azi', 'abs']:
-            raise ValueError('read_sensor_data: datatype must be "azi" or "abs".')
+        """
+        if dataset.lower() == 'azi':
+            return self.process_azimuth
+        elif dataset.lower() == 'abs':
+            return self.process_absolute
+        else:
+            return False
 
-        if (src2 == 'pri') and not self.pri_sensor_installed:
+    def _correct_ref_time(self, dataset, sens1, sens2):
+        """
+        Cross correlate two timeseries to indentify any clock offset using the 'Z' copmonent data 
+        from each sensor. It takes a segment of the timeseries that is correlation_segment_size long 
+        (specified in config) and in the center of the timeseries.
+        
+        Teh two timeseries are bandpass filter from config bp_start (default is 0.1hz) to 2hz.
+        
+        The correlation calculation is performed by the obspy.signal.xcorr function underneath.
+        
+        Adjusts the starttime of the traces from sens1 to remove clock discrepancy. Positive offset 
+        adjustment value indicates that the sens1 clock is slow (behind) sens2. Negative indicates the opposite. 
+        
+        We adjust sens1 because when comparing with a true reference sensor timeseries the clock 
+        may have been set by hand, not GPS. So we assume the sta sensor clocks have better time 
+        using the Q330 and GPS.
+        
+        Args:
+            dataset (str): 
+            sens1 (str): should be 'ref' 
+            sens2 (str): 'pri' or 'sec' 
+
+        Returns:
+            (float, float, np.array, str): (Time offset in seconds, 
+                                            max correlation value,
+                                            correlation function values
+                                            error msg returned from underlying routines
+                                            )
+        """
+
+        sens1 = sens1.lower()
+        sens2 = sens2.lower()
+
+        if sens2 not in ['pri', 'sec']:
+            raise ValueError('_correct_ref_time: sens2 must be "pri" or "sec".')
+
+        if sens1 not in ['ref']:
+            raise ValueError('_correct_ref_time: sens1 must be "ref".')
+
+        if (sens2 == 'pri') and not self.pri_sensor_installed:
             raise ValueError('Primary sensor processing not enabled. ' +
                              ' Can not use it to correct reference clock. ' +
                              ' Check configuration.')
-        if (src2 == 'sec') and not self.sec_sensor_installed:
+        if (sens2 == 'sec') and not self.sec_sensor_installed:
             raise ValueError('Secondary sensor processing not enabled. ' +
                              ' Can not use it to correct reference clock. ' +
                              ' Check configuration.')
-        if (datatype == 'azi') and not self.process_azimuth:
+        if (dataset == 'azi') and not self.process_azimuth:
             raise ValueError('Azimuth data processing not enabled. ' +
                              ' Can not use it to correct reference clock. ' +
                              ' Check configuration.')
-        if (datatype == 'abs') and not self.process_absolute:
+        if (dataset == 'abs') and not self.process_absolute:
             raise ValueError('Absolute data processing not enabled. ' +
                              ' Can not use it to correct reference clock. ' +
                              ' Check configuration.')
@@ -572,16 +781,17 @@ class APSurvey(object):
         cfunc = []
         emsg = ''
 
-        ref_z = self.trtpls[datatype][src1].z.copy()
-        sensor_z = self.trtpls[datatype][src2].z.copy()
+        ref_z = self.trtpls[dataset][sens1].z.copy()
+        sensor_z = self.trtpls[dataset][sens2].z.copy()
 
         # need to interpolate if ref data sampling rate > sensor sampling rate
         if ref_z.stats.sampling_rate > sensor_z.stats.sampling_rate:
             sensor_z.interpolate(ref_z.stats.sampling_rate, method='linear')
 
         if sensor_z and ref_z:
-            ref_z.filter('bandpass', freqmin=self.bp_start, freqmax=2.0) # self.bp_stop)
-            sensor_z.filter('bandpass', freqmin=self.bp_start, freqmax=2.0) # self.bp_stop)
+            ref_z.filter('bandpass', freqmin=self.bp_start, freqmax=2.0)
+            sensor_z.filter('bandpass', freqmin=self.bp_start, freqmax=2.0)
+
             # take middle for time series correlation
             dur = sensor_z.stats.endtime - sensor_z.stats.starttime
             start_t = sensor_z.stats.starttime + dur/2 - self.correlation_segment_size/2
@@ -589,59 +799,75 @@ class APSurvey(object):
             ref_z.trim(start_t, end_t)
             sensor_z.trim(start_t, end_t)
 
+            # compute time offset and adjust starttime of sens1 traces
             offset, cval, cfunc, emsg = time_offset(sensor_z, ref_z)
-            if src1 == 'ref':
-                for tr in self.streams[datatype][src1]:
-                    tr.stats.starttime = tr.stats.starttime + offset
-                    # print('Adjusting REF start time by: ', offset)
-            else:
-                print('{}/{} Offset: {}'.format(src1, src2, offset))
+            for tr in self.streams[dataset][sens1]:
+                tr.stats.starttime = tr.stats.starttime + offset
 
+            # log a messages if max correlation function value is < 0.9
             if cval < 0.9:
                 self.logmsg(logging.WARN, 'WARNING (time_offset): Correlation value < 0.9: ' + str(cval))
 
         return offset, cval, cfunc, emsg
 
-    def read_ref_data(self, datatype):
+    def _read_ref_data(self, dataset):
         """
-        Reads AZI or ABS miniseed data for ref sensor.
+        Read reference sensor miniseed data for given dataset, 
+        and store ChanTpl of 3 component traces.
+        
+        Channels with old-style IDA reference sensor codes are reanmed to Z12.
+        Channels codes can be overriden with reference sensors metadata supplied 
+        in the config file, if it is set.
+        
+        Ultimately, the refernce sensor channel codes MUST end in Z, 1 and 2 to succeed.
+        
+        Args:
+            dataset (str): 'azi' or 'abs'
+
+        Returns:
+            (bool): Success flag. True if Reference data read successfully, False if not.
+
         """
 
-        if (datatype == 'abs') and not self.process_absolute:
+        if (dataset == 'abs') and not self.process_absolute:
                 self.logmsg(logging.WARN, 'Processing Absolute data is not enabled.')
                 return False
 
-        if (datatype == 'azi') and not self.process_azimuth:
+        if (dataset == 'azi') and not self.process_azimuth:
                 self.logmsg(logging.WARN, 'Processing Azimuth data is not enabled.')
                 return False
 
-        self.logmsg(logging.INFO, 'Reading REF sensor {} data...'.format(datatype.upper()))
+        self.logmsg(logging.INFO, 'Reading REF sensor {} data...'.format(dataset.upper()))
 
         try:
-            self.streams[datatype]['ref']= read(self.msfiles[datatype]['ref'], format='MSEED')
+            self.streams[dataset]['ref']= read(self.msfiles[dataset]['ref'], format='MSEED')
         except Exception as e:
-            self.logmsg(logging.ERROR, 'Error reading reference data: ' + self.msfiles[datatype]['ref'])
+            self.logmsg(logging.ERROR, 'Error reading reference data: ' + self.msfiles[dataset]['ref'])
             self.logmsg(logging.ERROR, 'Can not use REFERENCE data in sensor comparisons.')
             print()
             print(e)
             print()
             return False
 
-        self.streams[datatype]['ref'].trim(starttime=self.starttime(datatype),
-                                endtime=self.endtime(datatype))
+        self.streams[dataset]['ref'].trim(starttime=self.starttime(dataset),
+                                          endtime=self.endtime(dataset))
 
-        gaps = self.streams[datatype]['ref'].get_gaps()
+        gaps = self.streams[dataset]['ref'].get_gaps()
         if gaps:
             self.logmsg(logging.ERROR, 'REFERENCE data has gaps within time span indicated.')
-            self.streams[datatype]['ref'].print_gaps()
+            self.streams[dataset]['ref'].print_gaps()
             self.logmsg(logging.ERROR, 'Can not use REFERENCE data in sensor comparisons.')
-            self.streams[datatype]['ref'] = Stream()
+            self.streams[dataset]['ref'] = Stream()
             return False
 
-        self.streams[datatype]['ref'].merge()
+        # merge multiple traces together in one contiguous trace
+        self.streams[dataset]['ref'].merge()
 
-        for tr in self.streams[datatype]['ref']:
+        for tr in self.streams[dataset]['ref']:
+            # rename refernece sensors traces with old-style IDA channel codes
             tr.stats.channel = rename_chan(tr.stats.channel)
+
+            # override channel codes with those in config file, if they are set.
             if self._config['ref_kit_metadata']['network'].strip():
                 tr.stats.network = self._config['ref_kit_metadata']['network']
             if self._config['ref_kit_metadata']['station'].strip():
@@ -649,141 +875,197 @@ class APSurvey(object):
             if self._config['ref_kit_metadata']['location'].strip():
                 tr.stats.location = self._config['ref_kit_metadata']['location']
         try:
-            tr_z = self.streams[datatype]['ref'].select(component='Z')[0]
-            tr_1 = self.streams[datatype]['ref'].select(component='1')[0]
-            tr_2 = self.streams[datatype]['ref'].select(component='2')[0]
+            # split out traces based on channel Z12 codes
+            tr_z = self.streams[dataset]['ref'].select(component='Z')[0]
+            tr_1 = self.streams[dataset]['ref'].select(component='1')[0]
+            tr_2 = self.streams[dataset]['ref'].select(component='2')[0]
         except Exception as e:
             self.logmsg(logging.ERROR, 'Z12 components not found in reference data.')
-            print(self.streams[datatype]['ref'])
+            print(self.streams[dataset]['ref'])
             self.logmsg(logging.ERROR, 'Can not use REFERENCE data in sensor comparisons.')
-            self.streams[datatype]['ref'] = Stream()
+            self.streams[dataset]['ref'] = Stream()
             return False
 
-        self.trtpls[datatype]['ref'] = self.ChanTpl(z=tr_z, n=tr_1, e=tr_2)
+        # finally, store ref sensor traces for this dataset
+        self.trtpls[dataset]['ref'] = self.ChanTpl(z=tr_z, n=tr_1, e=tr_2)
 
         return True
 
-    def read_sensor_data(self, datatype, sensor):
+    def _read_sensor_data(self, dataset, sensor):
         """
-        Retrieve IDA10 data from IDA Archive and comvert to miniseed for
-        azi/abs time periods
+        Retrieve IDA10 data from IDA Archive and convert to miniseed for indicated
+        azi or abs time period. 
+        
+        ALTERNATELY, if the ARC_RAW_DIR config setting is a file, it is ASSUMED to be a miniseed file.
+        This is ONLY to run single analysis (not both 'azi' and 'abs') on an existing miniseed file
+        instead of pulling data from IDA10 archive. IN this miniseed file there MUST be only 3 traces
+        with Z12 channel codes.
+        
+        Args:
+            dataset (str): 'azi' or 'abs' to indicate which time period to read from archive 
+            sensor (str): 'pri' or 'sec' to indicate which sensor's data to read form archive
+
+        Returns: 
+            (bool): Success status: True sensor data read, or False if not.
+        
         """
 
-        datatype = datatype.lower()
+        dataset = dataset.lower()
         sensor = sensor.lower()
 
+        if dataset not in ['azi', 'abs']:
+            raise ValueError('_read_sensor_data: dataset must be "azi" or "abs".')
+
         if sensor not in ['pri', 'sec']:
-            raise ValueError('read_sensor_data: sensor must be "pri" or "sec".')
+            raise ValueError('_read_sensor_data: sensor must be "pri" or "sec".')
 
-        if datatype not in ['azi', 'abs']:
-            raise ValueError('read_sensor_data: datatype must be "azi" or "abs".')
-
-        # see if data previously read in...
-        if self.streams[datatype][sensor]:
+        # see if data previously read in.
+        # For cases when running both 'azi' and 'abs' in one pass
+        if self.streams[dataset][sensor]:
             self.logmsg(logging.INFO, 'Using {} sensor {} data already in memory'.format(
-                sensor.upper(), datatype.upper()))
+                sensor.upper(), dataset.upper()))
             return True
 
+        # user error here... command line conflicts with config file
+        # TODO: better logging/feedback
         if (sensor == 'pri') and not self.pri_sensor_installed:
             return False
         if (sensor == 'sec') and not self.sec_sensor_installed:
             return False
-        if datatype == 'azi' and not self.process_azimuth:
+        if dataset == 'azi' and not self.process_azimuth:
             return False
-        if datatype == 'abs' and not self.process_absolute:
+        if dataset == 'abs' and not self.process_absolute:
             return False
 
+        # check for non IDA sensor data supplied as miniseed file.
+        # TODO: this is a kludge and this situation needs to be reworked
         if os.path.isfile(self.arc_raw_dir):
-            #assume miniseed file with ONLY needed channels and time period
+            # assume miniseed file with ONLY needed channels and time period
+
             ms_name = self.arc_raw_dir
             self.waveform_files.append(ms_name)
 
         else:
+            # retrieve data from IDA IDA10 archive
+
+            # construct root of output file names
             outname = './{}_{}_{}'.format(self.station,
                                           self.station_sensor_loc(sensor),
-                                          datatype)
+                                          dataset)
             ms_name = outname + '.ms'
             i10_name = outname + '.i10'
-            if os.path.exists(i10_name): os.remove(i10_name)
-            if os.path.exists(ms_name): os.remove(ms_name)
+            if os.path.exists(i10_name):
+                os.remove(i10_name)
+            if os.path.exists(ms_name):
+                os.remove(ms_name)
 
             self.waveform_files.append(i10_name)
             self.waveform_files.append(ms_name)
 
             self.logmsg(logging.INFO, 'Retrieving {} sensor {} data from archive' \
-                        ' and saving in {}'.format(sensor.upper(), 
-                                                   datatype.upper(),
+                        ' and saving in {}'.format(sensor.upper(),
+                                                   dataset.upper(),
                                                    ms_name))
 
-            try:  # this is really too much in single try:
+            try:
+                # get IDA10 data and convert to miniseed
                 i10get(self.arc_raw_dir,
                        self.station,
-                       self.chanloc_codes(sensor),
-                       self.starttime(datatype), self.endtime(datatype),
+                       self._chanloc_codes(sensor),
+                       self.starttime(dataset), self.endtime(dataset),
                        outfn=i10_name)
                 pimseed(self.station, i10_name, ms_name)
             except:
                 self.logmsg(logging.ERROR,
-                            'Error reading and converting IDA10 data for sensor ({}/{})'.format(datatype, sensor))
+                            'Error reading and converting IDA10 data for sensor ({}/{})'.format(dataset, sensor))
                 self.logmsg(logging.ERROR,
                             'Can not use {} sensor data in sensor comparisons.'.format(sensor))
                 return False
 
         try:
-            self.streams[datatype][sensor] = read(ms_name)
-            self.streams[datatype][sensor].trim(starttime=self.starttime(datatype),
-                                                endtime=self.endtime(datatype))
-            self.streams[datatype][sensor].merge()
-            gaps = self.streams[datatype][sensor].get_gaps()
+            # TODO: Split up, too much in this block
+            # read ms file, merge traces, check for gaps and split trces into ChanTpl for processing
+            self.streams[dataset][sensor] = read(ms_name)
+            self.streams[dataset][sensor].trim(starttime=self.starttime(dataset),
+                                               endtime=self.endtime(dataset))
+            self.streams[dataset][sensor].merge()
+            gaps = self.streams[dataset][sensor].get_gaps()
             if gaps:
                 self.logmsg(logging.ERROR,
-                            '{} Sensor data has gaps within the time span indicated.'.format(sensor))
-                self.streams[datatype][sensor].print_gaps()
+                            '{} Sensor data has gaps'.format(sensor))
+                self.streams[dataset][sensor].print_gaps()
                 self.logmsg(logging.ERROR,
                             'Can not use {} sensor data in sensor comparisons.'.format(sensor))
                 return False
-            tr_z = self.streams[datatype][sensor].select(component='Z')[0] #  .copy()
-            tr_1 = self.streams[datatype][sensor].select(component='1')[0] #  .copy()
-            tr_2 = self.streams[datatype][sensor].select(component='2')[0] #  .copy()
-            self.trtpls[datatype][sensor] = self.ChanTpl(z=tr_z, n=tr_1, e=tr_2)
-            self.msfiles[datatype][sensor] = os.path.abspath(ms_name)
-            self.streams[datatype][sensor].write(self.msfiles[datatype][sensor], format='MSEED')
+            tr_z = self.streams[dataset][sensor].select(component='Z')[0]
+            tr_1 = self.streams[dataset][sensor].select(component='1')[0]
+            tr_2 = self.streams[dataset][sensor].select(component='2')[0]
+            self.trtpls[dataset][sensor] = self.ChanTpl(z=tr_z, n=tr_1, e=tr_2)
+            self.msfiles[dataset][sensor] = os.path.abspath(ms_name)
+            self.streams[dataset][sensor].write(self.msfiles[dataset][sensor], format='MSEED')
         except:
             self.logmsg(logging.ERROR,
-                        'Error reading processing miniseed data for sensor ({}/{})'.format(datatype, sensor))
+                        'Error reading processing miniseed data for sensor ({}/{})'.format(dataset, sensor))
             self.logmsg(logging.ERROR,
                         'Can not use {} sensor data in sensor comparisons.'.format(sensor))
             return False
 
-
         return True
 
-    def read_responses(self, sens1, sens2):
+    def _read_responses(self, sens1, sens2):
+        """
+        Computes a pair of responses, for each component, for comparing a specific pair of sensors.
+         
+        One is the response for sens1, but computed with the sample rate of sens2. This is used to convolve 
+        the sen1 response into the sens2 timeseries.
+        
+        The other is the response of sens, at it's normal operating sample rate. This is used to deconvolving
+        sens2 response from it's timeseries
+        
+        
+        sens1 is considered the 'reference' sensor. and sens2 timeseries is  
+        
+        For each component:
+            The
+         
+         
+        azimuth and abs sensitivity of sens2 wrt sens1.
+        
+        
+        
+        Args:
+            sens1 (str): 'ref' or 'sec'. These are the two sensors that can be used as baseline 
+            sens2 (str):  'pri' or 'sec'. These are the two sensors that are compared against a baseline sensor 
+
+        Returns:
+            (bool, bool): Success flags. (Ref response OK, Sensor response OK)
+
+        """
 
         sens1 = sens1.lower()
         sens2 = sens2.lower()
 
         if sens1 not in ['ref', 'sec']:
-            raise ValueError('read_responses: sens1 must be "ref" or "sec"')
+            raise ValueError('_read_responses: sens1 must be "ref" or "sec"')
 
         if sens2 not in ['pri', 'sec']:
-            raise ValueError('read_responses: sens2 must be "pri" or "sec".')
+            raise ValueError('_read_responses: sens2 must be "pri" or "sec".')
 
         reftpl = self.trtpls['azi']['ref'] if self.trtpls['azi']['ref'] else self.trtpls['abs']['ref']
         pritpl = self.trtpls['azi']['pri'] if self.trtpls['azi']['pri'] else self.trtpls['abs']['pri']
         sectpl = self.trtpls['azi']['sec'] if self.trtpls['azi']['sec'] else self.trtpls['abs']['sec']
 
         if (sens1 == 'ref') and (not reftpl):
-            self.logmsg(logging.ERROR, 'Can not retrieve REFERENCE sensor ' + 
+            self.logmsg(logging.ERROR, 'Can not retrieve REFERENCE sensor ' +
                            'response before reading reference data.')
             return False, False
         if ((sens1 == 'pri') or (sens2 == 'pri')) and (not pritpl):
-            self.logmsg(logging.ERROR, 'Can not retrieve PRIMARY sensor ' + 
-                           'response before reading primary sensor data.')
+            self.logmsg(logging.ERROR, 'Can not retrieve PRIMARY sensor ' +
+                        'response before reading primary sensor data.')
             return False, False
         if ((sens1 == 'sec') or (sens2 == 'sec')) and (not sectpl):
-            self.logmsg(logging.ERROR, 'Can not retrieve SECONDARY sensor ' + 
-                           'response before reading secondary sensor data.')
+            self.logmsg(logging.ERROR, 'Can not retrieve SECONDARY sensor ' +
+                        'response before reading secondary sensor data.')
             return False, False
 
         if sens1 == 'ref':
@@ -796,85 +1078,46 @@ class APSurvey(object):
         else:
             sentpl = sectpl
 
-        if not self.responses[sens1][sens2]:
-            self.logmsg(logging.INFO, 'Computing {} response for {}/{} comparison...'.format(sens1.upper(),
-                                                                         sens1.upper(),
-                                                                         sens2.upper()))
-            ref_z, freqs, ref_ok = self.response_tr(reftpl.z.stats.starttime,
-                                            sentpl.z.stats.sampling_rate*self.segment_size_secs,
-                                            sentpl.z.stats.sampling_rate,
-                                            reftpl.z.stats.network,
-                                            reftpl.z.stats.station,
-                                            reftpl.z.stats.channel,
-                                            reftpl.z.stats.location,
-                                            units='VEL')
-            ref_1, freqs, ref_ok = self.response_tr(reftpl.n.stats.starttime,
-                                            sentpl.n.stats.sampling_rate*self.segment_size_secs,
-                                            sentpl.n.stats.sampling_rate,
-                                            reftpl.n.stats.network,
-                                            reftpl.n.stats.station,
-                                            reftpl.n.stats.channel,
-                                            reftpl.n.stats.location,
-                                            units='VEL')
-            ref_2, freqs, ref_ok = self.response_tr(reftpl.e.stats.starttime,
-                                            sentpl.e.stats.sampling_rate*self.segment_size_secs,
-                                            sentpl.e.stats.sampling_rate,
-                                            reftpl.e.stats.network,
-                                            reftpl.e.stats.station,
-                                            reftpl.e.stats.channel,
-                                            reftpl.e.stats.location,
-                                            units='VEL')
-            if ref_ok:
-                dynlimit_resp_min(ref_z, 100.0)
-                dynlimit_resp_min(ref_1, 100.0)
-                dynlimit_resp_min(ref_2, 100.0)
-                # this is the response of hte 'ref' sensors prepared for convolution
-                # with sens2. Will NOT be regular 'ref' response if sample rates are different
-                self.responses[sens1][sens2] = self.ChanTpl(z=ref_z, n=ref_1, e=ref_2)
-
-        else:
-            ref_ok = True
-            self.logmsg(logging.INFO, 'Using {} response already in memory...'.format(sens1.upper()))
-
+        # compute responses for sens2. For deconcolving response later...
         if not self.responses[sens2][sens2]:
             self.logmsg(logging.INFO, 'Computing {} response for {}/{} comparison...'.format(sens2.upper(),
                                                                          sens1.upper(),
                                                                          sens2.upper()))
             sen_z, freqs, sen_ok = self.response_tr(sentpl.z.stats.starttime,
-                                                sentpl.z.stats.sampling_rate*self.segment_size_secs,
-                                                sentpl.z.stats.sampling_rate,
-                                                sentpl.z.stats.network,
-                                                sentpl.z.stats.station,
-                                                sentpl.z.stats.channel,
-                                                sentpl.z.stats.location,
-                                                units='VEL')
+                                                    sentpl.z.stats.sampling_rate*self.segment_size_secs,
+                                                    sentpl.z.stats.sampling_rate,
+                                                    sentpl.z.stats.network,
+                                                    sentpl.z.stats.station,
+                                                    sentpl.z.stats.channel,
+                                                    sentpl.z.stats.location,
+                                                    units='VEL')
             sen_1, freqs, sen_ok = self.response_tr(sentpl.n.stats.starttime,
-                                                sentpl.n.stats.sampling_rate*self.segment_size_secs,
-                                                sentpl.n.stats.sampling_rate,
-                                                sentpl.n.stats.network,
-                                                sentpl.n.stats.station,
-                                                sentpl.n.stats.channel,
-                                                sentpl.n.stats.location,
-                                                units='VEL')
+                                                    sentpl.n.stats.sampling_rate*self.segment_size_secs,
+                                                    sentpl.n.stats.sampling_rate,
+                                                    sentpl.n.stats.network,
+                                                    sentpl.n.stats.station,
+                                                    sentpl.n.stats.channel,
+                                                    sentpl.n.stats.location,
+                                                    units='VEL')
             sen_2, freqs, sen_ok = self.response_tr(sentpl.e.stats.starttime,
-                                                sentpl.e.stats.sampling_rate*self.segment_size_secs,
-                                                sentpl.e.stats.sampling_rate,
-                                                sentpl.e.stats.network,
-                                                sentpl.e.stats.station,
-                                                sentpl.e.stats.channel,
-                                                sentpl.e.stats.location,
-                                                units='VEL')
+                                                    sentpl.e.stats.sampling_rate*self.segment_size_secs,
+                                                    sentpl.e.stats.sampling_rate,
+                                                    sentpl.e.stats.network,
+                                                    sentpl.e.stats.station,
+                                                    sentpl.e.stats.channel,
+                                                    sentpl.e.stats.location,
+                                                    units='VEL')
             if sen_ok:
-                # but lets exponentially taper off highest 5% of freqs before nyquist
-                #  taper off high freq response before deconvolving strm2 resp
+                # exponentially taper off highest 5% of freqs before nyquist
+                # taper off high freq response before deconvolving sens2 resp
                 # per idaresponse/resp.c
                 taper_high_freq_resp(sen_z, 0.95)
+                taper_high_freq_resp(sen_1, 0.95)
+                taper_high_freq_resp(sen_2, 0.95)
                 # clip minimum amp resp to 1/100.0 of max amp
                 # per idaresponse/resp.c
                 dynlimit_resp_min(sen_z, 100.0)
-                taper_high_freq_resp(sen_1, 0.95)
                 dynlimit_resp_min(sen_1, 100.0)
-                taper_high_freq_resp(sen_2, 0.95)
                 dynlimit_resp_min(sen_2, 100.0)
                 # note this is the regular responses for either 'pri' or 'sec' sensors
                 self.responses[sens2][sens2] = self.ChanTpl(z=sen_z, n=sen_1, e=sen_2)
@@ -882,20 +1125,83 @@ class APSurvey(object):
             sen_ok = True
             self.logmsg(logging.INFO, 'Using {} response already in memory...'.format(sens2.upper()))
 
+        # compute responses for sens1 with sens2 sample rate, for convolving sens1 response into sens2, later...
+        if not self.responses[sens1][sens2]:
+            self.logmsg(logging.INFO, 'Computing {} response for {}/{} comparison...'.format(sens1.upper(),
+                        sens1.upper(),
+                        sens2.upper()))
+            ref_z, freqs, ref_ok = self.response_tr(reftpl.z.stats.starttime,
+                                                    sentpl.z.stats.sampling_rate*self.segment_size_secs,
+                                                    sentpl.z.stats.sampling_rate,
+                                                    reftpl.z.stats.network,
+                                                    reftpl.z.stats.station,
+                                                    reftpl.z.stats.channel,
+                                                    reftpl.z.stats.location,
+                                                    units='VEL')
+            ref_1, freqs, ref_ok = self.response_tr(reftpl.n.stats.starttime,
+                                                    sentpl.n.stats.sampling_rate*self.segment_size_secs,
+                                                    sentpl.n.stats.sampling_rate,
+                                                    reftpl.n.stats.network,
+                                                    reftpl.n.stats.station,
+                                                    reftpl.n.stats.channel,
+                                                    reftpl.n.stats.location,
+                                                    units='VEL')
+            ref_2, freqs, ref_ok = self.response_tr(reftpl.e.stats.starttime,
+                                                    sentpl.e.stats.sampling_rate*self.segment_size_secs,
+                                                    sentpl.e.stats.sampling_rate,
+                                                    reftpl.e.stats.network,
+                                                    reftpl.e.stats.station,
+                                                    reftpl.e.stats.channel,
+                                                    reftpl.e.stats.location,
+                                                    units='VEL')
+            if ref_ok:
+                # clip minimum amp resp to 1/100.0 of max amp
+                # per idaresponse/resp.c
+                # TODO: why idaresponse/resp.c has no high freq taper here...?
+                dynlimit_resp_min(ref_z, 100.0)
+                dynlimit_resp_min(ref_1, 100.0)
+                dynlimit_resp_min(ref_2, 100.0)
+                self.responses[sens1][sens2] = self.ChanTpl(z=ref_z, n=ref_1, e=ref_2)
+
+        else:
+            ref_ok = True
+            self.logmsg(logging.INFO, 'Using {} response already in memory...'.format(sens1.upper()))
+
         return ref_ok, sen_ok
 
-    def sensor_sample_rate_str(self, datatype, sensor):
-        if self.streams[datatype][sensor]:
-            return str(self.streams[datatype][sensor][0].stats.sampling_rate)
+    def _sensor_sample_rate_str(self, dataset, sensor):
+        """
+        Reads sample rate from the first Trace in dataset/sensor Stream and returns it formatted as a string
+        
+        Args:
+            dataset (str): 'azi' or 'abs' 
+            sensor (str): 'ref' or 'pri' or 'sec'
+
+        Returns:
+            (str): sample rate value represented as a string. Empty string if dataset/sensor does not exist
+
+        """
+        if self.streams[dataset][sensor]:
+            return str(self.streams[dataset][sensor][0].stats.sampling_rate)
         else:
             return ''
 
-    def chanloc_codes(self, sensor):
+    def _chanloc_codes(self, sensor):
+        """
+        
+        Args:
+            sensor (str): 'pri' or 'sec' 
+
+        Returns:
+            (str): Comma separated list of CHAN+LOC codes as set in config for 'sensor'. 
+                    Returns empty string if not set in config or if invalid sensor requested 
+
+        """
 
         if sensor == 'pri':
             chans = self._config.get('pri_sensor_chans', '').lower().split(',')
             loc = self._config.get('pri_sensor_loc', '').upper()
-            if chans :
+            if chans:
                 return ','.join([chan+loc for chan in chans])
             else:
                 return ''
@@ -903,20 +1209,40 @@ class APSurvey(object):
         elif sensor == 'sec':
             chans = self._config.get('sec_sensor_chans', '').lower().split(',')
             loc = self._config.get('sec_sensor_loc', '').upper()
-            if chans :
+            if chans:
                 return ','.join([chan+loc for chan in chans])
             else:
                 return ''
+        else:
+            return ''
 
     def response_tr(self, respdate, npts, sr, net, sta, chn, loc, units='VEL'):
-        resp, f = None, None
-        respfile = self.respfilename(net, sta, chn, loc)
+        """
+        Obtain channel/loc frequency response using evalresp (from obspy) and RESP file on disk.
+         
+        Args:
+            respdate (datetime or UTCDateTime): Time at for response should be returned 
+            npts (int): NUmber of points in the response 
+            sr (int or float): sample rate at which response should be computed 
+            net (str): Network code
+            sta (str): Station code
+            chn (str): Channel code
+            loc (str): Location code
+            units (str): 'DIS', 'VEL', or 'ACC'
 
-        if os.path.exists(respfile):
+        Returns:
+            (np.array, np.array, bool): 
+                (Complex array with response, array with frequencies, True/False Success flag)
+
+        """
+        resp, f = None, None
+        respfn = self._respfilename(net, sta, chn, loc)
+
+        if os.path.exists(respfn):
             try:
-                resp, f = evalresp(1/sr,
+                resp, f = evalresp(1 / sr,
                                    npts,
-                                   self.respfilename(net, sta, chn, loc),
+                                   respfn,
                                    UTCDateTime(respdate),
                                    station=sta,
                                    channel=chn,
@@ -926,19 +1252,39 @@ class APSurvey(object):
                 ok = True
             except:
                 self.logmsg(logging.ERROR,
-                            'Error running EVALRESP with RESP file {}.'.format(respfile))
+                            'Error running EVALRESP with RESP file {}.'.format(respfn))
                 ok = False
         else:
-            self.logmsg(logging.ERROR, 'RESP file not found: ' + respfile)
+            self.logmsg(logging.ERROR, 'RESP file not found: ' + respfn)
             ok = False
 
         return resp, f, ok
 
-    def ms_filename(self, datatype, src):
-        return Path(self.msfiles[datatype][src]).name
+    def ms_filename(self, dataset, sensor):
+        """
+        Args:
+            dataset (str): 'azi' or 'abs' 
+            sensor (str): 'pri' or 'sec'
+
+        Returns:
+            (str): miniseed filename for dataset and sensor
+
+        """
+        return Path(self.msfiles[dataset][sensor]).name
 
 
-    def save_header(self, datatype, sumf, detf):
+    def _get_result_headers(self, datatype):
+        """
+        Construct headers with analysis parameters for summary and detailed results files.
+        
+        Args:
+            datatype (str): 'azi' or 'abs' 
+
+        Returns:
+            (str, str): (Summary Hdr, Detailed Hdr) 
+
+        """
+
         header = '#'*144 + '\n'
         header += '# ANALYSIS PARAMETERS\n'
         header += '# =====================\n'
@@ -948,13 +1294,13 @@ class APSurvey(object):
         header += '#              dataset: {}\n'.format(datatype.upper())
         header += '#              station: {}\n'.format(self.station.upper())
         header += '#           pri sensor: {}\n'.format(self.pri_sensor_installed)
-        header += '#     pri data sr (hz): {}\n'.format(self.sensor_sample_rate_str(datatype, 'pri'))
-        header += '#            pri chans: {}\n'.format(self.chanloc_codes('pri').upper())
+        header += '#     pri data sr (hz): {}\n'.format(self._sensor_sample_rate_str(datatype, 'pri'))
+        header += '#            pri chans: {}\n'.format(self._chanloc_codes('pri').upper())
         header += '#           sec sensor: {}\n'.format(self.sec_sensor_installed)
-        header += '#     sec data sr (hz): {}\n'.format(self.sensor_sample_rate_str(datatype, 'sec'))
-        header += '#            sec chans: {}\n'.format(self.chanloc_codes('sec').upper())
+        header += '#     sec data sr (hz): {}\n'.format(self._sensor_sample_rate_str(datatype, 'sec'))
+        header += '#            sec chans: {}\n'.format(self._chanloc_codes('sec').upper())
         header += '#          ref ms file: {}\n'.format(self.msfiles[datatype]['ref'])
-        header += '#     ref data sr (hz): {}\n'.format(self.sensor_sample_rate_str(datatype, 'ref'))
+        header += '#     ref data sr (hz): {}\n'.format(self._sensor_sample_rate_str(datatype, 'ref'))
         header += '#   ref clock base sen: {}\n'.format(self.ref_clock_adjustment_sensor)
         header += '#   ref clock adjusted: {}\n'.format(self.ref_clock_adjusted)
         header += '# ref clock adj (secs): {}\n'.format(self.ref_clock_adjustment)
@@ -981,138 +1327,181 @@ class APSurvey(object):
                      'amp', 'angle', 'lrms', 'var',
                      'coh', 'cohcut', 'status', 'analyzedon',
                      'sen1_ms_file', 'sen2_ms_file')
-        sumf.write(header + sumhdr)
-        detf.write(header + dethdr)
 
-    def save_footer(self, datatype, sumf, detf):
-        sumf.write('#'*144 + '\n')
-        detf.write('#'*144 + '\n')
+        return header + sumhdr, header + dethdr
 
-    def save_results(self, datatype, src1, src2, results, sumf, detf):
+    def _get_result_text(self, dataset, sens1, sens2, results):
+        """
+        Construct text for results summary and detail result files form 'results'
+        Args:
+            dataset (str): 'azi' or 'abs' 
+            sens1 (str): 'ref' or 'sec'
+            sens2 (str): 'pri' or 'sec'
+            results (ChanTpl): ChanTpl with APSurveyComponentResults for each component
+
+        Returns:
+            (str, str): (Summary result text, Detailed result text). 
+                        Returns empty strings if no results (should never happen)
+
+        """
+
+        sumres = ''
+        detres = ''
+
         analday = datetime.now().strftime('%Y-%m-%d')
         if results:
+            # loop through each component in results ChanTpl
             for compres in results:
                 if compres.usable_count == 0:
+                    # so sad...
                     sumres = '{:<4} {}/{} : {} No usable segments. {} {}'.format(
-                        self.station.upper(), src1.upper(), src2.upper(),
-                        compres.component, self.msfiles[datatype][src1],
-                        self.msfiles[datatype][src2])
+                        self.station.upper(), sens1.upper(), sens2.upper(),
+                        compres.component, self.msfiles[dataset][sens1],
+                        self.msfiles[dataset][sens2])
                 else:
+                    # construct summary result text record from component form aggregate calculations
                     sumres = '   {:<4} {:<4} {:<4} {:<4} '\
                              '{:7.4f} {:7.3f} '\
                              '{:8.3f} {:7.3f} {:7.3f} {:7.3f} '\
                              '{:8.3f} {:>6} {:>6} '\
                              '{:>10} {:<14} {:<14}'.format(
-                                 self.station.upper(), src1.upper(), src2.upper(),
+                                 self.station.upper(), sens1.upper(), sens2.upper(),
                                  compres.component, compres.amp_mean, compres.amp_std,
                                  (compres.ang_mean * 180./pi) % 360.,
                                  (compres.ang_std * 180./pi) % 360.,
                                  compres.lrms_mean, compres.var_mean,
                                  self.coherence_cutoff, compres.usable_count,
-                                 compres.total_count, analday, self.ms_filename(datatype, src1),
-                                 self.ms_filename(datatype, src2))
+                                 compres.total_count, analday, self.ms_filename(dataset, sens1),
+                                 self.ms_filename(dataset, sens2))
                 self.logmsg(logging.INFO, sumres)
-                sumf.write(sumres+'\n')
+                sumres += '\n'
 
+                # build detailed result text, one text line for the result for each segment
                 for res in compres.seg_results:
                     excl = 'EXCL' if not res.can_use else 'Ok  '
                     detres = '   {:<4} {:<4} {:<4} {:<4} {} {:17.6f} {:7.4f} {:8.3f} '\
                             '{:7.3f} {:7.3f} {:7.4f} {:7.3f} {:<6} {:>10} {:<14} {:<14}'.format(
-                        self.station.upper(), src1.upper(), src2.upper(), compres.component,
+                        self.station.upper(), sens1.upper(), sens2.upper(), compres.component,
                         res.start_utc, res.start_epoch, res.amp, (res.ang * 180./pi + 360.) % 360.,
                         res.lrms, res.var, res.coh, self.coherence_cutoff, excl, analday,
-                        self.ms_filename(datatype, src1), self.ms_filename(datatype, src2))
-                    detf.write(detres+'\n')
+                        self.ms_filename(dataset, sens1), self.ms_filename(dataset, sens2))
+                    detres += '\n'
 
-    def analyze(self, datatype):
+        return sumres, detres
+
+    def analyze(self, dataset):
+        """
+        Called externally to perform the analysis and write out results for a given 'dataset'.
+        
+        The refernce data is read first. 
+        
+        Then the secondary station sensor is read. The secondary sensor is read first because in most cases
+        it will be sampling at the same rate (40hz) as the reference sensor and is therefor better to use 
+        to run a correlation to identify and time offset between the reference and station sensors' timeseries
+        
+        Once any time offset is correction
+        Args:
+            dataset (str): 'azi' or 'abs 
+
+        Returns:
+            (str, str, list): Summary, detail and list of waveform files names, respectively.
+
+        """
+
+        dataset = dataset.lower()
+        if dataset not in ['azi', 'abs']:
+            raise ValueError('analyze: dataset must be "azi" or "abs".')
 
         self.waveform_files = []
         sensors_available = 0  # need 2+ to do any comparisons
 
-        data_ok = self.read_ref_data(datatype)
+        # read reference sensor data
+        data_ok = self._read_ref_data(dataset)
         compare_ref = data_ok
         if not data_ok:
             self.logmsg(logging.WARN, 'Unable to process {} REFERENCE sensor data.'.format(
-                datatype.upper()))
+                dataset.upper()))
             self.logmsg(logging.WARN, 'Skipping comparisons with REFERENCE sensor')
         else:
             sensors_available += 1
 
+        # read 'sec' sta sensor if enabled/active in config
         if self.sec_sensor_installed:
-            data_ok = self.read_sensor_data(datatype, 'sec')
+            data_ok = self._read_sensor_data(dataset, 'sec')
             compare_sec = data_ok
             if not data_ok:
                 self.logmsg(logging.WARN, 'Unable to process {} SECONDARY sensor data.'.format(
-                    datatype.upper()))
+                    dataset.upper()))
                 self.logmsg(logging.WARN, 'Skipping comparisons with SECONDARY sensor')
             else:
+                # compute ref/sec time offset
                 sensors_available += 1
-                offset, _, _, _ = self.correct_ref_time(datatype, 'ref', 'sec')
+                offset, _, _, _ = self._correct_ref_time(dataset, 'ref', 'sec')
                 self.ref_clock_adjustment = offset
                 self.ref_clock_adjusted = True
                 self.ref_clock_adjustment_sensor = 'secondary'
         else:
             compare_sec = False  # not installed
 
+        # read 'sec' sta sensor if enabled/active in config
         if self.pri_sensor_installed:
-            data_ok = self.read_sensor_data(datatype, 'pri')
+            data_ok = self._read_sensor_data(dataset, 'pri')
             compare_pri = data_ok
             if not data_ok:
                 self.logmsg(logging.WARN, 'Unable to process {} PRIMARY sensor data.'.format(
-                    datatype.upper()))
+                    dataset.upper()))
                 self.logmsg(logging.WARN, 'Skipping comparisons with PRIMARY sensor')
             else:
+                # compute time offset IFF not already done with 'sec' sensor
                 sensors_available += 1
                 if not self.ref_clock_adjusted:
-                    offset, _, _, _ = self.correct_ref_time(datatype, 'ref', 'pri')
+                    offset, _, _, _ = self._correct_ref_time(dataset, 'ref', 'pri')
                     self.ref_clock_adjustment = offset
                     self.ref_clock_adjusted = True
                     self.ref_clock_adjustment_sensor = 'primary'
         else:
             compare_pri = False  # not installed
 
-        dataday = self.starttime_datetime(datatype).strftime('%Y-%m-%d')
-        detfn = '{}_{}_{}_details.txt'.format(self.station.lower(), dataday, datatype)
-        sumfn = '{}_{}_{}_summary.txt'.format(self.station.lower(), dataday, datatype)
+        # build result file names from 'dataset' and date at start of timeseries
+        dataday = self.starttime_datetime(dataset).strftime('%Y-%m-%d')
+        detfn = '{}_{}_{}_details.txt'.format(self.station.lower(), dataday, dataset)
+        sumfn = '{}_{}_{}_summary.txt'.format(self.station.lower(), dataday, dataset)
 
         with open(sumfn, 'at') as sumf:
             with open(detfn, 'at') as detf:
 
-                self.save_header(datatype, sumf, detf)
+                sumhdr, dethdr = self._get_result_headers(dataset)
+                sumf.write(sumhdr)
+                detf.write(dethdr)
 
+                comparisons = []
                 if sensors_available >= 2:
                     if compare_ref and compare_sec:
-                        src1, src2 = 'ref', 'sec'
-                        results = self.compare_streams(datatype, src1, src2)
-                        if results:
-                            self.save_results(datatype, src1, src2, results, sumf, detf)
-                        else:
-                            sumf.write('# ERROR: No comparison results returned!\n')
-                            detf.write('# ERROR: No comparison results returned!\n')
+                        comparisons.append(('ref', 'sec'))
 
                     if compare_ref and compare_pri:
-                        src1, src2 = 'ref', 'pri'
-                        results = self.compare_streams(datatype, src1, src2)
-                        if results:
-                            self.save_results(datatype, src1, src2, results, sumf, detf)
-                        else:
-                            sumf.write('# ERROR: No comparison results returned!\n')
-                            detf.write('# ERROR: No comparison results returned!\n')
+                        comparisons.append(('ref', 'pri'))
 
                     if compare_pri and compare_sec:
-                        src1, src2 = 'sec', 'pri'
-                        results = self.compare_streams(datatype, src1, src2)
+                        comparisons.append(('sec', 'pri'))
+
+                    # loop through pairs of sensors, comparing streams and writing out results...
+                    for sens1, sens2 in comparisons:
+                        results = self.compare_streams(dataset, sens1, sens2)
                         if results:
-                            self.save_results(datatype, src1, src2, results, sumf, detf)
+                            sumres, detres = self._get_result_text(dataset, sens1, sens2, results)
+                            sumf.write(sumres)
+                            detf.write(detres)
                         else:
                             sumf.write('# ERROR: No comparison results returned!\n')
                             detf.write('# ERROR: No comparison results returned!\n')
                 else:
-                    detf.write('# No comparisons possible for {} data sets\n'.format(datatype.upper()))
-                    sumf.write('# No comparisons possible for {} data sets\n'.format(datatype.upper()))
+                    detf.write('# No comparisons possible for {} data sets\n'.format(dataset.upper()))
+                    sumf.write('# No comparisons possible for {} data sets\n'.format(dataset.upper()))
 
-
-                self.save_footer(datatype, detf, sumf)
+                # write footers to results files
+                sumf.write('#'*144 + '\n')
+                detf.write('#'*144 + '\n')
 
         return sumfn, detfn, self.waveform_files
 
@@ -1127,7 +1516,7 @@ class APSurvey(object):
             angle, amp, and variance measures
         """
 
-        src1_resp_ok, src2_resp_ok = self.read_responses(src1, src2)
+        src1_resp_ok, src2_resp_ok = self._read_responses(src1, src2)
         if not src1_resp_ok:
             self.logmsg(logging.WARN, 'Unable to read {} response.'.format(src1))
             self.logmsg(logging.WARN, 'Can not perform comparison: {}/{}'.format(
@@ -1216,7 +1605,7 @@ class APSurvey(object):
 
             tr2_fft = rfft(multiply(tr2_seg, taper))
             tr2_fft_dcnv = divide(tr2_fft[1:], tr2_resp[1:])
-            tr2_fft_dcnv = insert(tr2_fft_dcnv, 0, 0.0)
+            tr2_fft_dcnv = insert(tr2_fft_dcnv, 0, [0.0])
             tr2_dcnv = irfft(tr2_fft_dcnv)
             # demean again before convolving strm2 resp
             tr2_dcnv = ss.detrend(tr2_dcnv, type='constant')
@@ -1323,7 +1712,7 @@ class APSurvey(object):
 
             tr2_fft = rfft(multiply(tr2_seg, taper))
             tr2_fft_dcnv = divide(tr2_fft[1:], tr2_resp[1:])
-            tr2_fft_dcnv = insert(tr2_fft_dcnv, 0, 0.0)
+            tr2_fft_dcnv = insert(tr2_fft_dcnv, 0, [0.0])
             tr2_dcnv = irfft(tr2_fft_dcnv)
             # demean again before convolving strm2 resp
             tr2_dcnv = ss.detrend(tr2_dcnv, type='constant')
