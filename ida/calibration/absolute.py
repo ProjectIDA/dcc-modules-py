@@ -1354,13 +1354,13 @@ class APSurvey(object):
             for compres in results:
                 if compres.usable_count == 0:
                     # so sad...
-                    sumres = '{:<4} {}/{} : {} No usable segments. {} {}'.format(
+                    sumres += '{:<4} {}/{} : {} No usable segments. {} {}'.format(
                         self.station.upper(), sens1.upper(), sens2.upper(),
                         compres.component, self.msfiles[dataset][sens1],
                         self.msfiles[dataset][sens2])
                 else:
                     # construct summary result text record from component form aggregate calculations
-                    sumres = '   {:<4} {:<4} {:<4} {:<4} '\
+                    sumres += '   {:<4} {:<4} {:<4} {:<4} '\
                              '{:7.4f} {:7.3f} '\
                              '{:8.3f} {:7.3f} {:7.3f} {:7.3f} '\
                              '{:8.3f} {:>6} {:>6} '\
@@ -1379,7 +1379,7 @@ class APSurvey(object):
                 # build detailed result text, one text line for the result for each segment
                 for res in compres.seg_results:
                     excl = 'EXCL' if not res.can_use else 'Ok  '
-                    detres = '   {:<4} {:<4} {:<4} {:<4} {} {:17.6f} {:7.4f} {:8.3f} '\
+                    detres += '   {:<4} {:<4} {:<4} {:<4} {} {:17.6f} {:7.4f} {:8.3f} '\
                             '{:7.3f} {:7.3f} {:7.4f} {:7.3f} {:<6} {:>10} {:<14} {:<14}'.format(
                         self.station.upper(), sens1.upper(), sens2.upper(), compres.component,
                         res.start_utc, res.start_epoch, res.amp, (res.ang * 180./pi + 360.) % 360.,
