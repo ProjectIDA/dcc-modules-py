@@ -45,12 +45,7 @@ TAPER_TYPES = [
 def time_offset(trace1, trace2, bpfreqmin=0.1, bpfreqmax=1.0, winsize=1000):
     """ Timeseries time offset computed using correlation computation.
 
-        Timeseries will be checked for gaps. Any gaps will prevent the computation
-        correlation performed by shifting timeseries +/- winsize samples
-
         xcorr() does not look at start/end times, just aligns the samples starting at 0th sample.
-
-        If offset > 0, events in trace1 later in the timeseries than in trace2
 
         Returns offset in seconds that when added to trace2 the actual time of events
         will be the same.
@@ -74,39 +69,16 @@ def time_offset(trace1, trace2, bpfreqmin=0.1, bpfreqmax=1.0, winsize=1000):
 
     return offset, val, corrfun, ''
 
-def decimate_factors_425(sr_st, sr_targ):
-    """Assuming both startting (sr_st) and target (sr_targ) are divible by
-    returns list of decimation factors of 4, 2, 5"""
-
-    factors = []
-    cur_sr = round(sr_st)
-    while cur_sr != sr_targ:
-        if (mod(cur_sr, 4) == 0) and (round(divide(cur_sr, 4)) >= sr_targ):
-            factors.append(4)
-            cur_sr = round(divide(cur_sr, 4))
-        elif (mod(cur_sr, 2) == 0) and (round(divide(cur_sr, 2)) >= sr_targ):
-            factors.append(2)
-            cur_sr = round(divide(cur_sr, 2))
-        elif (mod(cur_sr, 5) == 0) and (round(divide(cur_sr, 5)) >= sr_targ):
-            factors.append(5)
-            cur_sr = round(divide(cur_sr, 5))
-
-    return factors
-
-def check_and_fix_polarities(strm, seis_model):
-
-    for tr in strm:
-        if invert_signal(tr.stats.channel, seis_model):
-            tr.data *= -1.0
-
 def taper_high_freq_resp(resp, taper_fraction):
-    """This comes from idaresponse/resp.c where highest 5% of complex frequency response
+    """
+    This comes from idaresponse/resp.c where highest 5% of complex frequency response
     is tapered using exponential function.
 
     resp: complex response to be tapered
     taper_fraction: decimal fraction of high freq to taper
 
-    Tapering is done IN-PLACE and updated resp is type np.complex128."""
+    Tapering is done IN-PLACE and updated resp is type np.complex128.
+    """
 
     if (taper_fraction < 0.0) or (taper_fraction > 1.0):
         raise ValueError('taper_high_freq_resp: taper_fraction must be between 0.0 and 1.0')
@@ -114,7 +86,7 @@ def taper_high_freq_resp(resp, taper_fraction):
     if len(resp) == 0:
         raise ValueError('taper_high_freq_resp: resp must not be empty')
 
-    # lets get exponentially taper off highest fraction of freqs before nyquist
+    # exponentially taper off highest fraction of freqs before nyquist
     # taken from idaresponse/resp.c
     resplen = len(resp)
     startndx = int( taper_fraction * resplen)
@@ -127,7 +99,8 @@ def taper_high_freq_resp(resp, taper_fraction):
 
 
 def dynlimit_resp_min(resp, dyn_range):
-    """This comes from idaresponse/resp.c where dynamic range of response is clipped
+    """
+    This comes from idaresponse/resp.c where dynamic range of response is clipped
     by setting minimum value for amplitude response.
 
     resp: complex response to be tapered
@@ -149,6 +122,12 @@ def dynlimit_resp_min(resp, dyn_range):
     phavals = angle(resp[amp_flag])
     resp[amp_flag] = limit_min * complex128(cos(phavals) + sin(phavals)*1j)
 
+
+def check_and_fix_polarities(strm, seis_model):
+
+    for tr in strm:
+        if invert_signal(tr.stats.channel, seis_model):
+            tr.data *= -1.0
 
 def invert_signal(channel, seis_model):
 

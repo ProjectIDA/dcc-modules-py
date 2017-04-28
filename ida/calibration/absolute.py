@@ -27,10 +27,10 @@ import yaml
 from collections import namedtuple
 import logging
 
-import matplotlib
-matplotlib.use('Qt4Agg')
-import matplotlib.pyplot as plt
-plt.ion()
+# import matplotlib
+# matplotlib.use('Qt4Agg')
+# import matplotlib.pyplot as plt
+# plt.ion()
 
 from obspy import read, UTCDateTime, Stream
 from obspy.signal.invsim import evalresp
@@ -65,11 +65,10 @@ class APSurveyComponentResult(object):
         """
         self.component = comp
         self.seg_results = []
-        self._amp_mean = None
-        self._amp_std = None
-        self._ang_mean = None
-        self._ang_std = None
-        self._ang_resid = None
+        self._amp_mean = None  # mean of segments ampl ratios
+        self._amp_std = None  # stdev of segments ampl ratios
+        self._ang_mean = None  # mean of segments relative angles
+        self._ang_std = None  # stdev of segments relative angles
         self._lrms_mean = None
         self._var_mean = None
         self._recalc_needed = False
@@ -110,7 +109,6 @@ class APSurveyComponentResult(object):
             self._amp_std = None
             self._ang_mean = None
             self._ang_std = None
-            self._ang_resid = None
             self._lrms_mean = None
             self._var_mean = None
         self._recalc_needed = False
@@ -167,19 +165,6 @@ class APSurveyComponentResult(object):
         return self._ang_std
 
     @property
-    def ang_resid(self):
-        """
-        Property returning the standard deviation of the relative angle of the 
-        individual segments for this component WITH RESPECT to the NORTH component of the baseline sensor
-
-        Returns: (float) STD deviations of the segment relative angle values 
-
-        """
-        if self._recalc_needed:
-            self._recalc()
-        return self._ang_resid
-
-    @property
     def lrms_mean(self):
         if self._recalc_needed:
             self._recalc()
@@ -205,7 +190,7 @@ class APSurveySegmentResult(object):
     def __init__(self, start_t_utc, ang, ang_resid, amp, lrms, var, coh, use_segment):
         self._start_t_utc = start_t_utc
         self._ang = ang
-        self._ang_resid = ang_resid
+        self._ang_resid = ang_resid  # currently not used for overall component results
         self._amp = amp
         self._lrms = lrms
         self._var = var
@@ -340,6 +325,8 @@ class APSurvey(object):
         self.analdate = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         self.ida_cal_raw_dir = os.environ.get('IDA_CAL_RAW_DIR', '')
         self.debug = debug
+
+        # keep a list of waveform files. Include i10 and ms data, just to show user at end
         self.waveform_files = []
 
         self.ok = True
@@ -1045,12 +1032,6 @@ class APSurvey(object):
         sens1 = sens1.lower()
         sens2 = sens2.lower()
 
-        if sens1 not in ['ref', 'sec']:
-            raise ValueError('_read_responses: sens1 must be "ref" or "sec"')
-
-        if sens2 not in ['pri', 'sec']:
-            raise ValueError('_read_responses: sens2 must be "pri" or "sec".')
-
         reftpl = self.trtpls['azi']['ref'] if self.trtpls['azi']['ref'] else self.trtpls['abs']['ref']
         pritpl = self.trtpls['azi']['pri'] if self.trtpls['azi']['pri'] else self.trtpls['abs']['pri']
         sectpl = self.trtpls['azi']['sec'] if self.trtpls['azi']['sec'] else self.trtpls['abs']['sec']
@@ -1393,11 +1374,10 @@ class APSurvey(object):
         """
         Called externally to perform the analysis and write out results for a given 'dataset'.
         
-        The refernce data is read first. 
-        
-        Then the secondary station sensor is read. The secondary sensor is read first because in most cases
-        it will be sampling at the same rate (40hz) as the reference sensor and is therefor better to use 
-        to run a correlation to identify and time offset between the reference and station sensors' timeseries
+        The refernce data is read first. Then the secondary station sensor is read. The secondary sensor is read
+        first because in most cases it will be sampling at the same rate (40hz) as the reference sensor and is
+        therefor better to use to run a correlation to identify and time offset between the reference and 
+        station sensors' timeseries
         
         Once any time offset is correction
         Args:
@@ -1434,9 +1414,10 @@ class APSurvey(object):
                     dataset.upper()))
                 self.logmsg(logging.WARN, 'Skipping comparisons with SECONDARY sensor')
             else:
-                # compute ref/sec time offset
                 sensors_available += 1
+                # compute and correct ref time offset
                 offset, _, _, _ = self._correct_ref_time(dataset, 'ref', 'sec')
+                # save offset info just to report out in results
                 self.ref_clock_adjustment = offset
                 self.ref_clock_adjusted = True
                 self.ref_clock_adjustment_sensor = 'secondary'
@@ -1455,7 +1436,9 @@ class APSurvey(object):
                 # compute time offset IFF not already done with 'sec' sensor
                 sensors_available += 1
                 if not self.ref_clock_adjusted:
+                    # compute and correct ref time offset
                     offset, _, _, _ = self._correct_ref_time(dataset, 'ref', 'pri')
+                    # save offset info just to report out in results
                     self.ref_clock_adjustment = offset
                     self.ref_clock_adjusted = True
                     self.ref_clock_adjustment_sensor = 'primary'
@@ -1474,7 +1457,7 @@ class APSurvey(object):
                 sumf.write(sumhdr)
                 detf.write(dethdr)
 
-                comparisons = []
+                comparisons = []  # list of sensor paairs that can be compared
                 if sensors_available >= 2:
                     if compare_ref and compare_sec:
                         comparisons.append(('ref', 'sec'))
@@ -1485,9 +1468,9 @@ class APSurvey(object):
                     if compare_pri and compare_sec:
                         comparisons.append(('sec', 'pri'))
 
-                    # loop through pairs of sensors, comparing streams and writing out results...
+                    # loop through pairs of sensors, comparing data streams and writing out results...
                     for sens1, sens2 in comparisons:
-                        results = self.compare_streams(dataset, sens1, sens2)
+                        results = self._compare_streams(dataset, sens1, sens2)
                         if results:
                             sumres, detres = self._get_result_text(dataset, sens1, sens2, results)
                             sumf.write(sumres)
@@ -1505,73 +1488,96 @@ class APSurvey(object):
 
         return sumfn, detfn, self.waveform_files
 
-    def compare_streams(self, datatype, src1, src2):
+    def _compare_streams(self, datatype, sens1, sens2):
         """
-        Processes each pair of traces:
-            trim sample count to multiple of analysis frequency rate
-            decimate to analysis sample rate
-            bandpass filter to analysis bandpass
-            deconvolve strm2 sensor resp from strm2 and convolve strm1 response
-            loop over segments performing analysis and compute
-            angle, amp, and variance measures
+        Prepares for analysis of wach of the three components.
+        Identifies proper respoonses for de/convolution
+        
+        Args:
+            datatype (str): 'azi' or 'abs 
+            sens1 (str): 'ref' or 'sec' 
+            sens2 (str): 'pri' or 'sec'
+
+        Returns: 
+            (ChanTpl): Contains tuple of APSurveyComponentResults containing the results of 
+            this sensor pair comparisons.
+
         """
 
-        src1_resp_ok, src2_resp_ok = self._read_responses(src1, src2)
-        if not src1_resp_ok:
-            self.logmsg(logging.WARN, 'Unable to read {} response.'.format(src1))
+        if sens1 not in ['ref', 'sec']:
+            raise ValueError('_compare_streams: sens1 must be "ref" or "sec"')
+        if sens2 not in ['pri', 'sec']:
+            raise ValueError('_compare_streams: sens2 must be "pri" or "sec".')
+        if sens1 == sens2:
+            raise ValueError('_compare_streams: sens1 and sens2 must different sensors.')
+
+        # maek sure responses for the the pari of sensors being compared have been loaded successfully
+        sens1_resp_ok, sens2_resp_ok = self._read_responses(sens1, sens2)
+        if not sens1_resp_ok:
+            self.logmsg(logging.WARN, 'Unable to read {} response.'.format(sens1))
             self.logmsg(logging.WARN, 'Can not perform comparison: {}/{}'.format(
-                src1.upper(), src2.upper()))
+                sens1.upper(), sens2.upper()))
             return False
-        elif not src2_resp_ok:
-            self.logmsg(logging.WARN, 'Unable to read {} response.'.format(src2))
+        elif not sens2_resp_ok:
+            self.logmsg(logging.WARN, 'Unable to read {} response.'.format(sens2))
             self.logmsg(logging.WARN, 'Can not perform comparison: {}/{}'.format(
-                src1.upper(), src2.upper()))
+                sens1.upper(), sens2.upper()))
             return False
 
-        if src1.lower() == 'ref':
+        # grab Traces for both sensors
+        strm1_z = self.trtpls[datatype][sens1].z
+        strm1_1 = self.trtpls[datatype][sens1].n
+        strm1_2 = self.trtpls[datatype][sens1].e
+        strm2_z = self.trtpls[datatype][sens2].z
+        strm2_1 = self.trtpls[datatype][sens2].n
+        strm2_2 = self.trtpls[datatype][sens2].e
 
-            strm1_z = self.trtpls[datatype][src1].z
-            strm1_1 = self.trtpls[datatype][src1].n
-            strm1_2 = self.trtpls[datatype][src1].e
-            strm2_z = self.trtpls[datatype][src2].z
-            strm2_1 = self.trtpls[datatype][src2].n
-            strm2_2 = self.trtpls[datatype][src2].e
+        # get responnse of sens1 computed for SR of sens2
+        # to convolve into timeseries of sens2
+        strm1_z_resp = self.responses[sens1][sens2].z
+        strm1_1_resp = self.responses[sens1][sens2].n
+        strm1_2_resp = self.responses[sens1][sens2].e
 
-        else:
-            # if 'ref' not first sensor, assume pri vs sec
-            # call as ('pri', 'sec'), but sec sensor should be the 'ref' sensor
-            # since it is higher sample rate, and would not be able to convolve
-            # response of lower rate sensor into high rate timeseries
-            # and set clock_adj to 0.0. Assumed sensor locked together.
-            strm1_z = self.trtpls[datatype]['sec'].z
-            strm1_1 = self.trtpls[datatype]['sec'].n
-            strm1_2 = self.trtpls[datatype]['sec'].e
-            strm2_z = self.trtpls[datatype]['pri'].z
-            strm2_1 = self.trtpls[datatype]['pri'].n
-            strm2_2 = self.trtpls[datatype]['pri'].e
+        # get response of sens2 for deconvolving response
+        strm2_z_resp = self.responses[sens2][sens2].z
+        strm2_1_resp = self.responses[sens2][sens2].n
+        strm2_2_resp = self.responses[sens2][sens2].e
 
-        strm1_z_resp = self.responses[src1][src2].z
-        strm1_1_resp = self.responses[src1][src2].n
-        strm1_2_resp = self.responses[src1][src2].e
-        strm2_z_resp = self.responses[src2][src2].z
-        strm2_1_resp = self.responses[src2][src2].n
-        strm2_2_resp = self.responses[src2][src2].e
-
+        # create a set of empty component results
         self.results = self.ChanTpl(z=APSurveyComponentResult('Z'),
                                     n=APSurveyComponentResult('1'),
                                     e=APSurveyComponentResult('2'))
-        self.compare_verticals(datatype, src1, src2, strm1_z, strm2_z,
-                               strm1_z_resp, strm2_z_resp, self.results.z)
-        self.compare_horizontals(datatype, src1, src2, strm1_1, strm1_2, strm2_1,
-                                 strm1_1_resp, strm2_1_resp, self.results.n)
-        self.compare_horizontals(datatype, src1, src2, strm1_1, strm1_2, strm2_2,
-                                 strm1_2_resp, strm2_2_resp, self.results.e)
+
+        # analyze components
+        self._compare_verticals(strm1_z, strm2_z, strm1_z_resp, strm2_z_resp, self.results.z)
+        self._compare_horizontals(strm1_1, strm1_2, strm2_1, strm1_1_resp, strm2_1_resp, self.results.n)
+        self._compare_horizontals(strm1_1, strm1_2, strm2_2, strm1_2_resp, strm2_2_resp, self.results.e)
 
         return self.results
 
-    def compare_horizontals(self, datatype, src1, src2, tr1_n, tr1_e, tr2, tr1_resp, tr2_resp, results):
+    def _compare_horizontals(self, tr1_n, tr1_e, tr2, tr1_resp, tr2_resp, results):
+        """
+        Compares tr2 from one sensor with the north and east (tr1_n, tr1_e) traces from the another sensor 
+        to determine the relative orientation of tr2 WRT tr1_n and relative sensitivities.
+        The traces is are analyzed in segments of length specified in the config.
+        The current tr2 response is removed and the response from tr1 is applied
+        
+        Result is expressed as tr2 angle WRT to tr1_n. 
+        
+        Positive relative angles are clock-wise adn saved in radians 
+        
+        Args:
+            tr1_n (Trace): sensor 1 ('baseline') north trace
+            tr1_e (Trace): sensor 1 ('baseline') east trace
+            tr2 (Trace): sensor 2 trace
+            tr1_resp (np.array): sensor 1 response to apply to tr2
+            tr2_resp (np.array): tr2 response to deconvolve
+            results (APSurveyComponentResult): COmponent results to assumulating individual segments results
 
-        dbg_cnt = 0
+        Returns: None
+
+        """
+
         start_t = max(tr1_n.stats.starttime, tr2.stats.starttime)
         end_t = min(tr1_n.stats.endtime, tr2.stats.endtime)
         tr1_sr = tr1_n.stats.sampling_rate
@@ -1579,10 +1585,9 @@ class APSurvey(object):
         tr1_time_delta = 1.0/tr1_sr
         tr2_time_delta = 1.0/tr2_sr
 
+        # loop through traces segment by segment
         while start_t + self.segment_size_secs < end_t:
-            dbg_cnt += 1
 
-            # print('satrting segment analysis...')
             tr1_n_seg = tr1_n.slice(starttime=start_t,
                                     endtime=start_t + self.segment_size_secs - tr1_time_delta)
             tr1_e_seg = tr1_e.slice(starttime=start_t,
@@ -1590,6 +1595,7 @@ class APSurvey(object):
             tr2_seg = tr2.slice(starttime=start_t,
                                 endtime=start_t + self.segment_size_secs - tr2_time_delta)
 
+            # get raw float data
             tr1_n_seg = tr1_n_seg.data.astype(float64)
             tr1_e_seg = tr1_e_seg.data.astype(float64)
             tr2_seg = tr2_seg.data.astype(float64)
@@ -1603,38 +1609,46 @@ class APSurvey(object):
             fraction = (self.segment_size_trim/self.segment_size_secs)
             taper = tukey(len(tr2_seg), alpha=fraction * 2, sym=True)
 
+            # remove tr2 response from timeseries
             tr2_fft = rfft(multiply(tr2_seg, taper))
             tr2_fft_dcnv = divide(tr2_fft[1:], tr2_resp[1:])
             tr2_fft_dcnv = insert(tr2_fft_dcnv, 0, [0.0])
             tr2_dcnv = irfft(tr2_fft_dcnv)
+
             # demean again before convolving strm2 resp
             tr2_dcnv = ss.detrend(tr2_dcnv, type='constant')
+
+            # convolve tr2 with tr1 response
             tr2_fft = rfft(multiply(tr2_dcnv, taper))
             tr2_fft_cnv = multiply(tr2_fft, tr1_resp)
             tr2_cnv = irfft(tr2_fft_cnv)
             del tr2_fft, tr2_fft_dcnv, tr2_dcnv, tr2_fft_cnv
 
-            # trim segment_size_trim in secs
+            # trim off taper segment_size_trim in secs
             trim_cnt = round(tr1_sr * self.segment_size_trim)
             tr1_n_seg = tr1_n_seg[trim_cnt:-trim_cnt]
             tr1_e_seg = tr1_e_seg[trim_cnt:-trim_cnt]
             trim_cnt = round(tr2_sr * self.segment_size_trim)
             tr2_cnv = tr2_cnv[trim_cnt:-trim_cnt]
 
+            # resample all 3 timeseries to analsysi sample rate
             tr1_n_seg = ss.resample(tr1_n_seg, round(len(tr1_n_seg) / (tr1_sr / self.analysis_sample_rate)))
             tr1_e_seg = ss.resample(tr1_e_seg, round(len(tr1_e_seg) / (tr1_sr / self.analysis_sample_rate)))
             tr2_cnv = ss.resample(tr2_cnv, round(len(tr2_cnv) / (tr2_sr / self.analysis_sample_rate)))
 
+            # demean and detrend
             tr1_n_seg = ss.detrend(tr1_n_seg, type='linear')
             tr1_e_seg = ss.detrend(tr1_e_seg, type='linear')
             tr2_cnv = ss.detrend(tr2_cnv, type='linear')
 
+            # apply taper before filtering
             fraction = 1/12
             taper = tukey(len(tr1_n_seg), fraction * 2, sym=True)
             tr1_n_seg *= taper
             tr1_e_seg *= taper
             tr2_cnv *= taper
 
+            # apply band pass filter with stops from config
             tr1_n_seg = osf.bandpass(tr1_n_seg,
                                      self.bp_start, self.bp_stop,
                                      self.analysis_sample_rate, zerophase=True)
@@ -1645,35 +1659,60 @@ class APSurvey(object):
                                    self.bp_start, self.bp_stop,
                                    self.analysis_sample_rate, zerophase=True)
 
-            if self.debug and (dbg_cnt == 5):
-                fig = plt.figure(figsize=(8.5, 11))
 
-                plt.plot(tr2_cnv)
-                plt.plot(tr1_n_seg)
-                plt.plot(tr1_e_seg)
-                plt.show()
-                input('hit any ley')
-
-
-            # set up matrix to solve for cos(wn) & cos(we) where:
-            #   wn is angle of tr2_cnv from ref North
-            #   we is angle of tr2_cnv from ref East
-            # Treat cos(we) as sin(pi/2 - we) where pi/2 - we is angle with North,
-            # then take arctan cos(wn)/cos(we)
             dc = ones(len(tr1_n_seg), dtype=float64)  # to take care of any non-zero means
+
+            # set up matrix of constant 1, and tr1 north and east traces
             mat = array([dc, tr1_n_seg, tr1_e_seg])
             matinv = mat.transpose()
+
+            # find least squares solution for:
+            #     tr2 = solution[2] * tr1_e + solution[1] * tr1_n + solution[0]
+            # ration of solution[2] and solution[1] are effectively the tan of angle omega
+            # between tr2 and tr1_n.
             solution, resid, _, _ = la.lstsq(matinv, tr2_cnv)
             w = arctan2(solution[2], solution[1])
-
+            # the lsq solution coeeficients are used to determine whether the tr2 values are scaled
+            # up or down from tr1. SInce:
+            #
+            #   tan(w) = solution[1] / solution [2]
+            #
+            # we can define a scaling factor f such that:
+            #
+            #   solution[1] = f * cos(w), and
+            #   solution[2] = f * sin(w)
+            #
+            # then
+            #
+            #   solution[1]**2 + solution[2]**2 = f**2 * ( cos**2(w) + sin**2(w) )
+            #
+            # simplifying & solving for f
+            #
+            #   f = sqrt(solution[1]**2 + solution[2]**2)
+            #
+            #
+            # This factor represents the factor by which the current response for tr2 (sensor 2) is off.
+            # When factor is > 1.0, the current response is underestimating actual sensitivity by this factor.
+            # When factor is < 1.0, the current response is overestimating actual sensitivity by this factor.
+            #
+            # whew.
+            #
             amp_ratio =  sqrt(solution[1]*solution[1] + solution[2]*solution[2])
 
+            # log root mean square of the tr2 timseries amplitude
             lrms = log10(sqrt(multiply(tr2_cnv, tr2_cnv).sum() / len(tr2_cnv)))
+
+            # 'synthetic' timeseries based on lsq solution, and calcualte the residauls
             syn  = dot(matinv, solution)
             res = tr2_cnv - syn
+
+            # variance indicator based on stdev of residuals and tr2 timeseries.
             myvar = std(res) / std(tr2_cnv)
+
+            # coherence of waveforms tr2 and synthetic
             coh = dot(tr2_cnv, syn) / sqrt(dot(tr2_cnv, tr2_cnv) * dot(syn, syn))
 
+            # Add this segment's results to component results
             results.add_segment(APSurveySegmentResult(start_t, w, resid, amp_ratio,
                                                       lrms, myvar, coh,
                                                       coh >= self.coherence_cutoff))
@@ -1682,23 +1721,41 @@ class APSurvey(object):
             start_t += self.segment_size_secs
 
 
-    def compare_verticals(self, datatype, src1, src2, tr1, tr2, tr1_resp, tr2_resp, results):
+    def _compare_verticals(self, tr1, tr2, tr1_resp, tr2_resp, results):
+        """
+        Compares the vertical component amplitudes of two traces from different sensors to determine the 
+        relative sensitivities of hte two components. 
+        The traces is are analyzed in segments of length specified in the config.
+        The current tr2 response is removed and the response from tr1 is applied
 
-        dbg_cnt = 0
+        Args:
+            tr1 (Trace): sensor 1 ('baseline') trace
+            tr2 (Trace): sensor 2 trace
+            tr1_resp (np.array): sensor 1 response to apply to tr2
+            tr2_resp (np.array): tr2 response to deconvolve
+            results (APSurveyComponentResult): COmponent results to assumulating individual segments results
+
+        Returns: None
+
+        """
+
+        # find latest astarttime of the two traces.
+        # The trace starttimes will be different when due to non-zero clock offset adjustment.
         start_t = max(tr1.stats.starttime, tr2.stats.starttime)
         tr1_sr = tr1.stats.sampling_rate
         tr2_sr = tr2.stats.sampling_rate
         tr1_time_delta = 1.0/tr1_sr
         tr2_time_delta = 1.0/tr2_sr
-        while start_t + self.segment_size_secs < tr1.stats.endtime:
-            dbg_cnt += 1
 
-            # print('satrting segment analysis...')
+        # loop through traces segment by segment
+        while start_t + self.segment_size_secs < tr1.stats.endtime:
+
             tr1_seg = tr1.slice(starttime=start_t,
                                         endtime=start_t + self.segment_size_secs - tr1_time_delta)
             tr2_seg = tr2.slice(starttime=start_t,
                                         endtime=start_t + self.segment_size_secs - tr2_time_delta)
 
+            # get raw float data
             tr1_seg = tr1_seg.data.astype(float64)
             tr2_seg = tr2_seg.data.astype(float64)
 
@@ -1710,10 +1767,12 @@ class APSurvey(object):
             fraction = (self.segment_size_trim/self.segment_size_secs)
             taper = tukey(len(tr2_seg), alpha=fraction * 2, sym=True)
 
+            # remove tr2 response from timeseries
             tr2_fft = rfft(multiply(tr2_seg, taper))
             tr2_fft_dcnv = divide(tr2_fft[1:], tr2_resp[1:])
             tr2_fft_dcnv = insert(tr2_fft_dcnv, 0, [0.0])
             tr2_dcnv = irfft(tr2_fft_dcnv)
+
             # demean again before convolving strm2 resp
             tr2_dcnv = ss.detrend(tr2_dcnv, type='constant')
             tr2_fft = rfft(multiply(tr2_dcnv, taper))
@@ -1721,41 +1780,51 @@ class APSurvey(object):
             tr2_cnv = irfft(tr2_fft_cnv)
             del tr2_fft, tr2_fft_dcnv, tr2_dcnv, tr2_fft_cnv
 
-            # trim segment_size_trim in secs
+            # trim off taper segment_size_trim in secs
             trim_cnt = round(tr1_sr * self.segment_size_trim)
             tr1_seg = tr1_seg[trim_cnt:-trim_cnt]
             trim_cnt = round(tr2_sr * self.segment_size_trim)
             tr2_cnv = tr2_cnv[trim_cnt:-trim_cnt]
 
+            # resample all 3 timeseries to analsysi sample rate
             tr1_seg = ss.resample(tr1_seg, round(len(tr1_seg) / (tr1_sr / self.analysis_sample_rate)))
             tr2_cnv = ss.resample(tr2_cnv, round(len(tr2_cnv) / (tr2_sr / self.analysis_sample_rate)))
 
+            # demean and detrend
             tr1_seg = ss.detrend(tr1_seg, type='linear')
             tr2_cnv = ss.detrend(tr2_cnv, type='linear')
 
+            # apply taper before filtering
             fraction = 1/12
             taper = tukey(len(tr1_seg), fraction * 2, sym=True)
             tr1_seg *= taper
             tr2_cnv *= taper
 
+            # apply band pass filter with stops from config
             tr1_seg = osf.bandpass(tr1_seg, self.bp_start, self.bp_stop, self.analysis_sample_rate, zerophase=True)
             tr2_cnv = osf.bandpass(tr2_cnv, self.bp_start, self.bp_stop, self.analysis_sample_rate, zerophase=True)
 
+            # compute amplitude ratio
             amp_ratio = tr2_cnv.std() / tr1_seg.std()
 
+            # log root mean square of the tr2 timseries amplitude
             lrms = log10(sqrt(multiply(tr2_cnv, tr2_cnv).sum() / len(tr2_cnv)))
 
+            # 'synthetic' timeseries based on lsq solution, and calcualte the residauls
             syn  = tr1_seg * amp_ratio
-            coh = dot(tr2_cnv, syn) / sqrt(dot(tr2_cnv, tr2_cnv) * dot(syn, syn))
-
             res = tr2_cnv - syn
+
+            # variance indicator based on stdev of residuals and tr2 timeseries.
             myvar = res.std() / tr2_cnv.std()
 
+            # coherence of waveforms tr2 and synthetic
+            coh = dot(tr2_cnv, syn) / sqrt(dot(tr2_cnv, tr2_cnv) * dot(syn, syn))
+
+            # Add this segment's results to component results
             results.add_segment(APSurveySegmentResult(start_t, 0.0, 0.0, amp_ratio,
                                                       lrms, myvar,
                                                       coh, coh >= self.coherence_cutoff))
 
             # start time for next segment
             start_t += self.segment_size_secs
-
 
