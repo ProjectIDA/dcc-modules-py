@@ -985,8 +985,22 @@ class APSurvey(object):
                             'Can not use {} sensor data in sensor comparisons.'.format(sensor))
                 return False
             tr_z = self.streams[dataset][sensor].select(component='Z')[0]
-            tr_1 = self.streams[dataset][sensor].select(component='1')[0]
-            tr_2 = self.streams[dataset][sensor].select(component='2')[0]
+            tr_1 = self.streams[dataset][sensor].select(component='1')
+            if not tr_1:
+                tr_1 = self.streams[dataset][sensor].select(component='N')
+            if tr_1:
+                tr_1 = tr_1[0]
+            else:
+                self.logmsg(logging.ERROR, 'Could not find NORTH component trace in miniseed data for sensor {}'.format(sensor))
+
+            tr_2 = self.streams[dataset][sensor].select(component='2')
+            if not tr_2:
+                tr_2 = self.streams[dataset][sensor].select(component='E')
+            if tr_2:
+                tr_2 = tr_2[0]
+            else:
+                self.logmsg(logging.ERROR, 'Could not find EAST component trace in miniseed data for sensor {}'.format(sensor))
+
             self.trtpls[dataset][sensor] = self.ChanTpl(z=tr_z, n=tr_1, e=tr_2)
             self.msfiles[dataset][sensor] = os.path.abspath(ms_name)
             self.streams[dataset][sensor].write(self.msfiles[dataset][sensor], format='MSEED')
