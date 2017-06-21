@@ -37,7 +37,7 @@ from obspy.signal.invsim import evalresp
 import obspy.signal.filter as osf
 from scipy.signal import tukey
 from numpy import array, ones, pi, arctan2, float64, multiply, divide, log10
-from numpy import std, sqrt, dot, insert
+from numpy import std, sqrt, dot, insert, inf
 from numpy.fft import rfft, irfft
 import numpy.linalg as la
 import scipy.signal as ss
@@ -511,7 +511,7 @@ class APSurvey(object):
             self.logmsg(logging.ERROR, 'Missing key in configuration file: ' + 'arc_raw_dir')
         else:
             fpath = self._config['arc_raw_dir']
-            if not (os.path.exists(fpath)):  # or (not os.path.isdir(fpath)):
+            if not (os.path.exists(fpath)) and (',' not in fpath):
                 self.logmsg(logging.ERROR, 'Raw Archive directory does not exist: {}'.format(fpath))
 
         if 'resp_file_dir' not in self._config:
@@ -926,12 +926,26 @@ class APSurvey(object):
 
         # check for non IDA sensor data supplied as miniseed file.
         # TODO: this is a kludge and this situation needs to be reworked
-        if os.path.isfile(self.arc_raw_dir):
-            # assume miniseed file with ONLY needed channels and time period
+        # if os.path.isfile(self.arc_raw_dir):
+        if not os.path.isdir(self.arc_raw_dir):
+            # assume pri, and possibly sec,  miniseed file names with ONLY needed 
+            # channels (Z12/ZNE) and time period
 
-            ms_name = self.arc_raw_dir
-            self.waveform_files.append(ms_name)
+            fns = self.arc_raw_dir.split(',')
+            fns = [fn.strip() for fn in fns]
+            if (sensor == 'pri') and (len(fns) > 0) and os.path.isfile(fns[0]):
+                ms_name = fns[0]
+                self.waveform_files.append(fns[0])
+            elif (sensor == 'sec') and (len(fns) > 1) and os.path.isfile(fns[1]):
+                ms_name = fns[1]
+                self.waveform_files.append(fns[1])
+            else:
+                self.logmsg(logging.ERROR, 
+                            'Error finding ms file [{}] for {} sensor.'.format(
+                                self.arc_raw_dir, sensor
+                            ))
 
+                return False
         else:
             # retrieve data from IDA IDA10 archive
 
@@ -1016,24 +1030,22 @@ class APSurvey(object):
     def _read_responses(self, sens1, sens2):
         """
         Computes a pair of responses, for each component, for comparing a specific pair of sensors.
-         
+
         One is the response for sens1, but computed with the sample rate of sens2. This is used to convolve 
         the sen1 response into the sens2 timeseries.
-        
+
         The other is the response of sens, at it's normal operating sample rate. This is used to deconvolving
         sens2 response from it's timeseries
-        
-        
-        sens1 is considered the 'reference' sensor. and sens2 timeseries is  
-        
+
+
+        sens1 is considered the 'reference' sensor. and sens2 timeseries is
+
         For each component:
             The
-         
-         
+
+
         azimuth and abs sensitivity of sens2 wrt sens1.
-        
-        
-        
+
         Args:
             sens1 (str): 'ref' or 'sec'. These are the two sensors that can be used as baseline 
             sens2 (str):  'pri' or 'sec'. These are the two sensors that are compared against a baseline sensor 
@@ -1506,7 +1518,7 @@ class APSurvey(object):
         """
         Prepares for analysis of wach of the three components.
         Identifies proper respoonses for de/convolution
-        
+
         Args:
             datatype (str): 'azi' or 'abs 
             sens1 (str): 'ref' or 'sec' 
@@ -1575,11 +1587,11 @@ class APSurvey(object):
         to determine the relative orientation of tr2 WRT tr1_n and relative sensitivities.
         The traces is are analyzed in segments of length specified in the config.
         The current tr2 response is removed and the response from tr1 is applied
-        
+
         Result is expressed as tr2 angle WRT to tr1_n. 
-        
+
         Positive relative angles are clock-wise adn saved in radians 
-        
+
         Args:
             tr1_n (Trace): sensor 1 ('baseline') north trace
             tr1_e (Trace): sensor 1 ('baseline') east trace
@@ -1609,122 +1621,139 @@ class APSurvey(object):
             tr2_seg = tr2.slice(starttime=start_t,
                                 endtime=start_t + self.segment_size_secs - tr2_time_delta)
 
-            # get raw float data
-            tr1_n_seg = tr1_n_seg.data.astype(float64)
-            tr1_e_seg = tr1_e_seg.data.astype(float64)
-            tr2_seg = tr2_seg.data.astype(float64)
+            if (round(tr1_n_seg.std()) > 0) and (round(tr1_e_seg.std()) > 0) and (round(tr2_seg.std()) > 0):
 
-            # need to demean and taper strm2, deconvolve it's resp, convolve strm1 resp
-            tr1_n_seg = ss.detrend(tr1_n_seg, type='constant')
-            tr1_e_seg = ss.detrend(tr1_e_seg, type='constant')
-            tr2_seg = ss.detrend(tr2_seg, type='constant')
+                # get raw float data
+                tr1_n_seg = tr1_n_seg.data.astype(float64)
+                tr1_e_seg = tr1_e_seg.data.astype(float64)
+                tr2_seg = tr2_seg.data.astype(float64)
 
-            # each side Creating tapers...
-            fraction = (self.segment_size_trim/self.segment_size_secs)
-            taper = tukey(len(tr2_seg), alpha=fraction * 2, sym=True)
+                # need to demean and taper strm2, deconvolve it's resp, convolve strm1 resp
+                tr1_n_seg = ss.detrend(tr1_n_seg, type='constant')
+                tr1_e_seg = ss.detrend(tr1_e_seg, type='constant')
+                tr2_seg = ss.detrend(tr2_seg, type='constant')
 
-            # remove tr2 response from timeseries
-            tr2_fft = rfft(multiply(tr2_seg, taper))
-            tr2_fft_dcnv = divide(tr2_fft[1:], tr2_resp[1:])
-            tr2_fft_dcnv = insert(tr2_fft_dcnv, 0, [0.0])
-            tr2_dcnv = irfft(tr2_fft_dcnv)
+                # each side Creating tapers...
+                fraction = (self.segment_size_trim/self.segment_size_secs)
+                taper = tukey(len(tr2_seg), alpha=fraction * 2, sym=True)
 
-            # demean again before convolving strm2 resp
-            tr2_dcnv = ss.detrend(tr2_dcnv, type='constant')
+                # remove tr2 response from timeseries
+                tr2_fft = rfft(multiply(tr2_seg, taper))
+                tr2_fft_dcnv = divide(tr2_fft[1:], tr2_resp[1:])
+                tr2_fft_dcnv = insert(tr2_fft_dcnv, 0, [0.0])
+                tr2_dcnv = irfft(tr2_fft_dcnv)
 
-            # convolve tr2 with tr1 response
-            tr2_fft = rfft(multiply(tr2_dcnv, taper))
-            tr2_fft_cnv = multiply(tr2_fft, tr1_resp)
-            tr2_cnv = irfft(tr2_fft_cnv)
-            del tr2_fft, tr2_fft_dcnv, tr2_dcnv, tr2_fft_cnv
+                # demean again before convolving strm2 resp
+                tr2_dcnv = ss.detrend(tr2_dcnv, type='constant')
 
-            # trim off taper segment_size_trim in secs
-            trim_cnt = round(tr1_sr * self.segment_size_trim)
-            tr1_n_seg = tr1_n_seg[trim_cnt:-trim_cnt]
-            tr1_e_seg = tr1_e_seg[trim_cnt:-trim_cnt]
-            trim_cnt = round(tr2_sr * self.segment_size_trim)
-            tr2_cnv = tr2_cnv[trim_cnt:-trim_cnt]
+                # convolve tr2 with tr1 response
+                tr2_fft = rfft(multiply(tr2_dcnv, taper))
+                tr2_fft_cnv = multiply(tr2_fft, tr1_resp)
+                tr2_cnv = irfft(tr2_fft_cnv)
+                del tr2_fft, tr2_fft_dcnv, tr2_dcnv, tr2_fft_cnv
 
-            # resample all 3 timeseries to analsysi sample rate
-            tr1_n_seg = ss.resample(tr1_n_seg, round(len(tr1_n_seg) / (tr1_sr / self.analysis_sample_rate)))
-            tr1_e_seg = ss.resample(tr1_e_seg, round(len(tr1_e_seg) / (tr1_sr / self.analysis_sample_rate)))
-            tr2_cnv = ss.resample(tr2_cnv, round(len(tr2_cnv) / (tr2_sr / self.analysis_sample_rate)))
+                # trim off taper segment_size_trim in secs
+                trim_cnt = round(tr1_sr * self.segment_size_trim)
+                tr1_n_seg = tr1_n_seg[trim_cnt:-trim_cnt]
+                tr1_e_seg = tr1_e_seg[trim_cnt:-trim_cnt]
+                trim_cnt = round(tr2_sr * self.segment_size_trim)
+                tr2_cnv = tr2_cnv[trim_cnt:-trim_cnt]
 
-            # demean and detrend
-            tr1_n_seg = ss.detrend(tr1_n_seg, type='linear')
-            tr1_e_seg = ss.detrend(tr1_e_seg, type='linear')
-            tr2_cnv = ss.detrend(tr2_cnv, type='linear')
+                # resample all 3 timeseries to analsysi sample rate
+                tr1_n_seg = ss.resample(tr1_n_seg, round(len(tr1_n_seg) / (tr1_sr / self.analysis_sample_rate)))
+                tr1_e_seg = ss.resample(tr1_e_seg, round(len(tr1_e_seg) / (tr1_sr / self.analysis_sample_rate)))
+                tr2_cnv = ss.resample(tr2_cnv, round(len(tr2_cnv) / (tr2_sr / self.analysis_sample_rate)))
 
-            # apply taper before filtering
-            fraction = 1/12
-            taper = tukey(len(tr1_n_seg), fraction * 2, sym=True)
-            tr1_n_seg *= taper
-            tr1_e_seg *= taper
-            tr2_cnv *= taper
+                # demean and detrend
+                tr1_n_seg = ss.detrend(tr1_n_seg, type='linear')
+                tr1_e_seg = ss.detrend(tr1_e_seg, type='linear')
+                tr2_cnv = ss.detrend(tr2_cnv, type='linear')
 
-            # apply band pass filter with stops from config
-            tr1_n_seg = osf.bandpass(tr1_n_seg,
-                                     self.bp_start, self.bp_stop,
-                                     self.analysis_sample_rate, zerophase=True)
-            tr1_e_seg = osf.bandpass(tr1_e_seg,
-                                     self.bp_start, self.bp_stop,
-                                     self.analysis_sample_rate, zerophase=True)
-            tr2_cnv = osf.bandpass(tr2_cnv,
-                                   self.bp_start, self.bp_stop,
-                                   self.analysis_sample_rate, zerophase=True)
+                # apply taper before filtering
+                fraction = 1/12
+                taper = tukey(len(tr1_n_seg), fraction * 2, sym=True)
+                tr1_n_seg *= taper
+                tr1_e_seg *= taper
+                tr2_cnv *= taper
+
+                # apply band pass filter with stops from config
+                tr1_n_seg = osf.bandpass(tr1_n_seg,
+                                         self.bp_start, self.bp_stop,
+                                         self.analysis_sample_rate, zerophase=True)
+                tr1_e_seg = osf.bandpass(tr1_e_seg,
+                                         self.bp_start, self.bp_stop,
+                                         self.analysis_sample_rate, zerophase=True)
+                tr2_cnv = osf.bandpass(tr2_cnv,
+                                       self.bp_start, self.bp_stop,
+                                       self.analysis_sample_rate, zerophase=True)
 
 
-            dc = ones(len(tr1_n_seg), dtype=float64)  # to take care of any non-zero means
+                dc = ones(len(tr1_n_seg), dtype=float64)  # to take care of any non-zero means
 
-            # set up matrix of constant 1, and tr1 north and east traces
-            mat = array([dc, tr1_n_seg, tr1_e_seg])
-            matinv = mat.transpose()
+                # set up matrix of constant 1, and tr1 north and east traces
+                mat = array([dc, tr1_n_seg, tr1_e_seg])
+                matinv = mat.transpose()
 
-            # find least squares solution for:
-            #     tr2 = solution[2] * tr1_e + solution[1] * tr1_n + solution[0]
-            # ration of solution[2] and solution[1] are effectively the tan of angle omega
-            # between tr2 and tr1_n.
-            solution, resid, _, _ = la.lstsq(matinv, tr2_cnv)
-            w = arctan2(solution[2], solution[1])
-            # the lsq solution coeeficients are used to determine whether the tr2 values are scaled
-            # up or down from tr1. SInce:
-            #
-            #   tan(w) = solution[1] / solution [2]
-            #
-            # we can define a scaling factor f such that:
-            #
-            #   solution[1] = f * cos(w), and
-            #   solution[2] = f * sin(w)
-            #
-            # then
-            #
-            #   solution[1]**2 + solution[2]**2 = f**2 * ( cos**2(w) + sin**2(w) )
-            #
-            # simplifying & solving for f
-            #
-            #   f = sqrt(solution[1]**2 + solution[2]**2)
-            #
-            #
-            # This factor represents the factor by which the current response for tr2 (sensor 2) is off.
-            # When factor is > 1.0, the current response is underestimating actual sensitivity by this factor.
-            # When factor is < 1.0, the current response is overestimating actual sensitivity by this factor.
-            #
-            # whew.
-            #
-            amp_ratio =  sqrt(solution[1]*solution[1] + solution[2]*solution[2])
+                # find least squares solution for:
+                #     tr2 = solution[2] * tr1_e + solution[1] * tr1_n + solution[0]
+                # ration of solution[2] and solution[1] are effectively the tan of angle omega
+                # between tr2 and tr1_n.
+                solution, resid, _, _ = la.lstsq(matinv, tr2_cnv)
+                w = arctan2(solution[2], solution[1])
+                # the lsq solution coeeficients are used to determine whether the tr2 values are scaled
+                # up or down from tr1. SInce:
+                #
+                #   tan(w) = solution[1] / solution [2]
+                #
+                # we can define a scaling factor f such that:
+                #
+                #   solution[1] = f * cos(w), and
+                #   solution[2] = f * sin(w)
+                #
+                # then
+                #
+                #   solution[1]**2 + solution[2]**2 = f**2 * ( cos**2(w) + sin**2(w) )
+                #
+                # simplifying & solving for f
+                #
+                #   f = sqrt(solution[1]**2 + solution[2]**2)
+                #
+                #
+                # This factor represents the factor by which the current response for tr2 (sensor 2) is off.
+                # When factor is > 1.0, the current response is underestimating actual sensitivity by this factor.
+                # When factor is < 1.0, the current response is overestimating actual sensitivity by this factor.
+                #
+                # whew.
+                #
+                amp_ratio =  sqrt(solution[1]*solution[1] + solution[2]*solution[2])
 
-            # log root mean square of the tr2 timseries amplitude
-            lrms = log10(sqrt(multiply(tr2_cnv, tr2_cnv).sum() / len(tr2_cnv)))
+                # log root mean square of the tr2 timseries amplitude
+                lrms = log10(sqrt(multiply(tr2_cnv, tr2_cnv).sum() / len(tr2_cnv)))
 
-            # 'synthetic' timeseries based on lsq solution, and calcualte the residauls
-            syn  = dot(matinv, solution)
-            res = tr2_cnv - syn
+                # 'synthetic' timeseries based on lsq solution, and calcualte the residauls
+                syn  = dot(matinv, solution)
+                res = tr2_cnv - syn
 
-            # variance indicator based on stdev of residuals and tr2 timeseries.
-            myvar = std(res) / std(tr2_cnv)
+                # variance indicator based on stdev of residuals and tr2 timeseries.
+                myvar = std(res) / std(tr2_cnv)
 
-            # coherence of waveforms tr2 and synthetic
-            coh = dot(tr2_cnv, syn) / sqrt(dot(tr2_cnv, tr2_cnv) * dot(syn, syn))
+                # coherence of waveforms tr2 and synthetic
+                coh = dot(tr2_cnv, syn) / sqrt(dot(tr2_cnv, tr2_cnv) * dot(syn, syn))
+
+            else:
+
+                amp_ratio = 0.0
+                resid = array([])
+
+                # log root mean square of the tr2 timseries amplitude
+                lrms = 0.0
+
+                # variance indicator based on stdev of residuals and tr2 timeseries.
+                myvar = inf
+
+                # coherence of waveforms tr2 and synthetic
+                coh = 0.0
+
 
             # Add this segment's results to component results
             results.add_segment(APSurveySegmentResult(start_t, w, resid, amp_ratio,
@@ -1818,21 +1847,37 @@ class APSurvey(object):
             tr1_seg = osf.bandpass(tr1_seg, self.bp_start, self.bp_stop, self.analysis_sample_rate, zerophase=True)
             tr2_cnv = osf.bandpass(tr2_cnv, self.bp_start, self.bp_stop, self.analysis_sample_rate, zerophase=True)
 
-            # compute amplitude ratio
-            amp_ratio = tr2_cnv.std() / tr1_seg.std()
+            tr1_stdev = tr1_seg.std()
+            tr2_stdev = tr2_cnv.std()
 
-            # log root mean square of the tr2 timseries amplitude
-            lrms = log10(sqrt(multiply(tr2_cnv, tr2_cnv).sum() / len(tr2_cnv)))
+            if (round(tr1_stdev) == 0) or (round(tr2_stdev) == 0):
+                # compute amplitude ratio
+                amp_ratio = 0.0
 
-            # 'synthetic' timeseries based on lsq solution, and calcualte the residauls
-            syn  = tr1_seg * amp_ratio
-            res = tr2_cnv - syn
+                # log root mean square of the tr2 timseries amplitude
+                lrms = 0.0
 
-            # variance indicator based on stdev of residuals and tr2 timeseries.
-            myvar = res.std() / tr2_cnv.std()
+                # variance indicator based on stdev of residuals and tr2 timeseries
+                myvar = inf
 
-            # coherence of waveforms tr2 and synthetic
-            coh = dot(tr2_cnv, syn) / sqrt(dot(tr2_cnv, tr2_cnv) * dot(syn, syn))
+                # coherence of waveforms tr2 and synthetic
+                coh = 0.0
+            else:
+                # compute amplitude ratio
+                amp_ratio = tr2_stdev / tr1_stdev
+
+                # log root mean square of the tr2 timseries amplitude
+                lrms = log10(sqrt(multiply(tr2_cnv, tr2_cnv).sum() / len(tr2_cnv)))
+
+                # 'synthetic' timeseries based on lsq solution, and calcualte the residauls
+                syn  = tr1_seg * amp_ratio
+                res = tr2_cnv - syn
+
+                # variance indicator based on stdev of residuals and tr2 timeseries
+                myvar = res.std() / tr2_cnv.std()
+
+                # coherence of waveforms tr2 and synthetic
+                coh = dot(tr2_cnv, syn) / sqrt(dot(tr2_cnv, tr2_cnv) * dot(syn, syn))
 
             # Add this segment's results to component results
             results.add_segment(APSurveySegmentResult(start_t, 0.0, 0.0, amp_ratio,
