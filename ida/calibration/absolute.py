@@ -787,7 +787,9 @@ class APSurvey(object):
             sensor_z.trim(start_t, end_t)
 
             # compute time offset and adjust starttime of sens1 traces
-            offset, cval, cfunc, emsg = time_offset(sensor_z, ref_z)
+            # use window isze of 1 minute at 40hz
+            offset, cval, cfunc, emsg = time_offset(sensor_z, ref_z, 
+                                                    winsize=2400)
             for tr in self.streams[dataset][sens1]:
                 tr.stats.starttime = tr.stats.starttime + offset
 
