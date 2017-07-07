@@ -739,12 +739,18 @@ class CalInfo():
 
     def enter_ctbto_calper(self):
 
+        calper_default = '1.0'
+
         result = SelectResult.noop
         while result not in [SelectResult.quit,
                              SelectResult.goback,
                              SelectResult.ok]:
             print()
-            calper_str = input(bold(blue(self.tui_indent_str + ' Enter CTBTO Calibration Period (CALPER) value [1.0]: ')))
+            calper_str = input(bold(blue(self.tui_indent_str +
+                               ' Enter CTBTO calibration period (CALPER) in secs (ENTER for {}): '.format(calper_default))))
+
+            if calper_str == "":
+                calper_str = calper_default
 
             try:
                 calper = float(calper_str)
@@ -1073,7 +1079,8 @@ class CalInfo():
         done = self.sta and self.loc and self.sensor and \
                self.opsr and self.comp and self.chan and \
                (self.lfdatedir or self.omit_lf) and (self.hfdatedir or self.omit_hf) and \
-               self.respfn and self.fullpaz and self.ctbto
+               self.respfn and self.fullpaz and self.ctbto and \
+               ((self.ctbto == 'N') or (self.ctbto_calper))
 
         return done
 
@@ -1090,16 +1097,9 @@ class CalInfo():
             self._info['sensor_calib_z'] = None
             self._info['sensor_calib_1'] = None
             self._info['sensor_calib_2'] = None
+            self._info['ctbto_calper'] = None
             done = True
 
-        # if not done and self.hfpert:
-        #     self.hfpert = None
-        #     done = True
-        #
-        # if not done and self.lfpert:
-        #     self.lfpert = None
-        #     done = True
-        #
         if not done and self.respfn:
             self.respfn = None
             self.fullpaz = None
@@ -1140,6 +1140,7 @@ class CalInfo():
         if not done and self.sensor:
             self.sensor = None
             done = self.sensor_cnt() > 1
+
 
     def collect_next(self):
 
@@ -1271,7 +1272,7 @@ class CalInfo():
                 self.ctbto_calper = self._config['ctbto_calper']
                 col_res = SelectResult.ok
             else:
-                col_res = self.enter_opsr()
+                col_res = self.enter_ctbto_calper()
                 if col_res == SelectResult.goback:
                     self.collect_backup()
                     col_res = SelectResult.ok
@@ -1296,7 +1297,7 @@ class CalInfo():
         opsr =   bold('{:<4}'.format(self.opsr))
         comp =   bold('{:<3}'.format(self.comp))
         chan =   bold('{:<6}'.format(self.chan))
-        ctbto =  bold('{:<3}/{}'.format(self.ctbto, self.ctbto_calper))
+        ctbto =  bold('{:<1}/{:<5}'.format(self.ctbto, self.ctbto_calper))
         sen =    bold('{:<10}'.format(self.sensor))
         lffile = bold('{}'.format(self.lffile))
         hffile = bold('{}'.format(self.hffile))
@@ -1361,7 +1362,7 @@ class CalInfo():
         opsr =   '{:>3}'.format('SR:') + '{:<4}'.format(self.opsr)
         comp =   '{:>4}'.format('Comp:') + '{:<3}'.format(self.comp)
         chan =   '{:>4}'.format('Chan:') + '{:<6}'.format(self.chan)
-        ctbto =  '{:>5}'.format('CTBTO:') + '{:<8}'.format(self.ctbto)
+        ctbto =  '{:>5}'.format('CTBTO:') + '{:<1}/{:<5}'.format(self.ctbto, self.ctbto_calper)
         sen =    '{:>4}'.format('Sen:') + '{:<10}'.format(self.sensor.upper())
         lffile = '{:>8}'.format('LF File:') + '{}'.format(self.lffile)
         hffile = '{:>8}'.format('HF File:') + '{}'.format(self.hffile)
