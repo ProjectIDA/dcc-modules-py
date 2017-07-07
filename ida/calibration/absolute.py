@@ -52,16 +52,16 @@ from ida.calibration.shaketable import rename_chan
 class APSurveyComponentResult(object):
     """
     Class representing the results for a single component (Z12).
-    It accumulates individual APSurveySegmentResult objects that each hold 
+    It accumulates individual APSurveySegmentResult objects that each hold
     for an individual segment
     """
 
     def __init__(self, comp):
         """
         Constructor for APSurveyComponentResult
-        
+
         Args:
-            comp (str): 'Z', '1', or '2' 
+            comp (str): 'Z', '1', or '2'
         """
         self.component = comp
         self.seg_results = []
@@ -78,9 +78,9 @@ class APSurveyComponentResult(object):
         """
         Adds an individual segment result object to accumulating component result
         and keeps track of number of 'usable' segments
-        
+
         Args:
-            apssegres (APSurveySegmentResult): Segment result object to add  
+            apssegres (APSurveySegmentResult): Segment result object to add
 
         Returns: None
 
@@ -93,7 +93,7 @@ class APSurveyComponentResult(object):
     def _recalc(self):
         """
         Recalculate overall compionent results from individual segment results.
-        
+
         Returns: None
 
         """
@@ -117,8 +117,8 @@ class APSurveyComponentResult(object):
     def amp_mean(self):
         """
         Property returning the overall mean relative amplitude of the individual segments for this component
-        
-        Returns: (float) Mean relative amplitude 
+
+        Returns: (float) Mean relative amplitude
 
         """
         if self._recalc_needed:
@@ -128,10 +128,10 @@ class APSurveyComponentResult(object):
     @property
     def amp_std(self):
         """
-        Property returning the standard deviation of the relative amplitude of the 
+        Property returning the standard deviation of the relative amplitude of the
         individual segments for this component
-        
-        Returns: (float) STD deviations of the segment relative amplitude values 
+
+        Returns: (float) STD deviations of the segment relative amplitude values
 
         """
         if self._recalc_needed:
@@ -144,7 +144,7 @@ class APSurveyComponentResult(object):
         Property returning the overall mean relative angle of the individual segments for this component
         WITH RESPECT to the NORTH component of the baseline sensor
 
-        Returns: (float) Mean relative angle 
+        Returns: (float) Mean relative angle
 
         """
         if self._recalc_needed:
@@ -154,10 +154,10 @@ class APSurveyComponentResult(object):
     @property
     def ang_std(self):
         """
-        Property returning the standard deviation of the relative angle of the 
+        Property returning the standard deviation of the relative angle of the
         individual segments for this component WITH RESPECT to the NORTH component of the baseline sensor
 
-        Returns: (float) STD deviations of the segment relative angle values 
+        Returns: (float) STD deviations of the segment relative angle values
 
         """
         if self._recalc_needed:
@@ -169,7 +169,7 @@ class APSurveyComponentResult(object):
         if self._recalc_needed:
             self._recalc()
         return self._lrms_mean
-
+9
     @property
     def var_mean(self):
         if self._recalc_needed:
@@ -235,29 +235,29 @@ class APSurveySegmentResult(object):
 
 class APSurvey(object):
     """
-    Performs relative azimuth and sensitivity calculations for two or more sensors in pairs. Structured on 
-    IDA historical approach that can analysze both 2 sensors for a station at one time wrt to one or two sets 
-    of reference sensor data obtained with the Azimuth Pointing System Kit, Compact Trillium portable sensor and 
+    Performs relative azimuth and sensitivity calculations for two or more sensors in pairs. Structured on
+    IDA historical approach that can analysze both 2 sensors for a station at one time wrt to one or two sets
+    of reference sensor data obtained with the Azimuth Pointing System Kit, Compact Trillium portable sensor and
     Taurus and Centaur portable digitizers.
-    
+
     In addition to measuring azimuth and sensitivity of each station sensor wrt to the reference sensor data,
-    the second (loc=10) sensor is also compared against the first (loc=00) sensor. The relative reslts can then
+    the second (loc=10) sensor is also compared against the first (loc=00) sensor. The relative reslts can then8888889
     be examined to see that the results of the three pairs fo sensors are internally consistent.
-    
-    A typical IDA APS calibration in the field will opbtain data for two lengthy time periods (15+ hours). 
-        1) 'Azimuth' data, with the reference sensor in a known orientation (from APS GPS infomation. This generally can only 
-    be done in open air, and does not permit the most accurate sensitivity comparisons between the reference sensor 
-    and the station sensors. 
+
+    A typical IDA APS calibration in the field will opbtain data for two lengthy time periods (15+ hours).
+        1) 'Azimuth' data, with the reference sensor in a known orientation (from APS GPS infomation. This generally can only
+    be done in open air, and does not permit the most accurate sensitivity comparisons between the reference sensor
+    and the station sensors.
         2) 'Absolute' data is acquired with the reference sensor very near the station sensors,
-    on the same pier, for example. In this instance, the azimuth and clock on the reference sensor will not be 
-    very well known, but the location allows for a better comparison of sensitivities. 
-    
-    When both sets of data can be obtained, the first is used to compute the relative azimuth of the 
+    on the same pier, for example. In this instance, the azimuth and clock on the reference sensor will not be
+    very well known, but the location allows for a better comparison of sensitivities.
+
+    When both sets of data can be obtained, the first is used to compute the relative azimuth of the
     station sensors with the reference sensor, adn teh second is ude to compute the relative sensitivities.
-    
-    The analysis process is driven by a YAML configuration file that is supplied to the APSurvey constructor. 
+
+    The analysis process is driven by a YAML configuration file that is supplied to the APSurvey constructor.
     The configuration file contains the following information (represented with Python data structures):
-    
+
          {
          # segment size. The entire timeseries is split into segments of this length. Analysis is performed on
          each one and the results aggregated for an overall result,
@@ -269,13 +269,13 @@ class APSurvey(object):
          # sample rate that both segments are decimated to before analysis
          'analysis_sample_rate_hz': 5,
 
-         # size of individual segments 
+         # size of individual segments
          'segment_size_secs': 1024,
 
          # trim/taper size used at each end when deconvolving/convolving responses.
          'segment_size_trim_secs': 128,
 
-         # coherence cutoff. If the pari of segments don't have a coherence of this value or greater 
+         # coherence cutoff. If the pari of segments don't have a coherence of this value or greater
          # they are not used in the overall calculation for htat component. Start at 0.99 and go as low as 0.95
          # for noisy data.
          'coherence_cutoff': 0.99,
@@ -292,7 +292,7 @@ class APSurvey(object):
          'sec_sensor_loc': '10',
 
          # location and timeseries start/end info. Time ar used when retrieving station sensor data from IDA archives.
-         # the 'process' flag indicates whether to include the dataset in the analysis. One of the two must always 
+         # the 'process' flag indicates whether to include the dataset in the analysis. One of the two must always
          # be set to True
          'ref_absolute_data': {'endtime_iso': '',
                                'ms_file': '',
@@ -308,14 +308,14 @@ class APSurvey(object):
 
          # location of root of IDA IDA10 archives
          'arc_raw_dir': '/ida/archive/raw',
-         # NOTE: This may also be a MINISEED file, if a non-IDA sensor is being analyzed. 
+         # NOTE: This may also be a MINISEED file, if a non-IDA sensor is being analyzed.
          # in this case, the metadata from the 'pri_sensor' above is used in output of results'
 
          # location of RESP files used for comuting sensors responses
          'resp_file_dir': '/ida/dcc/response/RESP',
-         
+
          }
-                
+
     """
 
     ChanTpl = namedtuple('ChanTuple', 'z n e')
@@ -421,12 +421,12 @@ class APSurvey(object):
 
     def _process_config(self):
         """
-        Checks for existance of keys and some existance of some file/directory values 
+        Checks for existance of keys and some existance of some file/directory values
         in parsed yaml config file.
-        
-        Sets self.ok flag to False if it runs into any problems. 
+
+        Sets self.ok flag to False if it runs into any problems.
         Flag needs to be check from calling code
-        
+
         Returns: None
 
         """
@@ -660,11 +660,11 @@ class APSurvey(object):
 
     def _respfilename(self, net, sta, chn, loc):
         """
-        Construct the absolute or relative path of RESP file for given net, sta, chn, loc 
+        Construct the absolute or relative path of RESP file for given net, sta, chn, loc
         using RESP directory supplied in config variable resp_file_dir
-        
+
         Args:
-            net (str): Network code 
+            net (str): Network code
             sta (str): Station code
             chn (str): Channel code
             loc (str): Location code
@@ -694,7 +694,7 @@ class APSurvey(object):
         Called externally to make sure dataset is enabled in config file before try calling self.analyze(dataset)
 
         Args:
-            dataset (str): 'azi' or 'abs' 
+            dataset (str): 'azi' or 'abs'
 
         Returns:
             (bool): True if data set 'dataset' is enabled in the configuration. False otherwise.
@@ -709,28 +709,28 @@ class APSurvey(object):
 
     def _correct_ref_time(self, dataset, sens1, sens2):
         """
-        Cross correlate two timeseries to indentify any clock offset using the 'Z' copmonent data 
-        from each sensor. It takes a segment of the timeseries that is correlation_segment_size long 
+        Cross correlate two timeseries to indentify any clock offset using the 'Z' copmonent data
+        from each sensor. It takes a segment of the timeseries that is correlation_segment_size long
         (specified in config) and in the center of the timeseries.
-        
+
         Teh two timeseries are bandpass filter from config bp_start (default is 0.1hz) to 2hz.
-        
+
         The correlation calculation is performed by the obspy.signal.xcorr function underneath.
-        
-        Adjusts the starttime of the traces from sens1 to remove clock discrepancy. Positive offset 
-        adjustment value indicates that the sens1 clock is slow (behind) sens2. Negative indicates the opposite. 
-        
-        We adjust sens1 because when comparing with a true reference sensor timeseries the clock 
-        may have been set by hand, not GPS. So we assume the sta sensor clocks have better time 
+
+        Adjusts the starttime of the traces from sens1 to remove clock discrepancy. Positive offset
+        adjustment value indicates that the sens1 clock is slow (behind) sens2. Negative indicates the opposite.
+
+        We adjust sens1 because when comparing with a true reference sensor timeseries the clock
+        may have been set by hand, not GPS. So we assume the sta sensor clocks have better time
         using the Q330 and GPS.
-        
+
         Args:
-            dataset (str): 
-            sens1 (str): should be 'ref' 
-            sens2 (str): 'pri' or 'sec' 
+            dataset (str):
+            sens1 (str): should be 'ref'
+            sens2 (str): 'pri' or 'sec'
 
         Returns:
-            (float, float, np.array, str): (Time offset in seconds, 
+            (float, float, np.array, str): (Time offset in seconds,
                                             max correlation value,
                                             correlation function values
                                             error msg returned from underlying routines
@@ -799,15 +799,15 @@ class APSurvey(object):
 
     def _read_ref_data(self, dataset):
         """
-        Read reference sensor miniseed data for given dataset, 
+        Read reference sensor miniseed data for given dataset,
         and store ChanTpl of 3 component traces.
-        
+
         Channels with old-style IDA reference sensor codes are reanmed to Z12.
-        Channels codes can be overriden with reference sensors metadata supplied 
+        Channels codes can be overriden with reference sensors metadata supplied
         in the config file, if it is set.
-        
+
         Ultimately, the refernce sensor channel codes MUST end in Z, 1 and 2 to succeed.
-        
+
         Args:
             dataset (str): 'azi' or 'abs'
 
@@ -881,20 +881,20 @@ class APSurvey(object):
     def _read_sensor_data(self, dataset, sensor):
         """
         Retrieve IDA10 data from IDA Archive and convert to miniseed for indicated
-        azi or abs time period. 
-        
+        azi or abs time period.
+
         ALTERNATELY, if the ARC_RAW_DIR config setting is a file, it is ASSUMED to be a miniseed file.
         This is ONLY to run single analysis (not both 'azi' and 'abs') on an existing miniseed file
         instead of pulling data from IDA10 archive. IN this miniseed file there MUST be only 3 traces
         with Z12 channel codes.
-        
+
         Args:
-            dataset (str): 'azi' or 'abs' to indicate which time period to read from archive 
+            dataset (str): 'azi' or 'abs' to indicate which time period to read from archive
             sensor (str): 'pri' or 'sec' to indicate which sensor's data to read form archive
 
-        Returns: 
+        Returns:
             (bool): Success status: True sensor data read, or False if not.
-        
+
         """
 
         dataset = dataset.lower()
@@ -1002,27 +1002,27 @@ class APSurvey(object):
     def _read_responses(self, sens1, sens2):
         """
         Computes a pair of responses, for each component, for comparing a specific pair of sensors.
-         
-        One is the response for sens1, but computed with the sample rate of sens2. This is used to convolve 
+
+        One is the response for sens1, but computed with the sample rate of sens2. This is used to convolve
         the sen1 response into the sens2 timeseries.
-        
+
         The other is the response of sens, at it's normal operating sample rate. This is used to deconvolving
         sens2 response from it's timeseries
-        
-        
-        sens1 is considered the 'reference' sensor. and sens2 timeseries is  
-        
+
+
+        sens1 is considered the 'reference' sensor. and sens2 timeseries is
+
         For each component:
             The
-         
-         
+
+
         azimuth and abs sensitivity of sens2 wrt sens1.
-        
-        
-        
+
+
+
         Args:
-            sens1 (str): 'ref' or 'sec'. These are the two sensors that can be used as baseline 
-            sens2 (str):  'pri' or 'sec'. These are the two sensors that are compared against a baseline sensor 
+            sens1 (str): 'ref' or 'sec'. These are the two sensors that can be used as baseline
+            sens2 (str):  'pri' or 'sec'. These are the two sensors that are compared against a baseline sensor
 
         Returns:
             (bool, bool): Success flags. (Ref response OK, Sensor response OK)
@@ -1153,9 +1153,9 @@ class APSurvey(object):
     def _sensor_sample_rate_str(self, dataset, sensor):
         """
         Reads sample rate from the first Trace in dataset/sensor Stream and returns it formatted as a string
-        
+
         Args:
-            dataset (str): 'azi' or 'abs' 
+            dataset (str): 'azi' or 'abs'
             sensor (str): 'ref' or 'pri' or 'sec'
 
         Returns:
@@ -1169,13 +1169,13 @@ class APSurvey(object):
 
     def _chanloc_codes(self, sensor):
         """
-        
+
         Args:
-            sensor (str): 'pri' or 'sec' 
+            sensor (str): 'pri' or 'sec'
 
         Returns:
-            (str): Comma separated list of CHAN+LOC codes as set in config for 'sensor'. 
-                    Returns empty string if not set in config or if invalid sensor requested 
+            (str): Comma separated list of CHAN+LOC codes as set in config for 'sensor'.
+                    Returns empty string if not set in config or if invalid sensor requested
 
         """
 
@@ -1200,11 +1200,11 @@ class APSurvey(object):
     def response_tr(self, respdate, npts, sr, net, sta, chn, loc, units='VEL'):
         """
         Obtain channel/loc frequency response using evalresp (from obspy) and RESP file on disk.
-         
+
         Args:
-            respdate (datetime or UTCDateTime): Time at for response should be returned 
-            npts (int): NUmber of points in the response 
-            sr (int or float): sample rate at which response should be computed 
+            respdate (datetime or UTCDateTime): Time at for response should be returned
+            npts (int): NUmber of points in the response
+            sr (int or float): sample rate at which response should be computed
             net (str): Network code
             sta (str): Station code
             chn (str): Channel code
@@ -1212,7 +1212,7 @@ class APSurvey(object):
             units (str): 'DIS', 'VEL', or 'ACC'
 
         Returns:
-            (np.array, np.array, bool): 
+            (np.array, np.array, bool):
                 (Complex array with response, array with frequencies, True/False Success flag)
 
         """
@@ -1244,7 +1244,7 @@ class APSurvey(object):
     def ms_filename(self, dataset, sensor):
         """
         Args:
-            dataset (str): 'azi' or 'abs' 
+            dataset (str): 'azi' or 'abs'
             sensor (str): 'pri' or 'sec'
 
         Returns:
@@ -1257,12 +1257,12 @@ class APSurvey(object):
     def _get_result_headers(self, datatype):
         """
         Construct headers with analysis parameters for summary and detailed results files.
-        
+
         Args:
-            datatype (str): 'azi' or 'abs' 
+            datatype (str): 'azi' or 'abs'
 
         Returns:
-            (str, str): (Summary Hdr, Detailed Hdr) 
+            (str, str): (Summary Hdr, Detailed Hdr)
 
         """
 
@@ -1315,13 +1315,13 @@ class APSurvey(object):
         """
         Construct text for results summary and detail result files form 'results'
         Args:
-            dataset (str): 'azi' or 'abs' 
+            dataset (str): 'azi' or 'abs'
             sens1 (str): 'ref' or 'sec'
             sens2 (str): 'pri' or 'sec'
             results (ChanTpl): ChanTpl with APSurveyComponentResults for each component
 
         Returns:
-            (str, str): (Summary result text, Detailed result text). 
+            (str, str): (Summary result text, Detailed result text).
                         Returns empty strings if no results (should never happen)
 
         """
@@ -1373,15 +1373,15 @@ class APSurvey(object):
     def analyze(self, dataset):
         """
         Called externally to perform the analysis and write out results for a given 'dataset'.
-        
+
         The refernce data is read first. Then the secondary station sensor is read. The secondary sensor is read
         first because in most cases it will be sampling at the same rate (40hz) as the reference sensor and is
-        therefor better to use to run a correlation to identify and time offset between the reference and 
+        therefor better to use to run a correlation to identify and time offset between the reference and
         station sensors' timeseries
-        
+
         Once any time offset is correction
         Args:
-            dataset (str): 'azi' or 'abs 
+            dataset (str): 'azi' or 'abs
 
         Returns:
             (str, str, list): Summary, detail and list of waveform files names, respectively.
@@ -1492,14 +1492,14 @@ class APSurvey(object):
         """
         Prepares for analysis of wach of the three components.
         Identifies proper respoonses for de/convolution
-        
+
         Args:
-            datatype (str): 'azi' or 'abs 
-            sens1 (str): 'ref' or 'sec' 
+            datatype (str): 'azi' or 'abs
+            sens1 (str): 'ref' or 'sec'
             sens2 (str): 'pri' or 'sec'
 
-        Returns: 
-            (ChanTpl): Contains tuple of APSurveyComponentResults containing the results of 
+        Returns:
+            (ChanTpl): Contains tuple of APSurveyComponentResults containing the results of
             this sensor pair comparisons.
 
         """
@@ -1557,15 +1557,15 @@ class APSurvey(object):
 
     def _compare_horizontals(self, tr1_n, tr1_e, tr2, tr1_resp, tr2_resp, results):
         """
-        Compares tr2 from one sensor with the north and east (tr1_n, tr1_e) traces from the another sensor 
+        Compares tr2 from one sensor with the north and east (tr1_n, tr1_e) traces from the another sensor
         to determine the relative orientation of tr2 WRT tr1_n and relative sensitivities.
         The traces is are analyzed in segments of length specified in the config.
         The current tr2 response is removed and the response from tr1 is applied
-        
-        Result is expressed as tr2 angle WRT to tr1_n. 
-        
-        Positive relative angles are clock-wise adn saved in radians 
-        
+
+        Result is expressed as tr2 angle WRT to tr1_n.
+
+        Positive relative angles are clock-wise adn saved in radians
+
         Args:
             tr1_n (Trace): sensor 1 ('baseline') north trace
             tr1_e (Trace): sensor 1 ('baseline') east trace
@@ -1723,8 +1723,8 @@ class APSurvey(object):
 
     def _compare_verticals(self, tr1, tr2, tr1_resp, tr2_resp, results):
         """
-        Compares the vertical component amplitudes of two traces from different sensors to determine the 
-        relative sensitivities of hte two components. 
+        Compares the vertical component amplitudes of two traces from different sensors to determine the
+        relative sensitivities of hte two components.
         The traces is are analyzed in segments of length specified in the config.
         The current tr2 response is removed and the response from tr1 is applied
 
