@@ -71,6 +71,7 @@ class CalInfo():
             'sensor': None,
             'comp': None,
             'ctbto': None,
+            'ctbto_calper': None,
             'chan': None,
             'opsr': None,
             'lfdatedir': None,
@@ -229,6 +230,10 @@ class CalInfo():
                 print(red('Error in configuration file: "sensor_calib_factor_2" key is missing.'))
                 valid = False
 
+            if 'ctbto_calper' not in self._config:
+                print(red('Error in configuration file: "ctbto_calper" key is missing.'))
+                valid = False
+
         if 'nom_paz_dir' not in self._config:
             print(red('Error in configuration file: "nom_paz_dir" key is missing.'))
             valid = False
@@ -373,6 +378,21 @@ class CalInfo():
                 raise ValueError('Invalid value for CTBTO Y/N flag: ' + value + ". Should be one of ['Y', 'N']")
         else:
             self._info['ctbto'] = None
+
+    @property
+    def ctbto_calper(self):
+        return self._info['ctbto_calper'] if self._info['ctbto_calper'] else ''
+
+    @ctbto_calper.setter
+    def ctbto_calper(self, value):
+
+        if value:
+            if isinstance(value, (float, int)) and value > 0.0:
+                self._info['ctbto_calper']= float(value)
+            else:
+                raise ValueError('Invalid value for CTBTO CALPER: ' + value + ". Must be a numeric value > 0")
+        else:
+            self._info['ctbto_calper'] = None
 
     def is_ctbto(self):
         return self.ctbto == 'Y'
@@ -714,6 +734,39 @@ class CalInfo():
         if result == SelectResult.ok:
             ndx = user_choice_groups[0][0]
             self.ctbto = flaglist[ndx][0]
+
+        return result
+
+    def enter_ctbto_calper(self):
+
+        result = SelectResult.noop
+        while result not in [SelectResult.quit,
+                             SelectResult.goback,
+                             SelectResult.ok]:
+            print()
+            calper_str = input(bold(blue(self.tui_indent_str + ' Enter CTBTO Calibration Period (CALPER) value [1.0]: ')))
+
+            try:
+                calper = float(calper_str)
+                if calper <= 0.0:
+                    print()
+                    print(self.tui_indent_str + bold(red(
+                        'ERROR: CALPER must be > 0.0.'
+                    )))
+                    print()
+                else:
+                    self.ctbto_calper = calper
+                    result = SelectResult.ok
+            except:
+                if calper_str.upper() == 'Q':
+                    result = SelectResult.quit
+                elif calper_str.upper() == 'B':
+                    result = SelectResult.goback
+                else:
+                    print()
+                    print(self.tui_indent_str +
+                          bold(red('ERROR: CTBTO Calibration Period (CALPER) must be a positive numeric value.')))
+                    print()
 
         return result
 
@@ -1213,6 +1266,16 @@ class CalInfo():
                     self.collect_backup()
                     col_res = SelectResult.ok
 
+        elif self.ctbto and not self.ctbto_calper:
+            if self.mode == 'config-file':
+                self.ctbto_calper = self._config['ctbto_calper']
+                col_res = SelectResult.ok
+            else:
+                col_res = self.enter_opsr()
+                if col_res == SelectResult.goback:
+                    self.collect_backup()
+                    col_res = SelectResult.ok
+
         return col_res, col_msg
 
     def collect_info(self):
@@ -1233,7 +1296,7 @@ class CalInfo():
         opsr =   bold('{:<4}'.format(self.opsr))
         comp =   bold('{:<3}'.format(self.comp))
         chan =   bold('{:<6}'.format(self.chan))
-        ctbto =  bold('{:<3}'.format(self.ctbto))
+        ctbto =  bold('{:<3}/{}'.format(self.ctbto, self.ctbto_calper))
         sen =    bold('{:<10}'.format(self.sensor))
         lffile = bold('{}'.format(self.lffile))
         hffile = bold('{}'.format(self.hffile))
@@ -1298,7 +1361,7 @@ class CalInfo():
         opsr =   '{:>3}'.format('SR:') + '{:<4}'.format(self.opsr)
         comp =   '{:>4}'.format('Comp:') + '{:<3}'.format(self.comp)
         chan =   '{:>4}'.format('Chan:') + '{:<6}'.format(self.chan)
-        ctbto =  '{:>5}'.format('CTBTO:') + '{:<3}'.format(self.ctbto)
+        ctbto =  '{:>5}'.format('CTBTO:') + '{:<8}'.format(self.ctbto)
         sen =    '{:>4}'.format('Sen:') + '{:<10}'.format(self.sensor.upper())
         lffile = '{:>8}'.format('LF File:') + '{}'.format(self.lffile)
         hffile = '{:>8}'.format('HF File:') + '{}'.format(self.hffile)
