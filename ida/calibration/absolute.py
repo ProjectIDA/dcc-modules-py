@@ -1452,7 +1452,7 @@ class APSurvey(object):
         else:
             compare_sec = False  # not installed
 
-        # read 'sec' sta sensor if enabled/active in config
+        # read 'pri' sta sensor if enabled/active in config
         if self.pri_sensor_installed:
             data_ok = self._read_sensor_data(dataset, 'pri')
             compare_pri = data_ok
