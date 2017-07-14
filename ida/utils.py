@@ -93,7 +93,7 @@ def i10get(i10_arc_dir, sta, chan_list, startime, endtime, outfn=None, **kwargs)
         # add this batch to list of processed
         gz_files_processed |= gz_files
 
-        gz_file_paths = [os.path.join(gz_dir, gz_file) for gz_file in gz_files]
+        gz_file_paths = sorted([os.path.join(gz_dir, gz_file) for gz_file in gz_files])
         if gz_file_paths:
 
             if outfn:
