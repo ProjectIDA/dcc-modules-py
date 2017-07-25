@@ -35,7 +35,8 @@ import obspy.signal.filter as osf
 import ida.calibration.qcal_utils
 from ida.signals.paz import PAZ
 import ida.signals.utils
-from ida.instruments import *
+from idal.instruments import CALTYPE_RBLF, CALTYPE_RBHF, TRIAXIAL_SEIS_MODELS, \
+        TRIAXIAL_TRANSFORMS, XFRM_TYPE_XYZ2UVW, XFRM_TYPE_UVW2ENZ_ABS
 
 import matplotlib.pyplot as plt
 
@@ -118,14 +119,14 @@ def analyze_cal_component(fullpaz, lfpertndxs, hfpertndxs, opsr, lftf_f, lf_tf, 
 
     def resp_cost(p, paz_partial_flags, freqs, normfreq, tf_target, resp_pert0):
         """
-        
+
         Args:
-            p (list): initial values of poles and zeros in list form 
+            p (list): initial values of poles and zeros in list form
             paz_partial_flags (list): flags identifying which poles and zeros to perturb
-            freqs (list): list of frequencies used in frequnecy response calc 
-            normfreq (float): frequency of normalization 
-            tf_target (list): list of real followed by imag components of target TF 
-            resp_pert0 (list(complex)): initial frequency response of paz to be perturbed 
+            freqs (list): list of frequencies used in frequnecy response calc
+            normfreq (float): frequency of normalization
+            tf_target (list): list of real followed by imag components of target TF
+            resp_pert0 (list(complex)): initial frequency response of paz to be perturbed
 
         Returns:
             resid (list): array of difference between target and new TF fit with real followed by imag components
@@ -485,7 +486,7 @@ def triaxial_horizontal_magnitudes(cal_tpl, seis_model):
                                                           one=enz[1],
                                                           vertical=enz[2],
                                                           input=cal_tpl.input)
-        success = True
+
     else:
         msg = 'The seismomemter model {} is unsupported or not a triaxial instrument.'.format(seis_model)
         logging.error(msg)
