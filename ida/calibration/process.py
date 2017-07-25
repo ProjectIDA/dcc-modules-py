@@ -35,7 +35,7 @@ import obspy.signal.filter as osf
 import ida.calibration.qcal_utils
 from ida.signals.paz import PAZ
 import ida.signals.utils
-from idal.instruments import CALTYPE_RBLF, CALTYPE_RBHF, TRIAXIAL_SEIS_MODELS, \
+from ida.instruments import CALTYPE_RBLF, CALTYPE_RBHF, TRIAXIAL_SEIS_MODELS, \
         TRIAXIAL_TRANSFORMS, XFRM_TYPE_XYZ2UVW, XFRM_TYPE_UVW2ENZ_ABS
 
 import matplotlib.pyplot as plt
