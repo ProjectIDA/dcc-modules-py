@@ -5,25 +5,6 @@ import os
 import glob
 import json
 
-def main():
-    parser = argparse.ArgumentParser(description="Walk the given directory and gather dict of subdirectories")
-    parser.add_argument("-d", "--datadir",
-                        help="the directory of PSD data", 
-                        action="store",
-                        type = str,
-                        required=True)
-    args = parser.parse_args()
-    generateJSONFile(args.datadir)
-
-def generateJSONFile(dirName):
-    os.chdir(dirName + "/generated_files")
-
-    entries_dict = process_dir("")
-
-    os.chdir(dirName)
-    with open('./psd-dates.json', 'w') as fp:
-            json.dump(entries_dict, fp)
-    
 def process_dir(idroot):
     # must start in root of tree you're processing
     entries = []
@@ -61,5 +42,3 @@ def process_dir(idroot):
     return entries
 
 ################################################################################
-if __name__ == '__main__':
-    main()
