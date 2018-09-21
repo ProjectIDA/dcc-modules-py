@@ -116,7 +116,9 @@ def imageOutputFile(sta, loc, chan, start, end, outdirname):
 
 ################################################################################
 def makePageImagePath(start, end, outDir):
-    if start == end:
+    print("start: {}".format(start.strftime("%Y/%m/%d")))
+    print("end: {}".format(end.strftime("%Y/%m/%d")))
+    if start.strftime("%Y/%m/%d") == end.strftime("%Y/%m/%d"):
         # doing a day, dir = base/year/month/day
         pathName = outDir + "/generated_files/" + str(start.year) + "/" + str(start.month).rjust(2, '0') + "/" + str(start.day).rjust(2, '0')
     elif (end.toordinal() - start.toordinal()) > 1:
