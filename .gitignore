@@ -11,6 +11,8 @@ __pycache__/
 *.ida
 *.ms
 
+# CTRL-P vim pluging
+CTRLP_ROOT
 
 # vim buffers?
 *.swp

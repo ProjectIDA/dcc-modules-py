@@ -804,11 +804,8 @@ class APSurvey(object):
         Read reference sensor miniseed data for given dataset,
         and store ChanTpl of 3 component traces.
 
-        Channels with old-style IDA reference sensor codes are reanmed to Z12.
-        Channels codes can be overriden with reference sensors metadata supplied
+        Network, Station and Loc codes can be overriden with reference sensors metadata supplied
         in the config file, if it is set.
-
-        Ultimately, the refernce sensor channel codes MUST end in Z, 1 and 2 to succeed.
 
         Args:
             dataset (str): 'azi' or 'abs'
@@ -862,6 +859,9 @@ class APSurvey(object):
             if self._config['ref_kit_metadata']['location'].strip():
                 tr.stats.location = self._config['ref_kit_metadata']['location']
 
+        # pull out individual components. Using 'select' cause it will return an empty stream
+        # if the component is not found instead of raising an exception.
+        # So, can check for '1', then 'N' if not found. Same of 2/E.
         st_z = self.streams[dataset]['ref'].select(component='Z')
         st_1 = self.streams[dataset]['ref'].select(component='1')
         if len(st_1) == 0:
@@ -871,7 +871,7 @@ class APSurvey(object):
             st_2 = self.streams[dataset]['ref'].select(component='E')
 
         try:
-            # split out traces based on channel Z12 codes
+            # split out traces by component. If any stream is empty, then component missing. End of story.
             tr_z = st_z[0]
             tr_1 = st_1[0]
             tr_2 = st_2[0]
