@@ -47,7 +47,7 @@ from ida import IDA_PKG_VERSION_HASH_STR, IDA_PKG_VERSION_DATETIME
 from ida.utils import i10get, pimseed
 from ida.signals.utils import time_offset, taper_high_freq_resp, \
         dynlimit_resp_min
-from ida.calibration.shaketable import rename_chan
+# from ida.calibration.shaketable import rename_chan
 
 class APSurveyComponentResult(object):
     """
@@ -853,8 +853,6 @@ class APSurvey(object):
         self.streams[dataset]['ref'].merge()
 
         for tr in self.streams[dataset]['ref']:
-            # rename refernece sensors traces with old-style IDA channel codes
-            tr.stats.channel = rename_chan(tr.stats.channel)
 
             # override channel codes with those in config file, if they are set.
             if self._config['ref_kit_metadata']['network'].strip():
@@ -863,13 +861,22 @@ class APSurvey(object):
                 tr.stats.station = self._config['ref_kit_metadata']['station']
             if self._config['ref_kit_metadata']['location'].strip():
                 tr.stats.location = self._config['ref_kit_metadata']['location']
+
+        st_z = self.streams[dataset]['ref'].select(component='Z')
+        st_1 = self.streams[dataset]['ref'].select(component='1')
+        if len(st_1) == 0:
+            st_1 = self.streams[dataset]['ref'].select(component='N')
+        st_2 = self.streams[dataset]['ref'].select(component='2')
+        if len(st_2) == 0:
+            st_2 = self.streams[dataset]['ref'].select(component='E')
+
         try:
             # split out traces based on channel Z12 codes
-            tr_z = self.streams[dataset]['ref'].select(component='Z')[0]
-            tr_1 = self.streams[dataset]['ref'].select(component='1')[0]
-            tr_2 = self.streams[dataset]['ref'].select(component='2')[0]
+            tr_z = st_z[0]
+            tr_1 = st_1[0]
+            tr_2 = st_2[0]
         except Exception as e:
-            self.logmsg(logging.ERROR, 'Z12 components not found in reference data.')
+            self.logmsg(logging.ERROR, 'Z12/ZNE components not found in reference data.')
             print(self.streams[dataset]['ref'])
             self.logmsg(logging.ERROR, 'Can not use REFERENCE data in sensor comparisons.')
             self.streams[dataset]['ref'] = Stream()
@@ -1813,8 +1820,8 @@ class APSurvey(object):
             fraction = (self.segment_size_trim/self.segment_size_secs)
             taper = tukey(len(tr2_seg), alpha=fraction * 2, sym=True)
 
-            print('tr2_resp len:', len(tr2_resp))
-            print('tr2_seg len:', len(tr2_seg))
+#            print('tr2_resp len:', len(tr2_resp))
+#            print('tr2_seg len:', len(tr2_seg))
             # remove tr2 response from timeseries
             tr2_fft = rfft(multiply(tr2_seg, taper))
             tr2_fft_dcnv = divide(tr2_fft[1:], tr2_resp[1:])
@@ -1834,13 +1841,15 @@ class APSurvey(object):
             trim_cnt = round(tr2_sr * self.segment_size_trim)
             tr2_cnv = tr2_cnv[trim_cnt:-trim_cnt]
 
-            # resample all 3 timeseries to analsysi sample rate
-            tr1_seg = ss.resample(tr1_seg, round(len(tr1_seg) / (tr1_sr / self.analysis_sample_rate)))
-            tr2_cnv = ss.resample(tr2_cnv, round(len(tr2_cnv) / (tr2_sr / self.analysis_sample_rate)))
+            # resample timeseries to analsysi sample rate
+#            tr1_seg = ss.resample(tr1_seg, round(len(tr1_seg) / (tr1_sr / self.analysis_sample_rate)))
+#            tr2_cnv = ss.resample(tr2_cnv, round(len(tr2_cnv) / (tr2_sr / self.analysis_sample_rate)))
+            tr1_seg_d = ss.decimate(tr1_seg, int(round(tr1_sr / self.analysis_sample_rate, 0)), ftype='iir', n=8, zero_phase=True)
+            tr2_cnv_d = ss.decimate(tr2_cnv, int(round(tr2_sr / self.analysis_sample_rate, 0)), ftype='iir', n=8, zero_phase=True)
 
             # demean and detrend
-            tr1_seg = ss.detrend(tr1_seg, type='linear')
-            tr2_cnv = ss.detrend(tr2_cnv, type='linear')
+            tr1_seg = ss.detrend(tr1_seg_d, type='linear')
+            tr2_cnv = ss.detrend(tr2_cnv_d, type='linear')
 
             # apply taper before filtering
             fraction = 1/12
