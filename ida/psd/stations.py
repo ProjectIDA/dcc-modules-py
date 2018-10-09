@@ -23,6 +23,7 @@
 
 import os
 import glob
+import datetime
 
 CHANNELLIST = ["bh1", "bh2", "bhz", "bhn", "bhe"]
 
@@ -69,7 +70,7 @@ def getMetadataFilename(station):
 
 
 ################################################################################
-def getStationList():
+def getStationList(monthStart, monthEnd):
  
     dbDir = os.environ.get('IDA_DATASCOPEDB_DIR')
     dbSite = dbDir + '/' + "IDA.site"
@@ -82,9 +83,12 @@ def getStationList():
 
     siteList = []
     for line in file:
-        site = line.split()[0].lower()
-        if site not in siteList:
-            siteList.append(site)
+        siteName = line.split()[0].lower()
+        siteActiveStart = datetime.datetime.utcfromtimestamp(float(line.split()[1]))
+        siteActiveEnd = datetime.datetime.utcfromtimestamp(float(line.split()[2]))
+
+        if siteActiveStart < monthEnd and siteActiveEnd > monthStart:
+            siteList.append(siteName)
         siteList.sort()
 
     return siteList
