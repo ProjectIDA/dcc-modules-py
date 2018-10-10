@@ -29,9 +29,9 @@ CHANNELLIST = ["bh1", "bh2", "bhz", "bhn", "bhe"]
 
 LOCATIONLIST = ["00", "10"]
 
-def isValidStationList(stations):
+def isValidStationList(stations, start, end):
     for station in stations:
-        if not isValidStation(station):
+        if not isValidStation(station, start, end):
             return False,station
     return True,None
 
