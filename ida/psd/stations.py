@@ -35,8 +35,8 @@ def isValidStationList(stations):
             return False,station
     return True,None
 
-def isValidStation(station_id):
-    stationList = getStationList()
+def isValidStation(station_id, start, end):
+    stationList = getStationList(start, end)
     return True if station_id in stationList else False
 
 def isValidChanList(chans):
