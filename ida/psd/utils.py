@@ -102,7 +102,7 @@ def mseedInputFilename(filename):
         
 
 ################################################################################
-def imageOutputFile(sta, loc, chan, start, end, outdirname):
+def imageOutputFile(sta, loc, chan, start, end, outdir):
     if not outdir:
         outdir = "./images"
 
