@@ -103,8 +103,8 @@ def mseedInputFilename(filename):
 
 ################################################################################
 def imageOutputFile(sta, loc, chan, start, end, outdirname):
-    if not outdirname:
-        outdirname = "./images"
+    if not outdir:
+        outdir = "./images"
 
     if not path.exists(outdir):
         makedirs(outdir)
