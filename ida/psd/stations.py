@@ -91,6 +91,7 @@ def getStationList(monthStart, monthEnd):
             siteList.append(siteName)
         siteList.sort()
 
+    file.close()
     return siteList
 
 ################################################################################
