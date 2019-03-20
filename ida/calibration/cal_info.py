@@ -815,14 +815,14 @@ class CalInfo():
                              SelectResult.goback,
                              SelectResult.ok]:
             print()
-            opsr_str = input(bold(blue(self.tui_indent_str + ' Enter sensor operating frequency [20, 40]: ')))
+            opsr_str = input(bold(blue(self.tui_indent_str + ' Enter sensor operating frequency [20, 40, 100]: ')))
 
             try:
                 opsr = round(float(opsr_str))
-                if opsr not in [20, 40]:
+                if opsr not in [20, 40, 100]:
                     print()
                     print(self.tui_indent_str + bold(red(
-                        'ERROR: Unsupported frequency. 20 and 40 are the supported frrequencies.'
+                        'ERROR: Unsupported frequency. 20, 40 and 100 are the supported frrequencies.'
                     )))
                     print()
                 else:
