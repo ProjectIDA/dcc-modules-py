@@ -4,6 +4,7 @@ __pycache__/
 *$py.class
 
 .DS_Store
+._.DS_Store
 
 # PyCharm stuff
 .idea
