@@ -5,7 +5,7 @@ import os
 import glob
 import json
 import pprint
-from calendar import month_abbr
+from calendar import month_abbr, monthrange
 
 def process_dir(rootdir):
     """ must start in root of tree you're processing. it should be the directory containing YYYY subdirs
@@ -31,12 +31,17 @@ def process_dir(rootdir):
 
                 monthinfo = { 'month': amonth,
                               'monthname': month_abbr[int(amonth)],
-                              'days': []
+                              'days': [],
+                              'complete': False
                             }
 
                 os.chdir(amonth)
                 for aday in sorted(glob.glob('??')):
                     monthinfo['days'].append(aday)
+
+                # if we have all days, mark month as "complete" used in template for partial month
+                if len(monthinfo['days']) == monthrange(int(ayear), int(monthinfo['month']))[1]:
+                    monthinfo['complete'] = True
 
                 yearinfo['months'].append(monthinfo)
                 os.chdir("..")
