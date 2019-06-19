@@ -30,16 +30,16 @@ from os import environ, path, makedirs
 """ custom argparse timestamp, check for both month/day date and ordinal date formats """
 def datetimeType(stamp):
     try:
-        return datetime.datetime.strptime(stamp, "%Y-%m-%dT%H-%M-%S")
+        return datetime.datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%S")
     except ValueError:
         try:
-            return datetime.datetime.strptime(stamp, "%Y-%m-%d-%H-%M-%S")
+            return datetime.datetime.strptime(stamp, "%Y-%m-%d-%H:%M:%S")
         except ValueError:
             try:
-                return datetime.datetime.strptime(stamp, "%Y-%jT%H-%M-%S")
+                return datetime.datetime.strptime(stamp, "%Y-%jT%H:%M:%S")
             except ValueError:
                 try:
-                    return datetime.datetime.strptime(stamp, "%Y-%j-%H-%M-%S")
+                    return datetime.datetime.strptime(stamp, "%Y-%j-%H:%M:%S")
                 except ValueError:
                     raise argparse.ArgumentTypeError("".join("Invalid date: \"", stamp, "\""))
 
