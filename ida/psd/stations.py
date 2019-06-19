@@ -25,7 +25,7 @@ import os
 import glob
 import datetime
 
-CHANNELLIST = ["bh1", "bh2", "bhz", "bhn", "bhe"]
+CHANNELLIST = ["bh1", "bh2", "bhz", "bhn", "bhe", "lh1", "lh2", "lhz", "lhn", "lhe"]
 
 LOCATIONLIST = ["00", "10"]
 
