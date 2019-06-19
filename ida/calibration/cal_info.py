@@ -1216,9 +1216,9 @@ class CalInfo():
                     # good channel, see if we can pull sample rate out of DB, if available
                     if isinstance(self.stages_df, DataFrame):
                         if not self.omit_lf:
-                            self._lf_chn_stages = get_stages(self.stages_df, self.sta, self.loc, self.chan, self.lfdatedir)
+                            self._lf_chn_stages = get_stages(self.stages_df, self.sta, self.loc, self.chan, self.lfdatedir[:10])
                         elif not self.omit_hf:
-                            self._hf_chn_stages = get_stages(self.stages_df, self.sta, self.loc, self.chan, self.hfdatedir)
+                            self._hf_chn_stages = get_stages(self.stages_df, self.sta, self.loc, self.chan, self.hfdatedir[:10])
 
                         if isinstance(self.chn_stages, DataFrame) and not (len(self.chn_stages) < 3):
                             # get channel freq from stage 3 srate column
