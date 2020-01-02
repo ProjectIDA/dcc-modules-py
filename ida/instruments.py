@@ -52,6 +52,7 @@ SEISTYPE_STS25 = 'STS2_5'
 SEISTYPE_STS25F = 'STS2_5_FAST'
 SEISTYPE_STS5A = 'STS-5A'
 SEISTYPE_STS6 = 'STS6'
+SEISTYPE_TRI = 'TRI'  // compact trillium
 SEISTYPE_TR12PA = 'TR12PB'
 SEISTYPE_TR12PB = 'TR12PA'
 SEISTYPE_TR240 = 'TR240'
@@ -78,6 +79,7 @@ SEISMOMETER_MODELS = [
     # SEISTYPE_STS25F,
     SEISTYPE_STS5A,
     SEISTYPE_STS6,
+    SEISTYPE_TRI,
     SEISTYPE_TR12PA,
     SEISTYPE_TR12PB,
     SEISTYPE_TR240,
@@ -103,6 +105,7 @@ TRIAXIAL_SEIS_MODELS = [
     SEISTYPE_STS25F,
     SEISTYPE_STS5A,
     SEISTYPE_STS6,
+    SEISTYPE_TRI,
     SEISTYPE_TR12PA,
     SEISTYPE_TR12PB,
     SEISTYPE_TR240,
@@ -163,6 +166,18 @@ STS6_UVW2ENZ_ABS = [
 ]
 
 # TRILLIUM TRIAXIAL TRANSFORMS
+TRI_XYZ2UVW = [
+    [ sqrt(6) / 3,  0,           sqrt(3) / 3],
+    [-sqrt(6) / 6,  sqrt(2) / 2, sqrt(3) / 3],
+    [-sqrt(6) / 6, -sqrt(2) / 2, sqrt(3) / 3]
+]
+# from UVW back to ENZ, but ABS values, so all going in same direction at same time to maximize signal
+TRI_UVW2ENZ_ABS = [
+    [sqrt(6) / 3, sqrt(6) / 6, sqrt(6) / 6],
+    [          0, sqrt(2) / 2, sqrt(2) / 2],
+    [sqrt(3) / 3, sqrt(3) / 3, sqrt(3) / 3]
+]
+
 # for both A nad B models
 TR120PH_XYZ2UVW = [
     [ sqrt(6) / 3,  0,           sqrt(3) / 3],
@@ -225,6 +240,10 @@ TRIAXIAL_TRANSFORMS = {
         XFRM_TYPE_XYZ2UVW: STS6_XYZ2UVW,
         XFRM_TYPE_UVW2ENZ_ABS: STS6_UVW2ENZ_ABS
     },
+    SEISTYPE_TRI: {
+        XFRM_TYPE_XYZ2UVW: TRI_XYZ2UVW,
+        XFRM_TYPE_UVW2ENZ_ABS: TRI_UVW2ENZ_ABS
+    },
     SEISTYPE_TR12PA: {
         XFRM_TYPE_XYZ2UVW: TR120PH_XYZ2UVW,
         XFRM_TYPE_UVW2ENZ_ABS: TR120PH_UVW2ENZ_ABS
@@ -269,6 +288,7 @@ INSTRUMENT_NOMINAL_GAINS = {
     SEISTYPE_STS5A: 1500,
     SEISTYPE_STS6: 1200,
 
+    SEISTYPE_TRI: 1500,
     SEISTYPE_TR12PA: 1200,
     SEISTYPE_TR12PB: 1200,
     SEISTYPE_TR240: 1200,
@@ -323,6 +343,7 @@ Q330_GCALIB_FOR_SEIS = {
     SEISTYPE_STS25F: 0.9911,  # value for Q330/STS2.5 combination
     SEISTYPE_STS5A: 0.9911,  # value for Q330/STS5 combination
     SEISTYPE_STS6: 0.9911,  # value for Q330/STS6 combination
+    SEISTYPE_TRI: 1.0011,
     SEISTYPE_TR12PA: 1.0011,
     SEISTYPE_TR12PB: 1.0011,
     SEISTYPE_TR240: 1.0011,
