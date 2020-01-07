@@ -111,14 +111,45 @@ def i10get(i10_arc_dir, sta, chan_list, startime, endtime, outfn=None, **kwargs)
 
 
 def msget(ms_arc_dir, sta, chan, loc, start_dt, end_dt, outfn=None, net='II', **kwargs):
-    """Function to retrieve IDA10 data for specified NET, STA, CHAN,
-    LOC between starttime and endtime from IDA MS Archive directory structure
+    """Function to retrieve IDA raw, pre-QC'd, MINISEED data for a specified NET, STA, CHAN,
+    LOC between starttime and endtime from IDA local miniseed archive.
 
-    Output is streamed supplied filename or to STDOUT if filename not supplied"""
+    Output is streamed STDOUT unless outfn is supplied.
+
+    Parameters
+    ----------
+    ms_arc_dir : str
+        path to root of miniseed archive directory tree with
+        structure: <ms_arc_dir>/sta/year/oday
+    sta: str
+        Station code (case insensitive)
+    chan: str
+        Channel code (case insensitive)
+    loc: str
+        Location code
+    start_dt: datetime.datetime
+        Start time of desired data set. Assumed to be UTC.
+    end_dt: datetime.datetime
+        End time of desired data set. Assumed to be UTC.
+    outfn: str, None
+        Name of file in which to write resulting miniseed data.
+        If None, output streamed to STDOUT. Default is None
+    net: str
+        Network code. Default 'II'
+
+    kwargs: dict
+        Extra keyword args
+
+    Returns
+    -------
+    Nothing
+
+    """
+
 
     from obspy import read, Stream, UTCDateTime
 
-    ms_file_list = arc_raw_ms_files(ms_arc_dir, net, sta.lower(), chan, loc.lower(),
+    ms_file_list = arc_raw_ms_files(ms_arc_dir, net, sta.lower(), chan.lower(), loc.lower(),
                                     start_dt, end_dt)
 
     msfinal = Stream()
