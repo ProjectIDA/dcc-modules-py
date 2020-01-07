@@ -110,6 +110,40 @@ def i10get(i10_arc_dir, sta, chan_list, startime, endtime, outfn=None, **kwargs)
                 sys.exit(1)
 
 
+def msget(ms_arc_dir, sta, chan, loc, start_dt, end_dt, outfn=None, net='II', **kwargs):
+    """Function to retrieve IDA10 data for specified NET, STA, CHAN,
+    LOC between starttime and endtime from IDA MS Archive directory structure
+
+    Output is streamed supplied filename or to STDOUT if filename not supplied"""
+
+    from obspy import read, Stream, UTCDateTime
+
+    ms_file_list = arc_raw_ms_files(ms_arc_dir, net, sta.lower(), chan, loc.lower(),
+                                    start_dt, end_dt)
+
+    msfinal = Stream()
+    for msfile in ms_file_list:
+        msfinal += read(msfile, format='MSEED')
+
+    msfinal.trim(UTCDateTime(start_dt), UTCDateTime(end_dt), nearest_sample=False)
+
+    if not outfn:
+        # send trimmed output to tempfile for pipping to stdout
+        outtf = tempfile.NamedTemporaryFile(delete=False)
+        msout = outtf.name
+    else:
+        msout = outfn
+
+    msfinal.write(msout, format='MSEED')
+
+    if not outfn:
+        # send to stdout
+        res = subprocess.run('cat ' + msout, shell=True, stderr=subprocess.PIPE, universal_newlines=True)
+        if res.returncode != 0:
+            print(red(bold('ERROR streaming MINISEED data to stdout.')), file=sys.stderr)
+        os.remove(outtf.name)
+
+
 def mstrim(starttime=None, endtime=None, infn=None, outfn=None):
     """Trim input miniseed data to start/end times supplied. Output to file or STDOUT"""
 
@@ -185,4 +219,53 @@ def arc_raw_i10_dirs(raw_root_dir, sta, start_dt, end_dt):
 
     return gz_filelist
 
+def arc_raw_ms_files(raw_root_dir, net, sta, chan, loc, start_dt, end_dt):
+    """ Returns a list of fully qualified filenames from the IDA MS archive
+    directory tree for given NET STA CHAN and LOC between dates start_t and end_t"""
 
+    start_year = start_dt.year
+    start_jday = int(start_dt.strftime('%j'))
+    end_year = end_dt.year
+    end_jday = int(end_dt.strftime('%j'))
+
+    filelist = []
+
+    sta = sta.lower()
+    sta_dir = os.path.join(raw_root_dir, sta)
+    if os.path.exists(sta_dir) and os.path.isdir(sta_dir):
+
+        for yr in range(start_year, end_year + 1):
+
+            if yr == start_year:
+                start_day = start_jday
+            else:
+                start_day = 1
+            if yr == end_year:
+                end_day = end_jday
+            else:
+                end_day = 365
+                if calendar.isleap(yr): end_day += 1
+
+            for dy in range(start_day, end_day + 1):
+                afile = os.path.join(
+                    raw_root_dir,
+                    sta,
+                    str(yr),
+                    f"{dy:0>3}",
+                    f"II.{sta.upper()}.{loc}.{chan.upper()}.{yr}.{dy:0>3}"
+                )
+                # print(afile)
+                # adir = os.path.join(raw_root_dir, sta, str(yr), '{:0>3}'.format(dy))
+                if Path(afile).exists() and os.path.isfile(afile):
+                    filelist.append(os.path.join(afile))
+
+    return filelist
+
+def is_valid_chanloc(chanloc):
+
+    if not isinstance(chanloc, str):
+        return False
+
+    return (len(chanloc) == 5) and \
+           chanloc[:3].isalpha() and \
+           chanloc[3:].isdigit()
