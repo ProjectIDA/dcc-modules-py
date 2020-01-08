@@ -285,8 +285,6 @@ def arc_raw_ms_files(raw_root_dir, net, sta, chan, loc, start_dt, end_dt):
                     f"{dy:0>3}",
                     f"II.{sta.upper()}.{loc}.{chan.upper()}.{yr}.{dy:0>3}"
                 )
-                # print(afile)
-                # adir = os.path.join(raw_root_dir, sta, str(yr), '{:0>3}'.format(dy))
                 if Path(afile).exists() and os.path.isfile(afile):
                     filelist.append(os.path.join(afile))
 
@@ -298,5 +296,5 @@ def is_valid_chanloc(chanloc):
         return False
 
     return (len(chanloc) == 5) and \
-           chanloc[:3].isalpha() and \
+           chanloc[:3].isalnum() and \
            chanloc[3:].isdigit()
