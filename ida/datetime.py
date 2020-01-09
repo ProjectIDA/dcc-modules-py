@@ -1,5 +1,5 @@
 #######################################################################################
-# Copyright (C) 2016  Regents of the University of California
+# Copyright (C) 2016, 2020  Regents of the University of California
 #
 # This is free software: you can redistribute it and/or modify it under the terms of
 # the GNU General Public License (GNU GPL) as published by the Free Software Foundation,
