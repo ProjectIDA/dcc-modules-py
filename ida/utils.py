@@ -297,4 +297,4 @@ def is_valid_chanloc(chanloc):
 
     return (len(chanloc) == 5) and \
            chanloc[:3].isalnum() and \
-           chanloc[3:].isdigit()
+           chanloc[3:].isalnum()
