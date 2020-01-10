@@ -148,31 +148,43 @@ def msget(ms_arc_dir, sta, chan, loc, start_dt, end_dt, outfn=None, net='II', **
 
 
     from obspy import read, Stream, UTCDateTime
+    from obspy.io.mseed import InternalMSEEDError
 
     ms_file_list = arc_raw_ms_files(ms_arc_dir, net, sta.lower(), chan.lower(), loc.lower(),
                                     start_dt, end_dt)
 
-    msfinal = Stream()
-    for msfile in ms_file_list:
-        msfinal += read(msfile, format='MSEED')
+    if ms_file_list:
 
-    msfinal.trim(UTCDateTime(start_dt), UTCDateTime(end_dt), nearest_sample=False)
+        msfinal = Stream()
+        try:
+            for msfile in ms_file_list:
+                msfinal += read(msfile, format='MSEED')
 
-    if not outfn:
-        # send trimmed output to tempfile for pipping to stdout
-        outtf = tempfile.NamedTemporaryFile(delete=False)
-        msout = outtf.name
+            msfinal.trim(UTCDateTime(start_dt), UTCDateTime(end_dt), nearest_sample=False)
+
+            if not outfn:
+                # send trimmed output to tempfile for pipping to stdout
+                outtf = tempfile.NamedTemporaryFile(delete=False)
+                msout = outtf.name
+            else:
+                msout = outfn
+
+            msfinal.write(msout, format='MSEED')
+
+        except InternalMSEEDError as err:
+            print(red(bold(err)), file=sys.stderr)
+
+        if not outfn:
+            # send to stdout
+            res = subprocess.run('cat ' + msout, shell=True, stderr=subprocess.PIPE, universal_newlines=True)
+            if res.returncode != 0:
+                print(red(bold('ERROR streaming MINISEED data to stdout.')), file=sys.stderr)
+            os.remove(outtf.name)
     else:
-        msout = outfn
+        print(red(bold(
+            'No MINISEED data found for {} {} {} {}'.format(sta, chan+loc, start_dt.isoformat(), end_dt.isoformat())
+        )), file=sys.stderr)
 
-    msfinal.write(msout, format='MSEED')
-
-    if not outfn:
-        # send to stdout
-        res = subprocess.run('cat ' + msout, shell=True, stderr=subprocess.PIPE, universal_newlines=True)
-        if res.returncode != 0:
-            print(red(bold('ERROR streaming MINISEED data to stdout.')), file=sys.stderr)
-        os.remove(outtf.name)
 
 
 def mstrim(starttime=None, endtime=None, infn=None, outfn=None):
