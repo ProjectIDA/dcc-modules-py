@@ -64,12 +64,15 @@ def gen_station_solar_soh_fig(sta, start_dt, end_dt):
     fig = plt.figure(figsize=(8.5, 11))
 
     fig.suptitle(
-        "{}\nSPS State of Health\n(updated {} UTC)".format(
+        "{} - SPS State of Health\n{}  -  {}\n(updated {} UTC)".format(
             sta.upper(),
+            start_dt.strftime("%Y-%m-%d %H:%M:%S"), end_dt.strftime("%Y-%m-%d %H:%M:%S"),
             datetime.datetime.utcnow().strftime("%Y-%m-%d (%j) %H:%M")
         ),
         fontweight='bold'
     )
+
+    plot_cnt = len(SOLAR_SOH_PLOT_CHANLOCS)
 
     for ndx, chan_info in enumerate(SOLAR_SOH_PLOT_CHANLOCS):
 
@@ -88,7 +91,8 @@ def gen_station_solar_soh_fig(sta, start_dt, end_dt):
 
         os.remove(outtf.name)
 
-        ax = fig.add_subplot('41' + str(ndx + 1))
+        ax = fig.add_subplot("{}1{}".format(str(plot_cnt), str(ndx + 1)))
+
         ax.set_ylabel(chan_info['ylabel'], fontweight='bold')
         ax.set_xlabel(chan_info['xlabel'], fontweight='bold')
         ax.set_xlim(start_dt, end_dt)
@@ -119,3 +123,4 @@ def gen_station_solar_soh_fig(sta, start_dt, end_dt):
     plt.subplots_adjust(top=0.92, bottom=0.06, hspace=0.4)
 
     return fig
+
