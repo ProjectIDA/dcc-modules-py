@@ -45,6 +45,11 @@ SOLAR_SOH_PLOT_CHANLOCS = [
 
 
 def get_solar_station_list():
+    """Return list os IDA station codes for solar powered stations
+
+    Returns:
+        list of station codes: [str]
+    """
 
     # TODO: replace with call to ida station api endpoint
     sta_list = [
@@ -60,6 +65,22 @@ def get_solar_station_list():
 
 
 def gen_station_solar_soh_fig(sta, start_dt, end_dt):
+    """
+
+    Parameters
+    ----------
+    sta: str
+        Station code of solar station to generate SOH plots for
+    start_dt: datetime.datetime
+        start datetime pof period to plot
+    end_dt: datetime.datetime
+        end datetime of period to plot
+
+    Returns
+    -------
+    Plot figure: matploib.pyplot.Figure
+        Up to caller to decide what to do with the Figure. Save to disk or show interactively.
+    """
 
     fig = plt.figure(figsize=(8.5, 11))
 
@@ -72,6 +93,7 @@ def gen_station_solar_soh_fig(sta, start_dt, end_dt):
         fontweight='bold'
     )
 
+    # this is how many plots in this figure.
     plot_cnt = len(SOLAR_SOH_PLOT_CHANLOCS)
 
     for ndx, chan_info in enumerate(SOLAR_SOH_PLOT_CHANLOCS):
@@ -91,22 +113,30 @@ def gen_station_solar_soh_fig(sta, start_dt, end_dt):
 
         os.remove(outtf.name)
 
+        # Note all plots in a single column
         ax = fig.add_subplot("{}1{}".format(str(plot_cnt), str(ndx + 1)))
 
         ax.set_ylabel(chan_info['ylabel'], fontweight='bold')
         ax.set_xlabel(chan_info['xlabel'], fontweight='bold')
         ax.set_xlim(start_dt, end_dt)
+
+        # set tick and label properties
         ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
         ax.xaxis.set_major_locator(mdates.DayLocator(interval=7))
         ax.xaxis.set_minor_locator(mdates.DayLocator())
         ax.yaxis.set_minor_locator(AutoMinorLocator(5))
         ax.grid(True, linestyle='dotted')
 
+        # set up a second axis so we can show also Y-axis
+        # ticks and labels on right side of plot
         ax2 = ax.twinx()
         ax2.yaxis.set_minor_locator(AutoMinorLocator(5))
-        ax2.set_ylabel(ax.get_ylabel(), labelpad=12.0, fontweight='bold', rotation=270)
+        ax2.set_ylabel(ax.get_ylabel(), labelpad=12.0,
+                       fontweight='bold', rotation=270)
+        ax2.tick_params(axis='y', which='both',
+                        left=False, right=True,
+                        labelleft=False, labelright=True)
 
-        ax2.tick_params(axis='y', which='both', left=False, right=True, labelleft=False, labelright=True)
         plt.xticks(fontsize=7)
 
         for tr in stream:
@@ -116,9 +146,13 @@ def gen_station_solar_soh_fig(sta, start_dt, end_dt):
 
             ax.plot(times, data, 'b-', linewidth=0.5, linestyle='-')
 
+        # set final limits for right-side Y-axis so
+        # ticks and lables in the same place as left-side
         ybot, ytop = ax.get_ylim()
         ax2.set_ylim(bottom=ybot, top=ytop)
 
+    # firce Y-lables to align hortizontally
+    # and tweak spacing around plots
     fig.align_ylabels()
     plt.subplots_adjust(top=0.92, bottom=0.06, hspace=0.4)
 
