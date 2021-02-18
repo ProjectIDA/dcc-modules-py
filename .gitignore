@@ -9,6 +9,9 @@ __pycache__/
 # PyCharm stuff
 .idea
 
+#VSCODE stuff
+.vscode
+
 *.ida
 *.ms
 
