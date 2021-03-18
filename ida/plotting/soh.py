@@ -33,6 +33,14 @@ from ida.utils import msget
 
 
 RPM_SOH_PLOT_CHAN_INFO = [
+    {'chn': 'rl1', 'loc': '25', 'gain': 1,
+     'xlabel': 'Relay 1 State (0 => open; 1 => closed)', 'ylabel': 'RL1-25 (0/1)'},
+    {'chn': 'rl2', 'loc': '25', 'gain': 1,
+     'xlabel': 'Relay 2 State (0 => open; 1 => closed)', 'ylabel': 'RL2-25 (0/1)'},
+    {'chn': 'tpe', 'loc': '25', 'gain': 10.0,
+     'xlabel': 'External Temp', 'ylabel': 'TPE-25  (Deg C)'},
+    {'chn': 'tpi', 'loc': '25', 'gain': 10.0,
+     'xlabel': 'Internal Temp', 'ylabel': 'TPI-25  (Deg C)'},
     {'chn': 'mv1', 'loc': '25', 'gain': 10.0,
      'xlabel': 'Battery O/P Voltage', 'ylabel': 'MV1-25  (V)'},
     {'chn': 'mv2', 'loc': '25', 'gain': 10.0,
@@ -40,27 +48,13 @@ RPM_SOH_PLOT_CHAN_INFO = [
     {'chn': 'mv3', 'loc': '25', 'gain': 10.0,
      'xlabel': 'Wilmore O/P Voltage', 'ylabel': 'MV3-25  (V)'},
     {'chn': 'mv4', 'loc': '25', 'gain': 10.0,
-     'xlabel': 'Topaz AC (0 => ON; 1 => OFF)', 'ylabel': 'MV4-25'},
+     'xlabel': 'AC Indicator (0 => ON; 12 => OFF)', 'ylabel': 'MV4-25'},
     {'chn': 'mc1', 'loc': '25', 'gain': 10.0,
      'xlabel': 'Wilmore O/P Current', 'ylabel': 'MC1-25  (A)'},
     {'chn': 'mc2', 'loc': '25', 'gain': 10.0,
      'xlabel': 'Vault O/P Current', 'ylabel': 'MC2-25  (A)'},
     {'chn': 'mc3', 'loc': '25', 'gain': 10.0,
      'xlabel': 'Shunt Battery Current', 'ylabel': 'MC3-25  (A)'},
-    {'chn': 'mc4', 'loc': '25', 'gain': 10.0,
-     'xlabel': 'NOT USED', 'ylabel': 'MC4-25  (A)'},
-    {'chn': 'rl1', 'loc': '25', 'gain': 1,
-     'xlabel': 'Relay 1 State (0 => open; 1 => closed)', 'ylabel': 'RL1-25 (0/1)'},
-    {'chn': 'rl2', 'loc': '25', 'gain': 1,
-     'xlabel': 'Relay 2 State (0 => open; 1 => closed)', 'ylabel': 'RL2-25 (0/1)'},
-    {'chn': 'rl3', 'loc': '25', 'gain': 1,
-     'xlabel': 'Relay 3 State (0 => open; 1 => closed)', 'ylabel': 'RL3-25 (0/1)'},
-    {'chn': 'rl4', 'loc': '25', 'gain': 1,
-     'xlabel': 'Relay 4 State (0 => open; 1 => closed)', 'ylabel': 'RL4-25 (0/1)'},
-    {'chn': 'tpe', 'loc': '25', 'gain': 10.0,
-     'xlabel': 'External Temp', 'ylabel': 'TPE-25  (Deg C)'},
-    {'chn': 'tpi', 'loc': '25', 'gain': 10.0,
-     'xlabel': 'Internal Temp', 'ylabel': 'TPI-25  (Deg C)'},
 ]
 
 class plotchan:
