@@ -53,8 +53,9 @@ RPM_SOH_PLOT_CHAN_INFO = [
      'xlabel': 'Wilmore Output Current', 'ylabel': 'MC1-25  (A)'},
     {'chn': 'mc2', 'loc': '25', 'gain': 10.0,
      'xlabel': 'Vault Output Current', 'ylabel': 'MC2-25  (A)'},
-    {'chn': 'mc3', 'loc': '25', 'gain': 10.0,
-     'xlabel': 'Shunt Battery Current', 'ylabel': 'MC3-25  (A)'},
+
+    {'chn': 'mc4', 'loc': '25', 'gain': 10.0,
+     'xlabel': 'Shunt Battery Current', 'ylabel': 'MC4-25  (A)'},
 ]
 
 class plotchan:
