@@ -23,6 +23,7 @@
 from datetime import datetime
 import os.path
 from pathlib import Path
+from trace import Trace
 import yaml
 from collections import namedtuple
 import logging
@@ -35,6 +36,7 @@ import logging
 from obspy import read, UTCDateTime, Stream
 from obspy.signal.invsim import evalresp
 import obspy.signal.filter as osf
+from obspy import read_inventory
 from scipy.signal import tukey
 from numpy import array, ones, pi, arctan2, float64, multiply, divide, log10
 from numpy import std, sqrt, dot, insert, inf
@@ -372,6 +374,19 @@ class APSurvey(object):
                 'sec': None
             }
         }
+        # 3-component ChanTpl's. 'abs' or 'azi' may be left empty if not running both analyses
+        self.system_sensitivities = {
+            'abs': {
+                'ref': None,
+                'pri': None,
+                'sec': None
+            },
+            'azi': {
+                'ref': None,
+                'pri': None,
+                'sec': None
+            }
+        }
         # in-memory responses for 2 or 3 sensors
         # note that '_v_' responses are because responses have to account for
         # potentially different sample-rates  & nyquist freqs
@@ -388,11 +403,11 @@ class APSurvey(object):
                 'pri': None,
 
                 # regular response for sec station sensor used to deconvolve sta sensor response
-                'sec': None
+                'sec': None,
             },
             'pri': {
                 # regular response for sec station sensor used to deconvolve sta sensor response
-                'pri': None
+                'pri': None,
             },
         }
         # time correction flags so only do it once
@@ -882,8 +897,15 @@ class APSurvey(object):
             self.streams[dataset]['ref'] = Stream()
             return False
 
-        # finally, store ref sensor traces for this dataset
+        # store ref sensor traces
         self.trtpls[dataset]['ref'] = self.ChanTpl(z=tr_z, n=tr_1, e=tr_2)
+
+        # finally, store ref channel sensitivities
+        target_freq = (self.bp_start + self.bp_stop / 2.0)
+        ss_z = self._calculate_sys_sens(tr_z, target_freq)
+        ss_1 = self._calculate_sys_sens(tr_2, target_freq)
+        ss_2 = self._calculate_sys_sens(tr_z, target_freq)
+        self.system_sensitivities[dataset]['ref'] = self.ChanTpl(z=ss_z, n=ss_1, e=ss_2)
 
         return True
 
@@ -1034,7 +1056,33 @@ class APSurvey(object):
                         'Can not use {} sensor data in sensor comparisons.'.format(sensor))
             return False
 
+        # finally, store channel sensitivities
+        target_freq = (self.bp_start + self.bp_stop / 2.0)
+        ss_z = self._calculate_sys_sens(tr_z, target_freq)
+        ss_1 = self._calculate_sys_sens(tr_2, target_freq)
+        ss_2 = self._calculate_sys_sens(tr_z, target_freq)
+        self.system_sensitivities[dataset][sensor] = self.ChanTpl(z=ss_z, n=ss_1, e=ss_2)
+
         return True
+
+    def _calculate_sys_sens(self, tr: Trace, freq: float):
+        """ 
+        Retrieves the overall system sensitivity the supplied trace
+        using the RESP files.
+        """
+
+        if type(tr) == Trace:
+            respfn = self._respfilename(tr.stats.network, tr.stats.station, tr.stats.channel, tr.stats.location)
+        else:
+            return 1.0
+
+        inv = read_inventory(respfn)
+        resp = inv.get_response(f'{tr.stats.network}.{tr.stats.station}.{tr.stats.location}.{tr.stats.channel}', tr.stats.starttime)
+
+        # recalculate sensitivity at midpoint (in hz) of the analysis bandpass
+        resp.recalculate_overall_sensitivity(float)
+
+        return resp.instrument_sensitivity.value
 
     def _read_responses(self, sens1, sens2):
         """
@@ -1050,10 +1098,7 @@ class APSurvey(object):
         sens1 is considered the 'reference' sensor. and sens2 timeseries is
 
         For each component:
-            The
-
-
-        azimuth and abs sensitivity of sens2 wrt sens1.
+            The azimuth and abs sensitivity of sens2 wrt sens1.
 
         Args:
             sens1 (str): 'ref' or 'sec'. These are the two sensors that can be used as baseline
@@ -1107,7 +1152,8 @@ class APSurvey(object):
                                                     sentpl.z.stats.channel,
                                                     sentpl.z.stats.location,
                                                     units='VEL')
-            sen_1, freqs, sen_ok = self.response_tr(sentpl.n.stats.starttime,
+            if sen_ok:
+                sen_1, freqs, sen_ok = self.response_tr(sentpl.n.stats.starttime,
                                                     sentpl.n.stats.sampling_rate*self.segment_size_secs,
                                                     sentpl.n.stats.sampling_rate,
                                                     sentpl.n.stats.network,
@@ -1115,7 +1161,8 @@ class APSurvey(object):
                                                     sentpl.n.stats.channel,
                                                     sentpl.n.stats.location,
                                                     units='VEL')
-            sen_2, freqs, sen_ok = self.response_tr(sentpl.e.stats.starttime,
+            if sen_ok:
+                sen_2, freqs, sen_ok = self.response_tr(sentpl.e.stats.starttime,
                                                     sentpl.e.stats.sampling_rate*self.segment_size_secs,
                                                     sentpl.e.stats.sampling_rate,
                                                     sentpl.e.stats.network,
@@ -1137,6 +1184,7 @@ class APSurvey(object):
                 dynlimit_resp_min(sen_2, 100.0)
                 # note this is the regular responses for either 'pri' or 'sec' sensors
                 self.responses[sens2][sens2] = self.ChanTpl(z=sen_z, n=sen_1, e=sen_2)
+
         else:
             sen_ok = True
             self.logmsg(logging.INFO, 'Using {} response already in memory...'.format(sens2.upper()))
@@ -1154,7 +1202,8 @@ class APSurvey(object):
                                                     reftpl.z.stats.channel,
                                                     reftpl.z.stats.location,
                                                     units='VEL')
-            ref_1, freqs, ref_ok = self.response_tr(reftpl.n.stats.starttime,
+            if ref_ok:
+                ref_1, freqs, ref_ok = self.response_tr(reftpl.n.stats.starttime,
                                                     sentpl.n.stats.sampling_rate*self.segment_size_secs,
                                                     sentpl.n.stats.sampling_rate,
                                                     reftpl.n.stats.network,
@@ -1162,7 +1211,8 @@ class APSurvey(object):
                                                     reftpl.n.stats.channel,
                                                     reftpl.n.stats.location,
                                                     units='VEL')
-            ref_2, freqs, ref_ok = self.response_tr(reftpl.e.stats.starttime,
+            if ref_ok:
+                ref_2, freqs, ref_ok = self.response_tr(reftpl.e.stats.starttime,
                                                     sentpl.e.stats.sampling_rate*self.segment_size_secs,
                                                     sentpl.e.stats.sampling_rate,
                                                     reftpl.e.stats.network,
@@ -1456,6 +1506,7 @@ class APSurvey(object):
                 self.ref_clock_adjustment = offset
                 self.ref_clock_adjusted = True
                 self.ref_clock_adjustment_sensor = 'secondary'
+                self.responses['sec']['sys_sens'] = 1.0
         else:
             compare_sec = False  # not installed
 
