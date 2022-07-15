@@ -903,8 +903,8 @@ class APSurvey(object):
         # finally, store ref channel sensitivities
         target_freq = (self.bp_start + self.bp_stop / 2.0)
         ss_z = self._calculate_sys_sens(tr_z, target_freq)
-        ss_1 = self._calculate_sys_sens(tr_2, target_freq)
-        ss_2 = self._calculate_sys_sens(tr_z, target_freq)
+        ss_1 = self._calculate_sys_sens(tr_1, target_freq)
+        ss_2 = self._calculate_sys_sens(tr_2, target_freq)
         self.system_sensitivities[dataset]['ref'] = self.ChanTpl(z=ss_z, n=ss_1, e=ss_2)
 
         return True
@@ -1059,28 +1059,31 @@ class APSurvey(object):
         # finally, store channel sensitivities
         target_freq = (self.bp_start + self.bp_stop / 2.0)
         ss_z = self._calculate_sys_sens(tr_z, target_freq)
-        ss_1 = self._calculate_sys_sens(tr_2, target_freq)
-        ss_2 = self._calculate_sys_sens(tr_z, target_freq)
+        ss_1 = self._calculate_sys_sens(tr_1, target_freq)
+        ss_2 = self._calculate_sys_sens(tr_2, target_freq)
         self.system_sensitivities[dataset][sensor] = self.ChanTpl(z=ss_z, n=ss_1, e=ss_2)
 
         return True
 
-    def _calculate_sys_sens(self, tr: Trace, freq: float):
+    def _calculate_sys_sens(self, tr: Trace, freq: float = None):
         """ 
         Retrieves the overall system sensitivity the supplied trace
         using the RESP files.
         """
 
-        if type(tr) == Trace:
-            respfn = self._respfilename(tr.stats.network, tr.stats.station, tr.stats.channel, tr.stats.location)
-        else:
-            return 1.0
+        # if type(tr) == Trace:
+        respfn = self._respfilename(tr.stats.network, tr.stats.station, tr.stats.channel, tr.stats.location)
+        # else:
+        #     return 1.0
 
         inv = read_inventory(respfn)
         resp = inv.get_response(f'{tr.stats.network}.{tr.stats.station}.{tr.stats.location}.{tr.stats.channel}', tr.stats.starttime)
 
         # recalculate sensitivity at midpoint (in hz) of the analysis bandpass
-        resp.recalculate_overall_sensitivity(float)
+        if freq:
+            resp.recalculate_overall_sensitivity(freq)
+
+        # print(f'{tr.stats.network}, {tr.stats.station}, {tr.stats.channel}, {tr.stats.location}: {resp.instrument_sensitivity.value}')
 
         return resp.instrument_sensitivity.value
 
@@ -1623,11 +1626,17 @@ class APSurvey(object):
         strm1_z_resp = self.responses[sens1][sens2].z
         strm1_1_resp = self.responses[sens1][sens2].n
         strm1_2_resp = self.responses[sens1][sens2].e
+        strm1_z_sens = self.system_sensitivities[datatype][sens1].z
+        strm1_1_sens = self.system_sensitivities[datatype][sens1].n
+        strm1_2_sens = self.system_sensitivities[datatype][sens1].e
 
         # get response of sens2 for deconvolving response
         strm2_z_resp = self.responses[sens2][sens2].z
         strm2_1_resp = self.responses[sens2][sens2].n
         strm2_2_resp = self.responses[sens2][sens2].e
+        strm2_z_sens = self.system_sensitivities[datatype][sens2].z
+        strm2_1_sens = self.system_sensitivities[datatype][sens2].n
+        strm2_2_sens = self.system_sensitivities[datatype][sens2].e
 
         # create a set of empty component results
         self.results = self.ChanTpl(z=APSurveyComponentResult('Z'),
@@ -1635,9 +1644,11 @@ class APSurvey(object):
                                     e=APSurveyComponentResult('2'))
 
         # analyze components
-        self._compare_verticals(strm1_z, strm2_z, strm1_z_resp, strm2_z_resp, self.results.z)
-        self._compare_horizontals(strm1_1, strm1_2, strm2_1, strm1_1_resp, strm2_1_resp, self.results.n)
-        self._compare_horizontals(strm1_1, strm1_2, strm2_2, strm1_2_resp, strm2_2_resp, self.results.e)
+        self._compare_verticals(strm1_z, strm2_z, strm1_z_sens, strm2_z_sens, self.results.z)
+        self._compare_horizontals(strm1_1, strm1_2, strm2_1, strm1_1_sens, strm2_1_sens, self.results.n)  #CHECK PARAMS HERE
+        self._compare_horizontals(strm1_1, strm1_2, strm2_2, strm1_2_sens, strm2_2_sens, self.results.e)
+        # self._compare_horizontals(strm1_1, strm1_2, strm2_1, strm1_1_resp, strm2_1_resp, self.results.n)
+        # self._compare_horizontals(strm1_1, strm1_2, strm2_2, strm1_2_resp, strm2_2_resp, self.results.e)
 
         return self.results
 
@@ -1688,64 +1699,31 @@ class APSurvey(object):
                 tr1_e_seg = tr1_e_seg.data.astype(float64)
                 tr2_seg = tr2_seg.data.astype(float64)
 
-                # need to demean and taper strm2, deconvolve it's resp, convolve strm1 resp
-                tr1_n_seg = ss.detrend(tr1_n_seg, type='constant')
-                tr1_e_seg = ss.detrend(tr1_e_seg, type='constant')
-                tr2_seg = ss.detrend(tr2_seg, type='constant')
+                # need to demean/detrend
+                tr1_n_seg = ss.detrend(tr1_n_seg, type='linear')
+                tr1_e_seg = ss.detrend(tr1_e_seg, type='linear')
+                tr2_seg = ss.detrend(tr2_seg, type='linear')
 
-                # each side Creating tapers...
-                fraction = (self.segment_size_trim/self.segment_size_secs)
-                taper = tukey(len(tr2_seg), alpha=fraction * 2, sym=True)
+                # remove system sensitivities from each timeseries
+                tr2_cnv = tr2_seg / tr2_resp # new 2022-07-06
+                tr1_n_seg /= tr1_resp # new 2022-07-06
+                tr1_e_seg /= tr1_resp # new 2022-07-06
 
-                # remove tr2 response from timeseries
-                tr2_fft = rfft(multiply(tr2_seg, taper))
-                tr2_fft_dcnv = divide(tr2_fft[1:], tr2_resp[1:])
-                tr2_fft_dcnv = insert(tr2_fft_dcnv, 0, [0.0])
-                tr2_dcnv = irfft(tr2_fft_dcnv)
+                # apply band pass filter with bounds from config
+                tr1_n_seg = osf.bandpass(tr1_n_seg,
+                                         self.bp_start, self.bp_stop,
+                                         tr1_sr, zerophase=True)
+                tr1_e_seg = osf.bandpass(tr1_e_seg,
+                                         self.bp_start, self.bp_stop,
+                                         tr1_sr, zerophase=True)
+                tr2_cnv = osf.bandpass(tr2_cnv,
+                                       self.bp_start, self.bp_stop,
+                                       tr2_sr, zerophase=True)
 
-                # demean again before convolving strm2 resp
-                tr2_dcnv = ss.detrend(tr2_dcnv, type='constant')
-
-                # convolve tr2 with tr1 response
-                tr2_fft = rfft(multiply(tr2_dcnv, taper))
-                tr2_fft_cnv = multiply(tr2_fft, tr1_resp)
-                tr2_cnv = irfft(tr2_fft_cnv)
-                del tr2_fft, tr2_fft_dcnv, tr2_dcnv, tr2_fft_cnv
-
-                # trim off taper segment_size_trim in secs
-                trim_cnt = round(tr1_sr * self.segment_size_trim)
-                tr1_n_seg = tr1_n_seg[trim_cnt:-trim_cnt]
-                tr1_e_seg = tr1_e_seg[trim_cnt:-trim_cnt]
-                trim_cnt = round(tr2_sr * self.segment_size_trim)
-                tr2_cnv = tr2_cnv[trim_cnt:-trim_cnt]
-
-                # resample all 3 timeseries to analsysi sample rate
+                # resample all 3 timeseries to analisys SR
                 tr1_n_seg = ss.resample(tr1_n_seg, round(len(tr1_n_seg) / (tr1_sr / self.analysis_sample_rate)))
                 tr1_e_seg = ss.resample(tr1_e_seg, round(len(tr1_e_seg) / (tr1_sr / self.analysis_sample_rate)))
                 tr2_cnv = ss.resample(tr2_cnv, round(len(tr2_cnv) / (tr2_sr / self.analysis_sample_rate)))
-
-                # demean and detrend
-                tr1_n_seg = ss.detrend(tr1_n_seg, type='linear')
-                tr1_e_seg = ss.detrend(tr1_e_seg, type='linear')
-                tr2_cnv = ss.detrend(tr2_cnv, type='linear')
-
-                # apply taper before filtering
-                fraction = 1/12
-                taper = tukey(len(tr1_n_seg), fraction * 2, sym=True)
-                tr1_n_seg *= taper
-                tr1_e_seg *= taper
-                tr2_cnv *= taper
-
-                # apply band pass filter with stops from config
-                tr1_n_seg = osf.bandpass(tr1_n_seg,
-                                         self.bp_start, self.bp_stop,
-                                         self.analysis_sample_rate, zerophase=True)
-                tr1_e_seg = osf.bandpass(tr1_e_seg,
-                                         self.bp_start, self.bp_stop,
-                                         self.analysis_sample_rate, zerophase=True)
-                tr2_cnv = osf.bandpass(tr2_cnv,
-                                       self.bp_start, self.bp_stop,
-                                       self.analysis_sample_rate, zerophase=True)
 
 
                 dc = ones(len(tr1_n_seg), dtype=float64)  # to take care of any non-zero means
@@ -1859,75 +1837,31 @@ class APSurvey(object):
             tr2_seg = tr2.slice(starttime=start_t,
                                         endtime=start_t + self.segment_size_secs - tr2_time_delta)
 
-            # get raw float data
-            tr1_seg = tr1_seg.data.astype(float64)
-            tr2_seg = tr2_seg.data.astype(float64)
+            if ((round(tr1_seg.std()) > 0) and (round(tr2_seg.std()) > 0)):
 
-            # need to demean and taper strm2, deconvolve it's resp, convolve strm1 resp
-            tr1_seg = ss.detrend(tr1_seg, type='constant')
-            tr2_seg = ss.detrend(tr2_seg, type='constant')
+                # get raw float data
+                tr1_seg = tr1_seg.data.astype(float64)
+                tr2_seg = tr2_seg.data.astype(float64)
 
-            # each side Creating tapers...
-            fraction = (self.segment_size_trim/self.segment_size_secs)
-            taper = tukey(len(tr2_seg), alpha=fraction * 2, sym=True)
+                # need to demean/detrend
+                tr1_seg = ss.detrend(tr1_seg, type='linear')
+                tr2_seg = ss.detrend(tr2_seg, type='linear')
 
-#            print('tr2_resp len:', len(tr2_resp))
-#            print('tr2_seg len:', len(tr2_seg))
-            # remove tr2 response from timeseries
-            tr2_fft = rfft(multiply(tr2_seg, taper))
-            tr2_fft_dcnv = divide(tr2_fft[1:], tr2_resp[1:])
-            tr2_fft_dcnv = insert(tr2_fft_dcnv, 0, [0.0])
-            tr2_dcnv = irfft(tr2_fft_dcnv)
+                # remove system sensitivities from each timeseries
+                tr1_seg /= tr1_resp
+                tr2_cnv = tr2_seg / tr2_resp
 
-            # demean again before convolving strm2 resp
-            tr2_dcnv = ss.detrend(tr2_dcnv, type='constant')
-            tr2_fft = rfft(multiply(tr2_dcnv, taper))
-            tr2_fft_cnv = multiply(tr2_fft, tr1_resp)
-            tr2_cnv = irfft(tr2_fft_cnv)
-            del tr2_fft, tr2_fft_dcnv, tr2_dcnv, tr2_fft_cnv
+                # apply band pass filter with bounds from config
+                tr1_seg = osf.bandpass(tr1_seg, self.bp_start, self.bp_stop, tr1_sr, zerophase=True)
+                tr2_cnv = osf.bandpass(tr2_cnv, self.bp_start, self.bp_stop, tr2_sr, zerophase=True)
 
-            # trim off taper segment_size_trim in secs
-            trim_cnt = round(tr1_sr * self.segment_size_trim)
-            tr1_seg = tr1_seg[trim_cnt:-trim_cnt]
-            trim_cnt = round(tr2_sr * self.segment_size_trim)
-            tr2_cnv = tr2_cnv[trim_cnt:-trim_cnt]
+                # down sample to analysis SR
+                tr1_seg = ss.resample(tr1_seg, round(len(tr1_seg) / (tr1_sr / self.analysis_sample_rate)))
+                tr2_cnv = ss.resample(tr2_cnv, round(len(tr2_cnv) / (tr2_sr / self.analysis_sample_rate)))
 
-            # resample timeseries to analsysi sample rate
-#            tr1_seg = ss.resample(tr1_seg, round(len(tr1_seg) / (tr1_sr / self.analysis_sample_rate)))
-#            tr2_cnv = ss.resample(tr2_cnv, round(len(tr2_cnv) / (tr2_sr / self.analysis_sample_rate)))
-            tr1_seg_d = ss.decimate(tr1_seg, int(round(tr1_sr / self.analysis_sample_rate, 0)), ftype='iir', n=8, zero_phase=True)
-            tr2_cnv_d = ss.decimate(tr2_cnv, int(round(tr2_sr / self.analysis_sample_rate, 0)), ftype='iir', n=8, zero_phase=True)
+                tr1_stdev = tr1_seg.std()
+                tr2_stdev = tr2_cnv.std()
 
-            # demean and detrend
-            tr1_seg = ss.detrend(tr1_seg_d, type='linear')
-            tr2_cnv = ss.detrend(tr2_cnv_d, type='linear')
-
-            # apply taper before filtering
-            fraction = 1/12
-            taper = tukey(len(tr1_seg), fraction * 2, sym=True)
-            tr1_seg *= taper
-            tr2_cnv *= taper
-
-            # apply band pass filter with stops from config
-            tr1_seg = osf.bandpass(tr1_seg, self.bp_start, self.bp_stop, self.analysis_sample_rate, zerophase=True)
-            tr2_cnv = osf.bandpass(tr2_cnv, self.bp_start, self.bp_stop, self.analysis_sample_rate, zerophase=True)
-
-            tr1_stdev = tr1_seg.std()
-            tr2_stdev = tr2_cnv.std()
-
-            if (round(tr1_stdev) == 0) or (round(tr2_stdev) == 0):
-                # compute amplitude ratio
-                amp_ratio = 0.0
-
-                # log root mean square of the tr2 timseries amplitude
-                lrms = 0.0
-
-                # variance indicator based on stdev of residuals and tr2 timeseries
-                myvar = inf
-
-                # coherence of waveforms tr2 and synthetic
-                coh = 0.0
-            else:
                 # compute amplitude ratio
                 amp_ratio = tr2_stdev / tr1_stdev
 
@@ -1943,6 +1877,19 @@ class APSurvey(object):
 
                 # coherence of waveforms tr2 and synthetic
                 coh = dot(tr2_cnv, syn) / sqrt(dot(tr2_cnv, tr2_cnv) * dot(syn, syn))
+                # compute amplitude ratio
+
+            else:
+                amp_ratio = 0.0
+
+                # log root mean square of the tr2 timseries amplitude
+                lrms = 0.0
+
+                # variance indicator based on stdev of residuals and tr2 timeseries
+                myvar = inf
+
+                # coherence of waveforms tr2 and synthetic
+                coh = 0.0
 
             # Add this segment's results to component results
             results.add_segment(APSurveySegmentResult(start_t, 0.0, 0.0, amp_ratio,
