@@ -39,6 +39,16 @@ CTBTChannelResult = namedtuple('CTBTChannelResult', [
     'A0'
 ])
 
+def make_NE(chan: str):
+    """Convert '1' and '2' comp code in chan code to 'N' and 'E'"""
+
+    if chan[-1] == '1': 
+        chan = chan.replace('1', 'N')
+    elif chan[-1] == '2':
+        chan = chan.replace('2', 'E')
+
+    return chan
+
 
 def ims2_calibrate_result_msg_header(cal_timestamp):
     ts_str = cal_timestamp.strftime('%Y/%m/%d %H:%M:%S')
@@ -50,6 +60,8 @@ def ims2_calibrate_result_msg_header(cal_timestamp):
            "TIME_STAMP {}\n".format(ts_str)
 
 def ims2_calibrate_result_msg_comp_info(sta, chan, inspec, calib, calper):
+
+    chan = make_NE(chan)
 
     return "\nSTA_LIST {}\n" \
            "CHAN_LIST {}\n" \
@@ -68,10 +80,12 @@ def ims2_paz2_msg(sta, loc, chan, seis_model, cal_timestamp,
     date_str = cal_timestamp.strftime('%Y/%m/%d')
     time_str = cal_timestamp.strftime('%H:%M')
 
-    msg = "DATA_TYPE RESPONSE\n"
+    chan = make_NE(chan)
+
+    msg = "DATA_TYPE RESPONSE IMS2.0\n"
 
     # CAL2 header record...
-    msg = msg + '{:<4} {:<5} {:<3} {:<4} {:<6} {:<15.8e} {:<7.3f} {:<11.5f} {:<10} {:<5}\n'.format(
+    msg = msg + '{:<4} {:<5} {:<3} {:<4} {:<6} {:>15.8e} {:>7.3f} {:>11.5f} {:<10} {:<5}\n'.format(
         'CAL2',
         sta,
         chan,
@@ -86,7 +100,7 @@ def ims2_paz2_msg(sta, loc, chan, seis_model, cal_timestamp,
     # PAZ2 header records...
     # assumed at 1hz
     # covert to displacement and radians
-    msg = msg + '{:<4} {:<2} {:1} {:<15.8e} {:<4} {:<8.3f} {:<3d} {:<3d} {:<25}\n'.format(
+    msg = msg + '{:<4} {:>2} {:1} {:>15.8e} {:<4} {:>8.3f} {:>3d} {:>3d} {:<25}\n'.format(
         'PAZ2',
         1,
         'V',
@@ -110,7 +124,7 @@ def ims2_paz2_msg(sta, loc, chan, seis_model, cal_timestamp,
 
 
 def ims2_dig2_msg(stage_seq_num, nom_sens, samp_rate, description):
-    txt = 'DIG2 {:<2} {:<15.8e} {:<11.5f} {:<}'.format(stage_seq_num,
+    txt = 'DIG2 {:>2} {:>15.8e} {:>11.5f} {:<}'.format(stage_seq_num,
                                                        nom_sens,
                                                        samp_rate,
                                                        description[:25])
@@ -119,7 +133,7 @@ def ims2_dig2_msg(stage_seq_num, nom_sens, samp_rate, description):
 
 def ims2_fir2_msg(stage_seq_num, gain, decimation, group_correction,
                  symmetry, description, factors):
-    fmt = 'FIR2 {:<2} {:<10.2e} {:<4} {:<8.3f} {} {:<4} {:<}'
+    fmt = 'FIR2 {:>2} {:>10.2e} {:>4} {:>8.3f} {} {:>4} {:<}'
     txthead = fmt.format(stage_seq_num,
                          gain,
                          decimation,
