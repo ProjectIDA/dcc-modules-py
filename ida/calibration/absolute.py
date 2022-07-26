@@ -33,13 +33,13 @@ import logging
 # import matplotlib.pyplot as plt
 # plt.ion()
 
-from obspy import read, UTCDateTime, Stream
+from obspy import read, UTCDateTime, Stream, Trace
 from obspy.signal.invsim import evalresp
 import obspy.signal.filter as osf
 from obspy import read_inventory
 from scipy.signal import tukey
 from numpy import array, ones, pi, arctan2, float64, multiply, divide, log10
-from numpy import std, sqrt, dot, insert, inf
+from numpy import std, sqrt, dot, insert, inf, corrcoef
 from numpy.fft import rfft, irfft
 import numpy.linalg as la
 import scipy.signal as ss
@@ -374,6 +374,7 @@ class APSurvey(object):
                 'sec': None
             }
         }
+        # in-memory sensitivity for 2 or 3 sensors
         # 3-component ChanTpl's. 'abs' or 'azi' may be left empty if not running both analyses
         self.system_sensitivities = {
             'abs': {
@@ -387,29 +388,7 @@ class APSurvey(object):
                 'sec': None
             }
         }
-        # in-memory responses for 2 or 3 sensors
-        # note that '_v_' responses are because responses have to account for
-        # potentially different sample-rates  & nyquist freqs
-        self.responses = {
-            # responses for 'ref' sensor adjusted for dif sampling rates of sta sensors
-            # these are used to convolve reference response into station sensor timeseries
-            'ref': {
-                'pri': None,
-                'sec': None,
-            },
-            'sec': {
-                # response for 'sec' sensor (if it exists) adjusted for dif sampling rates of pri sensor
-                # used to convolve sec response into pri timeseries when comparing pri sensors against sec.
-                'pri': None,
 
-                # regular response for sec station sensor used to deconvolve sta sensor response
-                'sec': None,
-            },
-            'pri': {
-                # regular response for sec station sensor used to deconvolve sta sensor response
-                'pri': None,
-            },
-        }
         # time correction flags so only do it once
         self.ref_clock_adjustment = 0.0
         self.ref_clock_adjusted = False
@@ -422,14 +401,15 @@ class APSurvey(object):
         # will be a ChanTpl containing a APSurveyComponentResults for each Z12 component
         self.results = None
 
-        with open(fn, 'rt') as cfl:
+        self.config_file = fn
+        with open(self.config_file, 'rt') as cfl:
             config_txt = cfl.read()
         try:
             self._config = yaml.load(config_txt)
-            self._config_dir = Path(fn).parent
+            self._config_dir = Path(self.config_file).parent
         except:
             self._config = {}
-            print(red('Error parsing YAML config file: ' + fn))
+            print(red('Error parsing YAML config file: ' + self.config_file))
             self.ok = False
         else:
             self._process_config()
@@ -804,7 +784,7 @@ class APSurvey(object):
             # compute time offset and adjust starttime of sens1 traces
             # use window isze of 1 minute at 40hz
             offset, cval, cfunc, emsg = time_offset(sensor_z, ref_z,
-                                                    winsize=2400)
+                                                    winsize=4800)
             for tr in self.streams[dataset][sens1]:
                 tr.stats.starttime = tr.stats.starttime + offset
 
@@ -1056,7 +1036,7 @@ class APSurvey(object):
                         'Can not use {} sensor data in sensor comparisons.'.format(sensor))
             return False
 
-        # finally, store channel sensitivities
+        # finally, store channel sensitivities at a freq at linear middle of bandpass (in hz)
         target_freq = (self.bp_start + self.bp_stop / 2.0)
         ss_z = self._calculate_sys_sens(tr_z, target_freq)
         ss_1 = self._calculate_sys_sens(tr_1, target_freq)
@@ -1086,157 +1066,6 @@ class APSurvey(object):
         # print(f'{tr.stats.network}, {tr.stats.station}, {tr.stats.channel}, {tr.stats.location}: {resp.instrument_sensitivity.value}')
 
         return resp.instrument_sensitivity.value
-
-    def _read_responses(self, sens1, sens2):
-        """
-        Computes a pair of responses, for each component, for comparing a specific pair of sensors.
-
-        One is the response for sens1, but computed with the sample rate of sens2. This is used to convolve
-        the sen1 response into the sens2 timeseries.
-
-        The other is the response of sens, at it's normal operating sample rate. This is used to deconvolving
-        sens2 response from it's timeseries
-
-
-        sens1 is considered the 'reference' sensor. and sens2 timeseries is
-
-        For each component:
-            The azimuth and abs sensitivity of sens2 wrt sens1.
-
-        Args:
-            sens1 (str): 'ref' or 'sec'. These are the two sensors that can be used as baseline
-            sens2 (str):  'pri' or 'sec'. These are the two sensors that are compared against a baseline sensor
-
-        Returns:
-            (bool, bool): Success flags. (Ref response OK, Sensor response OK)
-
-        """
-
-        sens1 = sens1.lower()
-        sens2 = sens2.lower()
-
-        reftpl = self.trtpls['azi']['ref'] if self.trtpls['azi']['ref'] else self.trtpls['abs']['ref']
-        pritpl = self.trtpls['azi']['pri'] if self.trtpls['azi']['pri'] else self.trtpls['abs']['pri']
-        sectpl = self.trtpls['azi']['sec'] if self.trtpls['azi']['sec'] else self.trtpls['abs']['sec']
-
-        if (sens1 == 'ref') and (not reftpl):
-            self.logmsg(logging.ERROR, 'Can not retrieve REFERENCE sensor ' +
-                           'response before reading reference data.')
-            return False, False
-        if ((sens1 == 'pri') or (sens2 == 'pri')) and (not pritpl):
-            self.logmsg(logging.ERROR, 'Can not retrieve PRIMARY sensor ' +
-                        'response before reading primary sensor data.')
-            return False, False
-        if ((sens1 == 'sec') or (sens2 == 'sec')) and (not sectpl):
-            self.logmsg(logging.ERROR, 'Can not retrieve SECONDARY sensor ' +
-                        'response before reading secondary sensor data.')
-            return False, False
-
-        if sens1 == 'ref':
-            pass
-        elif sens1 == 'sec':
-            reftpl = sectpl
-
-        if sens2 == 'pri':
-            sentpl = pritpl
-        else:
-            sentpl = sectpl
-
-        # compute responses for sens2. For deconcolving response later...
-        if not self.responses[sens2][sens2]:
-            self.logmsg(logging.INFO, 'Computing {} response for {}/{} comparison...'.format(sens2.upper(),
-                                                                         sens1.upper(),
-                                                                         sens2.upper()))
-            sen_z, freqs, sen_ok = self.response_tr(sentpl.z.stats.starttime,
-                                                    sentpl.z.stats.sampling_rate*self.segment_size_secs,
-                                                    sentpl.z.stats.sampling_rate,
-                                                    sentpl.z.stats.network,
-                                                    sentpl.z.stats.station,
-                                                    sentpl.z.stats.channel,
-                                                    sentpl.z.stats.location,
-                                                    units='VEL')
-            if sen_ok:
-                sen_1, freqs, sen_ok = self.response_tr(sentpl.n.stats.starttime,
-                                                    sentpl.n.stats.sampling_rate*self.segment_size_secs,
-                                                    sentpl.n.stats.sampling_rate,
-                                                    sentpl.n.stats.network,
-                                                    sentpl.n.stats.station,
-                                                    sentpl.n.stats.channel,
-                                                    sentpl.n.stats.location,
-                                                    units='VEL')
-            if sen_ok:
-                sen_2, freqs, sen_ok = self.response_tr(sentpl.e.stats.starttime,
-                                                    sentpl.e.stats.sampling_rate*self.segment_size_secs,
-                                                    sentpl.e.stats.sampling_rate,
-                                                    sentpl.e.stats.network,
-                                                    sentpl.e.stats.station,
-                                                    sentpl.e.stats.channel,
-                                                    sentpl.e.stats.location,
-                                                    units='VEL')
-            if sen_ok:
-                # exponentially taper off highest 5% of freqs before nyquist
-                # taper off high freq response before deconvolving sens2 resp
-                # per idaresponse/resp.c
-                taper_high_freq_resp(sen_z, 0.95)
-                taper_high_freq_resp(sen_1, 0.95)
-                taper_high_freq_resp(sen_2, 0.95)
-                # clip minimum amp resp to 1/100.0 of max amp
-                # per idaresponse/resp.c
-                dynlimit_resp_min(sen_z, 100.0)
-                dynlimit_resp_min(sen_1, 100.0)
-                dynlimit_resp_min(sen_2, 100.0)
-                # note this is the regular responses for either 'pri' or 'sec' sensors
-                self.responses[sens2][sens2] = self.ChanTpl(z=sen_z, n=sen_1, e=sen_2)
-
-        else:
-            sen_ok = True
-            self.logmsg(logging.INFO, 'Using {} response already in memory...'.format(sens2.upper()))
-
-        # compute responses for sens1 with sens2 sample rate, for convolving sens1 response into sens2, later...
-        if not self.responses[sens1][sens2]:
-            self.logmsg(logging.INFO, 'Computing {} response for {}/{} comparison...'.format(sens1.upper(),
-                        sens1.upper(),
-                        sens2.upper()))
-            ref_z, freqs, ref_ok = self.response_tr(reftpl.z.stats.starttime,
-                                                    sentpl.z.stats.sampling_rate*self.segment_size_secs,
-                                                    sentpl.z.stats.sampling_rate,
-                                                    reftpl.z.stats.network,
-                                                    reftpl.z.stats.station,
-                                                    reftpl.z.stats.channel,
-                                                    reftpl.z.stats.location,
-                                                    units='VEL')
-            if ref_ok:
-                ref_1, freqs, ref_ok = self.response_tr(reftpl.n.stats.starttime,
-                                                    sentpl.n.stats.sampling_rate*self.segment_size_secs,
-                                                    sentpl.n.stats.sampling_rate,
-                                                    reftpl.n.stats.network,
-                                                    reftpl.n.stats.station,
-                                                    reftpl.n.stats.channel,
-                                                    reftpl.n.stats.location,
-                                                    units='VEL')
-            if ref_ok:
-                ref_2, freqs, ref_ok = self.response_tr(reftpl.e.stats.starttime,
-                                                    sentpl.e.stats.sampling_rate*self.segment_size_secs,
-                                                    sentpl.e.stats.sampling_rate,
-                                                    reftpl.e.stats.network,
-                                                    reftpl.e.stats.station,
-                                                    reftpl.e.stats.channel,
-                                                    reftpl.e.stats.location,
-                                                    units='VEL')
-            if ref_ok:
-                # clip minimum amp resp to 1/100.0 of max amp
-                # per idaresponse/resp.c
-                # TODO: why idaresponse/resp.c has no high freq taper here...?
-                dynlimit_resp_min(ref_z, 100.0)
-                dynlimit_resp_min(ref_1, 100.0)
-                dynlimit_resp_min(ref_2, 100.0)
-                self.responses[sens1][sens2] = self.ChanTpl(z=ref_z, n=ref_1, e=ref_2)
-
-        else:
-            ref_ok = True
-            self.logmsg(logging.INFO, 'Using {} response already in memory...'.format(sens1.upper()))
-
-        return ref_ok, sen_ok
 
     def _sensor_sample_rate_str(self, dataset, sensor):
         """
@@ -1285,50 +1114,6 @@ class APSurvey(object):
         else:
             return ''
 
-    def response_tr(self, respdate, npts, sr, net, sta, chn, loc, units='VEL'):
-        """
-        Obtain channel/loc frequency response using evalresp (from obspy) and RESP file on disk.
-
-        Args:
-            respdate (datetime or UTCDateTime): Time at for response should be returned
-            npts (int): NUmber of points in the response
-            sr (int or float): sample rate at which response should be computed
-            net (str): Network code
-            sta (str): Station code
-            chn (str): Channel code
-            loc (str): Location code
-            units (str): 'DIS', 'VEL', or 'ACC'
-
-        Returns:
-            (np.array, np.array, bool):
-                (Complex array with response, array with frequencies, True/False Success flag)
-
-        """
-        resp, f = None, None
-        respfn = self._respfilename(net, sta, chn, loc)
-
-        if os.path.exists(respfn):
-            try:
-                resp, f = evalresp(1 / sr,
-                                   npts,
-                                   respfn,
-                                   UTCDateTime(respdate),
-                                   station=sta,
-                                   channel=chn,
-                                   network=net,
-                                   locid=loc,
-                                   units=units, freq=True)
-                ok = True
-            except:
-                self.logmsg(logging.ERROR,
-                            'Error running EVALRESP with RESP file {}.'.format(respfn))
-                ok = False
-        else:
-            self.logmsg(logging.ERROR, 'RESP file not found: ' + respfn)
-            ok = False
-
-        return resp, f, ok
-
     def ms_filename(self, dataset, sensor):
         """
         Args:
@@ -1360,6 +1145,7 @@ class APSurvey(object):
         header += '#   ida module version: {} ({})\n'.format(IDA_PKG_VERSION_HASH_STR,
                                                              IDA_PKG_VERSION_DATETIME)
         header += '#          analysis at: {}\n'.format(self.analdate)
+        header += '#          config file: {}\n'.format(self.config_file)
         header += '#              dataset: {}\n'.format(datatype.upper())
         header += '#              station: {}\n'.format(self.station.upper())
         header += '#           pri sensor: {}\n'.format(self.pri_sensor_installed)
@@ -1509,7 +1295,7 @@ class APSurvey(object):
                 self.ref_clock_adjustment = offset
                 self.ref_clock_adjusted = True
                 self.ref_clock_adjustment_sensor = 'secondary'
-                self.responses['sec']['sys_sens'] = 1.0
+                # self.responses['sec']['sys_sens'] = 1.0
         else:
             compare_sec = False  # not installed
 
@@ -1601,17 +1387,17 @@ class APSurvey(object):
             raise ValueError('_compare_streams: sens1 and sens2 must different sensors.')
 
         # maek sure responses for the the pari of sensors being compared have been loaded successfully
-        sens1_resp_ok, sens2_resp_ok = self._read_responses(sens1, sens2)
-        if not sens1_resp_ok:
-            self.logmsg(logging.WARN, 'Unable to read {} response.'.format(sens1))
-            self.logmsg(logging.WARN, 'Can not perform comparison: {}/{}'.format(
-                sens1.upper(), sens2.upper()))
-            return False
-        elif not sens2_resp_ok:
-            self.logmsg(logging.WARN, 'Unable to read {} response.'.format(sens2))
-            self.logmsg(logging.WARN, 'Can not perform comparison: {}/{}'.format(
-                sens1.upper(), sens2.upper()))
-            return False
+        # sens1_resp_ok, sens2_resp_ok = self._read_responses(sens1, sens2)
+        # if not sens1_resp_ok:
+        #     self.logmsg(logging.WARN, 'Unable to read {} response.'.format(sens1))
+        #     self.logmsg(logging.WARN, 'Can not perform comparison: {}/{}'.format(
+        #         sens1.upper(), sens2.upper()))
+        #     return False
+        # elif not sens2_resp_ok:
+        #     self.logmsg(logging.WARN, 'Unable to read {} response.'.format(sens2))
+        #     self.logmsg(logging.WARN, 'Can not perform comparison: {}/{}'.format(
+        #         sens1.upper(), sens2.upper()))
+        #     return False
 
         # grab Traces for both sensors
         strm1_z = self.trtpls[datatype][sens1].z
@@ -1623,17 +1409,17 @@ class APSurvey(object):
 
         # get responnse of sens1 computed for SR of sens2
         # to convolve into timeseries of sens2
-        strm1_z_resp = self.responses[sens1][sens2].z
-        strm1_1_resp = self.responses[sens1][sens2].n
-        strm1_2_resp = self.responses[sens1][sens2].e
+        # strm1_z_resp = self.responses[sens1][sens2].z
+        # strm1_1_resp = self.responses[sens1][sens2].n
+        # strm1_2_resp = self.responses[sens1][sens2].e
         strm1_z_sens = self.system_sensitivities[datatype][sens1].z
         strm1_1_sens = self.system_sensitivities[datatype][sens1].n
         strm1_2_sens = self.system_sensitivities[datatype][sens1].e
 
         # get response of sens2 for deconvolving response
-        strm2_z_resp = self.responses[sens2][sens2].z
-        strm2_1_resp = self.responses[sens2][sens2].n
-        strm2_2_resp = self.responses[sens2][sens2].e
+        # strm2_z_resp = self.responses[sens2][sens2].z
+        # strm2_1_resp = self.responses[sens2][sens2].n
+        # strm2_2_resp = self.responses[sens2][sens2].e
         strm2_z_sens = self.system_sensitivities[datatype][sens2].z
         strm2_1_sens = self.system_sensitivities[datatype][sens2].n
         strm2_2_sens = self.system_sensitivities[datatype][sens2].e
@@ -1647,8 +1433,6 @@ class APSurvey(object):
         self._compare_verticals(strm1_z, strm2_z, strm1_z_sens, strm2_z_sens, self.results.z)
         self._compare_horizontals(strm1_1, strm1_2, strm2_1, strm1_1_sens, strm2_1_sens, self.results.n)  #CHECK PARAMS HERE
         self._compare_horizontals(strm1_1, strm1_2, strm2_2, strm1_2_sens, strm2_2_sens, self.results.e)
-        # self._compare_horizontals(strm1_1, strm1_2, strm2_1, strm1_1_resp, strm2_1_resp, self.results.n)
-        # self._compare_horizontals(strm1_1, strm1_2, strm2_2, strm1_2_resp, strm2_2_resp, self.results.e)
 
         return self.results
 
@@ -1676,54 +1460,47 @@ class APSurvey(object):
         """
 
         start_t = max(tr1_n.stats.starttime, tr2.stats.starttime)
-        end_t = min(tr1_n.stats.endtime, tr2.stats.endtime)
         tr1_sr = tr1_n.stats.sampling_rate
         tr2_sr = tr2.stats.sampling_rate
-        tr1_time_delta = 1.0/tr1_sr
-        tr2_time_delta = 1.0/tr2_sr
+
+        # get raw float data
+        tr1_n_data = tr1_n.data.astype(float64)
+        tr1_e_data = tr1_e.data.astype(float64)
+        tr2_data = tr2.data.astype(float64)
+
+        # need to demean/detrend
+        tr1_n_data = ss.detrend(tr1_n_data, type='linear')
+        tr1_e_data = ss.detrend(tr1_e_data, type='linear')
+        tr2_data = ss.detrend(tr2_data, type='linear')
+
+        # remove system sensitivities from each timeseries
+        tr1_n_data /= tr1_resp # new 2022-07-06
+        tr1_e_data /= tr1_resp # new 2022-07-06
+        tr2_data /=  tr2_resp # new 2022-07-06
+
+
+        # apply band pass filter with bounds from config
+        tr1_n_data = osf.bandpass(tr1_n_data, self.bp_start, self.bp_stop, tr1_sr, zerophase=True)
+        tr1_e_data = osf.bandpass(tr1_e_data, self.bp_start, self.bp_stop, tr1_sr, zerophase=True)
+        tr2_data = osf.bandpass(tr2_data, self.bp_start, self.bp_stop, tr2_sr, zerophase=True)
+
+        # resample all 3 timeseries to analisys SR
+        tr1_n_data = ss.resample(tr1_n_data, round(len(tr1_n_data) / (tr1_sr / self.analysis_sample_rate)))
+        tr1_e_data = ss.resample(tr1_e_data, round(len(tr1_e_data) / (tr1_sr / self.analysis_sample_rate)))
+        tr2_data = ss.resample(tr2_data, round(len(tr2_data) / (tr2_sr / self.analysis_sample_rate)))
+
+        segment_size_samples = self.segment_size_secs * self.analysis_sample_rate
+        trace_size = min(len(tr1_n_data), len(tr1_e_data), len(tr2_data))
 
         # loop through traces segment by segment
-        while start_t + self.segment_size_secs < end_t:
+        cur_sample = 0
+        while cur_sample + segment_size_samples < trace_size:
 
-            tr1_n_seg = tr1_n.slice(starttime=start_t,
-                                    endtime=start_t + self.segment_size_secs - tr1_time_delta)
-            tr1_e_seg = tr1_e.slice(starttime=start_t,
-                                    endtime=start_t + self.segment_size_secs - tr1_time_delta)
-            tr2_seg = tr2.slice(starttime=start_t,
-                                endtime=start_t + self.segment_size_secs - tr2_time_delta)
+            tr1_n_seg = tr1_n_data[cur_sample:cur_sample + segment_size_samples]
+            tr1_e_seg = tr1_e_data[cur_sample:cur_sample + segment_size_samples]
+            tr2_seg = tr2_data[cur_sample:cur_sample + segment_size_samples]
 
-            if (round(tr1_n_seg.std()) > 0) and (round(tr1_e_seg.std()) > 0) and (round(tr2_seg.std()) > 0):
-
-                # get raw float data
-                tr1_n_seg = tr1_n_seg.data.astype(float64)
-                tr1_e_seg = tr1_e_seg.data.astype(float64)
-                tr2_seg = tr2_seg.data.astype(float64)
-
-                # need to demean/detrend
-                tr1_n_seg = ss.detrend(tr1_n_seg, type='linear')
-                tr1_e_seg = ss.detrend(tr1_e_seg, type='linear')
-                tr2_seg = ss.detrend(tr2_seg, type='linear')
-
-                # remove system sensitivities from each timeseries
-                tr2_cnv = tr2_seg / tr2_resp # new 2022-07-06
-                tr1_n_seg /= tr1_resp # new 2022-07-06
-                tr1_e_seg /= tr1_resp # new 2022-07-06
-
-                # apply band pass filter with bounds from config
-                tr1_n_seg = osf.bandpass(tr1_n_seg,
-                                         self.bp_start, self.bp_stop,
-                                         tr1_sr, zerophase=True)
-                tr1_e_seg = osf.bandpass(tr1_e_seg,
-                                         self.bp_start, self.bp_stop,
-                                         tr1_sr, zerophase=True)
-                tr2_cnv = osf.bandpass(tr2_cnv,
-                                       self.bp_start, self.bp_stop,
-                                       tr2_sr, zerophase=True)
-
-                # resample all 3 timeseries to analisys SR
-                tr1_n_seg = ss.resample(tr1_n_seg, round(len(tr1_n_seg) / (tr1_sr / self.analysis_sample_rate)))
-                tr1_e_seg = ss.resample(tr1_e_seg, round(len(tr1_e_seg) / (tr1_sr / self.analysis_sample_rate)))
-                tr2_cnv = ss.resample(tr2_cnv, round(len(tr2_cnv) / (tr2_sr / self.analysis_sample_rate)))
+            if  ((tr1_n_seg.std() > 0) and (tr1_e_seg.std() > 0) and (tr2_seg.std() > 0)):
 
 
                 dc = ones(len(tr1_n_seg), dtype=float64)  # to take care of any non-zero means
@@ -1736,7 +1513,7 @@ class APSurvey(object):
                 #     tr2 = solution[2] * tr1_e + solution[1] * tr1_n + solution[0]
                 # ration of solution[2] and solution[1] are effectively the tan of angle omega
                 # between tr2 and tr1_n.
-                solution, resid, _, _ = la.lstsq(matinv, tr2_cnv)
+                solution, resid, _, _ = la.lstsq(matinv, tr2_seg, rcond=None)
                 w = arctan2(solution[2], solution[1])
                 # the lsq solution coeeficients are used to determine whether the tr2 values are scaled
                 # up or down from tr1. SInce:
@@ -1766,17 +1543,17 @@ class APSurvey(object):
                 amp_ratio =  sqrt(solution[1]*solution[1] + solution[2]*solution[2])
 
                 # log root mean square of the tr2 timseries amplitude
-                lrms = log10(sqrt(multiply(tr2_cnv, tr2_cnv).sum() / len(tr2_cnv)))
+                lrms = log10(sqrt(multiply(tr2_seg, tr2_seg).sum() / len(tr2_seg)))
 
                 # 'synthetic' timeseries based on lsq solution, and calcualte the residauls
                 syn  = dot(matinv, solution)
-                res = tr2_cnv - syn
+                res = tr2_seg - syn
 
                 # variance indicator based on stdev of residuals and tr2 timeseries.
-                myvar = std(res) / std(tr2_cnv)
+                myvar = std(res) / std(tr2_seg)
 
                 # coherence of waveforms tr2 and synthetic
-                coh = dot(tr2_cnv, syn) / sqrt(dot(tr2_cnv, tr2_cnv) * dot(syn, syn))
+                coh = dot(tr2_seg, syn) / sqrt(dot(tr2_seg, tr2_seg) * dot(syn, syn))
 
             else:
 
@@ -1800,6 +1577,7 @@ class APSurvey(object):
 
             # start time for next segment
             start_t += self.segment_size_secs
+            cur_sample += segment_size_samples
 
 
     def _compare_verticals(self, tr1, tr2, tr1_resp, tr2_resp, results):
@@ -1825,58 +1603,61 @@ class APSurvey(object):
         start_t = max(tr1.stats.starttime, tr2.stats.starttime)
         tr1_sr = tr1.stats.sampling_rate
         tr2_sr = tr2.stats.sampling_rate
-        tr1_time_delta = 1.0/tr1_sr
-        tr2_time_delta = 1.0/tr2_sr
 
+        # get timeseries data as numpy float64 array from insde Obspy trace objects
+        tr1_data = tr1.data.astype(float64)
+        tr2_data = tr2.data.astype(float64)
+
+        # demean/detrend
+        tr1_data = ss.detrend(tr1_data, type='linear')
+        tr2_data = ss.detrend(tr2_data, type='linear')
+
+        # remove system sensitivities from each timeseries
+        tr1_data /= tr1_resp
+        tr2_data /= tr2_resp
+
+        # apply band pass filter with bounds from config
+        tr1_data = osf.bandpass(tr1_data, self.bp_start, self.bp_stop, tr1_sr, zerophase=True)
+        tr2_data = osf.bandpass(tr2_data, self.bp_start, self.bp_stop, tr2_sr, zerophase=True)
+
+        # down sample to analysis SR
+        tr1_data = ss.resample(tr1_data, round(len(tr1_data) / (tr1_sr / self.analysis_sample_rate)))
+        tr2_data = ss.resample(tr2_data, round(len(tr2_data) / (tr2_sr / self.analysis_sample_rate)))
+
+        segment_size_samples = self.segment_size_secs * self.analysis_sample_rate
+        trace_size = min(len(tr1_data), len(tr2_data))
 
         # loop through traces segment by segment
-        while start_t + self.segment_size_secs < tr1.stats.endtime:
+        cur_sample = 0
+        while cur_sample + segment_size_samples < trace_size:
 
-            tr1_seg = tr1.slice(starttime=start_t,
-                                        endtime=start_t + self.segment_size_secs - tr1_time_delta)
-            tr2_seg = tr2.slice(starttime=start_t,
-                                        endtime=start_t + self.segment_size_secs - tr2_time_delta)
+            tr1_seg = tr1_data[cur_sample:cur_sample + segment_size_samples]
+            tr2_seg = tr2_data[cur_sample:cur_sample + segment_size_samples]
 
-            if ((round(tr1_seg.std()) > 0) and (round(tr2_seg.std()) > 0)):
+            tr1_stdev = tr1_seg.std()
+            tr2_stdev = tr2_seg.std()
 
-                # get raw float data
-                tr1_seg = tr1_seg.data.astype(float64)
-                tr2_seg = tr2_seg.data.astype(float64)
-
-                # need to demean/detrend
-                tr1_seg = ss.detrend(tr1_seg, type='linear')
-                tr2_seg = ss.detrend(tr2_seg, type='linear')
-
-                # remove system sensitivities from each timeseries
-                tr1_seg /= tr1_resp
-                tr2_cnv = tr2_seg / tr2_resp
-
-                # apply band pass filter with bounds from config
-                tr1_seg = osf.bandpass(tr1_seg, self.bp_start, self.bp_stop, tr1_sr, zerophase=True)
-                tr2_cnv = osf.bandpass(tr2_cnv, self.bp_start, self.bp_stop, tr2_sr, zerophase=True)
-
-                # down sample to analysis SR
-                tr1_seg = ss.resample(tr1_seg, round(len(tr1_seg) / (tr1_sr / self.analysis_sample_rate)))
-                tr2_cnv = ss.resample(tr2_cnv, round(len(tr2_cnv) / (tr2_sr / self.analysis_sample_rate)))
-
-                tr1_stdev = tr1_seg.std()
-                tr2_stdev = tr2_cnv.std()
+            if ((tr1_stdev > 0) and (tr2_stdev > 0)):
 
                 # compute amplitude ratio
                 amp_ratio = tr2_stdev / tr1_stdev
 
                 # log root mean square of the tr2 timseries amplitude
-                lrms = log10(sqrt(multiply(tr2_cnv, tr2_cnv).sum() / len(tr2_cnv)))
+                lrms = log10(sqrt(multiply(tr2_seg, tr2_seg).sum() / len(tr2_seg)))
 
                 # 'synthetic' timeseries based on lsq solution, and calcualte the residauls
                 syn  = tr1_seg * amp_ratio
-                res = tr2_cnv - syn
+                res = tr2_seg - syn
+
+                # cc1 = corrcoef(tr1_seg, syn)
+                # cc2 = corrcoef(tr2_seg, syn)
+                # print(f'{cc1[0][1]}, {cc2[0][1]}')
 
                 # variance indicator based on stdev of residuals and tr2 timeseries
-                myvar = res.std() / tr2_cnv.std()
+                myvar = res.std() / tr2_seg.std()
 
                 # coherence of waveforms tr2 and synthetic
-                coh = dot(tr2_cnv, syn) / sqrt(dot(tr2_cnv, tr2_cnv) * dot(syn, syn))
+                coh = dot(tr2_seg, syn) / sqrt(dot(tr2_seg, tr2_seg) * dot(syn, syn))
                 # compute amplitude ratio
 
             else:
@@ -1898,4 +1679,5 @@ class APSurvey(object):
 
             # start time for next segment
             start_t += self.segment_size_secs
+            cur_sample += segment_size_samples
 
