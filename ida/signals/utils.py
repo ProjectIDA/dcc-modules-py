@@ -22,7 +22,7 @@
 import logging
 
 from obspy.core import Trace, Stream  #, UTCDateTime
-from obspy.signal.cross_correlation import xcorr
+from obspy.signal.cross_correlation import xcorr, correlate, xcorr_max
 from scipy.signal import freqs
 from scipy.signal.ltisys import zpk2tf
 from numpy import array, ndarray, isclose, abs, mod, divide, multiply, pi, exp, cos, sin, \
@@ -63,7 +63,10 @@ def time_offset(trace1, trace2, bpfreqmin=0.1, bpfreqmax=1.0, winsize=1000):
     tr1 = trace1.copy()
     tr2 = trace2.copy()
 
-    index, val, corrfun = xcorr(tr1, tr2, winsize, full_xcorr=True)
+    # xcorr deprecated in obspy 1.3: 
+    # index, val, corrfun = xcorr(tr1, tr2, winsize, full_xcorr=True)
+    corrfun = correlate(tr1, tr2, winsize)
+    index, val = xcorr_max(corrfun)
 
     offset = index / trace1.stats.sampling_rate
 
