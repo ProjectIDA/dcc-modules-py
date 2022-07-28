@@ -23,7 +23,9 @@ from functools import reduce
 
 from numpy import pi
 
-from ida.instruments import *
+
+from collections import namedtuple
+# from ida.instruments import *
 
 """Methods and structures supporting construction of CTBTO IMS 2.0 messages"""
 
@@ -39,29 +41,17 @@ CTBTChannelResult = namedtuple('CTBTChannelResult', [
     'A0'
 ])
 
-def make_NE(chan: str):
-    """Convert '1' and '2' comp code in chan code to 'N' and 'E'"""
-
-    if chan[-1] == '1': 
-        chan = chan.replace('1', 'N')
-    elif chan[-1] == '2':
-        chan = chan.replace('2', 'E')
-
-    return chan
-
-
-def ims2_calibrate_result_msg_header(cal_timestamp):
+def ims2_calibrate_result_msg_header(sta, cal_timestamp):
     ts_str = cal_timestamp.strftime('%Y/%m/%d %H:%M:%S')
+    yr_str = cal_timestamp.strftime('%Y')
 
     return "BEGIN IMS2.0\n\n" \
            "MSG_TYPE COMMAND_RESPONSE\n" \
-           "MSG_ID <REPLACE WITH VALUE>\n" \
-           "REF_ID <REPLACE WITH VALUE>\n" \
+           f'MSG_ID cal_{yr_str}_1_{sta.upper()}_cc\n' \
+           f'REF_ID cal_{yr_str}_1_{sta.upper()}_cs\n' \
            "TIME_STAMP {}\n".format(ts_str)
 
 def ims2_calibrate_result_msg_comp_info(sta, chan, inspec, calib, calper):
-
-    chan = make_NE(chan)
 
     return "\nSTA_LIST {}\n" \
            "CHAN_LIST {}\n" \
@@ -79,8 +69,6 @@ def ims2_paz2_msg(sta, loc, chan, seis_model, cal_timestamp,
     # sys_scale_factor is A0 * gnom * gcalib (multiplier
     date_str = cal_timestamp.strftime('%Y/%m/%d')
     time_str = cal_timestamp.strftime('%H:%M')
-
-    chan = make_NE(chan)
 
     msg = "DATA_TYPE RESPONSE IMS2.0\n"
 
