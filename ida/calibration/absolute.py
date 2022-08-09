@@ -942,6 +942,8 @@ class APSurvey(object):
             # assume pri, and possibly sec,  miniseed file names with ONLY needed
             # channels (Z12/ZNE) and time period
 
+            self.logmsg(logging.INFO, 'Reading local target sensor data file(s)...')
+
             fns = self.arc_raw_dir.split(',')
             fns = [fn.strip() for fn in fns]
             if (sensor == 'pri') and (len(fns) > 0) and os.path.isfile(fns[0]):
@@ -997,10 +999,16 @@ class APSurvey(object):
         try:
             # TODO: Split up, too much in this block
             # read ms file, merge traces, check for gaps and split trces into ChanTpl for processing
+            self.logmsg(logging.DEBUG, 'Reading {} sensor data.'.format(sensor))
             self.streams[dataset][sensor] = read(ms_name)
+            self.logmsg(logging.DEBUG, 'trimming {} sensor data.'.format(sensor))
             self.streams[dataset][sensor].trim(starttime=self.starttime(dataset),
                                                endtime=self.endtime(dataset))
+            self.logmsg(logging.DEBUG, 'Merging {} sensor data.'.format(sensor))
             self.streams[dataset][sensor].merge()
+
+            self.logmsg(logging.DEBUG, 'Checking for gaps in {} sensor data.'.format(sensor))
+
             gaps = self.streams[dataset][sensor].get_gaps()
             if gaps:
                 self.logmsg(logging.ERROR,
@@ -1028,7 +1036,11 @@ class APSurvey(object):
 
             self.trtpls[dataset][sensor] = self.ChanTpl(z=tr_z, n=tr_1, e=tr_2)
             self.msfiles[dataset][sensor] = os.path.abspath(ms_name)
+
+            self.logmsg(logging.DEBUG, 'Writing prepped {} sensor data.'.format(sensor))
+
             self.streams[dataset][sensor].write(self.msfiles[dataset][sensor], format='MSEED')
+            self.logmsg(logging.DEBUG, 'Wrote prepped {} sensor data.'.format(sensor))
         except:
             self.logmsg(logging.ERROR,
                         'Error reading processing miniseed data for sensor ({}/{})'.format(dataset, sensor))
@@ -1038,15 +1050,17 @@ class APSurvey(object):
 
         # finally, store channel sensitivities at a freq at linear middle of bandpass (in hz)
         target_freq = (self.bp_start + self.bp_stop / 2.0)
+        self.logmsg(logging.DEBUG, 'Calculating system sensitivity for {} sensor...'.format(sensor))
         ss_z = self._calculate_sys_sens(tr_z, target_freq)
         ss_1 = self._calculate_sys_sens(tr_1, target_freq)
         ss_2 = self._calculate_sys_sens(tr_2, target_freq)
+        self.logmsg(logging.DEBUG, 'Calculated system sensitivity for {} sensor.'.format(sensor))
         self.system_sensitivities[dataset][sensor] = self.ChanTpl(z=ss_z, n=ss_1, e=ss_2)
 
         return True
 
     def _calculate_sys_sens(self, tr: Trace, freq: float = None):
-        """ 
+        """
         Retrieves the overall system sensitivity the supplied trace
         using the RESP files.
         """
@@ -1308,6 +1322,7 @@ class APSurvey(object):
                     dataset.upper()))
                 self.logmsg(logging.WARN, 'Skipping comparisons with PRIMARY sensor')
             else:
+                self.logmsg(logging.DEBUG, 'Computing time offset between REF and PRI sensor data...')
                 # compute time offset IFF not already done with 'sec' sensor
                 sensors_available += 1
                 if not self.ref_clock_adjusted:
@@ -1317,6 +1332,7 @@ class APSurvey(object):
                     self.ref_clock_adjustment = offset
                     self.ref_clock_adjusted = True
                     self.ref_clock_adjustment_sensor = 'primary'
+                self.logmsg(logging.DEBUG, 'Computed time offset between REF and PRI sensor data.')
         else:
             compare_pri = False  # not installed
 
@@ -1345,6 +1361,7 @@ class APSurvey(object):
 
                     # loop through pairs of sensors, comparing data streams and writing out results...
                     for sens1, sens2 in comparisons:
+                        self.logmsg(logging.INFO, 'Comparing {} with {} sensor'.format(sens1, sens2))
                         results = self._compare_streams(dataset, sens1, sens2)
                         if results:
                             sumres, detres = self._get_result_text(dataset, sens1, sens2, results)
@@ -1430,9 +1447,13 @@ class APSurvey(object):
                                     e=APSurveyComponentResult('2'))
 
         # analyze components
+        self.logmsg(logging.DEBUG, 'Comparing verticals...')
         self._compare_verticals(strm1_z, strm2_z, strm1_z_sens, strm2_z_sens, self.results.z)
+        self.logmsg(logging.DEBUG, "Comparing '1' horizontals...")
         self._compare_horizontals(strm1_1, strm1_2, strm2_1, strm1_1_sens, strm2_1_sens, self.results.n)  #CHECK PARAMS HERE
+        self.logmsg(logging.DEBUG, "Comparing '2' horizontals...")
         self._compare_horizontals(strm1_1, strm1_2, strm2_2, strm1_2_sens, strm2_2_sens, self.results.e)
+        self.logmsg(logging.DEBUG, "Done comparing.")
 
         return self.results
 
@@ -1468,21 +1489,33 @@ class APSurvey(object):
         tr1_e_data = tr1_e.data.astype(float64)
         tr2_data = tr2.data.astype(float64)
 
+        # round timeseries to even number of samples
+        tr1_n_data = tr1_n_data[:round(len(tr1_n_data)/2)*2]
+        tr1_e_data = tr1_e_data[:round(len(tr1_e_data)/2)*2]
+        tr2_data = tr2_data[:round(len(tr2_data)/2)*2]
+
+        self.logmsg(logging.DEBUG, "Detrending/demeaning timeseries...")
+
         # need to demean/detrend
         tr1_n_data = ss.detrend(tr1_n_data, type='linear')
         tr1_e_data = ss.detrend(tr1_e_data, type='linear')
         tr2_data = ss.detrend(tr2_data, type='linear')
+
+        self.logmsg(logging.DEBUG, "Dividing out system sensitivity from timeseries...")
 
         # remove system sensitivities from each timeseries
         tr1_n_data /= tr1_resp # new 2022-07-06
         tr1_e_data /= tr1_resp # new 2022-07-06
         tr2_data /=  tr2_resp # new 2022-07-06
 
+        self.logmsg(logging.DEBUG, "Bandpassing timeseries...")
 
         # apply band pass filter with bounds from config
         tr1_n_data = osf.bandpass(tr1_n_data, self.bp_start, self.bp_stop, tr1_sr, zerophase=True)
         tr1_e_data = osf.bandpass(tr1_e_data, self.bp_start, self.bp_stop, tr1_sr, zerophase=True)
         tr2_data = osf.bandpass(tr2_data, self.bp_start, self.bp_stop, tr2_sr, zerophase=True)
+
+        self.logmsg(logging.DEBUG, "Downsampling  timeseries...")
 
         # resample all 3 timeseries to analisys SR
         tr1_n_data = ss.resample(tr1_n_data, round(len(tr1_n_data) / (tr1_sr / self.analysis_sample_rate)))
@@ -1494,7 +1527,12 @@ class APSurvey(object):
 
         # loop through traces segment by segment
         cur_sample = 0
+
+        self.logmsg(logging.DEBUG, f"Looping through timeseries starting at {start_t} by segment from sample 0 to {trace_size} by {segment_size_samples}")
+
         while cur_sample + segment_size_samples < trace_size:
+
+            self.logmsg(logging.DEBUG, "Comparing segment starting at: {}...".format(start_t))
 
             tr1_n_seg = tr1_n_data[cur_sample:cur_sample + segment_size_samples]
             tr1_e_seg = tr1_e_data[cur_sample:cur_sample + segment_size_samples]
@@ -1608,20 +1646,29 @@ class APSurvey(object):
         tr1_data = tr1.data.astype(float64)
         tr2_data = tr2.data.astype(float64)
 
+        # round timeseries to even number of samples
+        tr1_data = tr1_data[:round(len(tr1_data)/2)*2]
+        tr2_data = tr2_data[:round(len(tr2_data)/2)*2]
+
+        self.logmsg(logging.DEBUG, "Detrending/demeaning  timeseries...")
         # demean/detrend
         tr1_data = ss.detrend(tr1_data, type='linear')
         tr2_data = ss.detrend(tr2_data, type='linear')
 
+        self.logmsg(logging.DEBUG, "Dividing out system sensitivities...")
         # remove system sensitivities from each timeseries
         tr1_data /= tr1_resp
         tr2_data /= tr2_resp
 
+        self.logmsg(logging.DEBUG, "Bandpassing  timeseries...")
         # apply band pass filter with bounds from config
         tr1_data = osf.bandpass(tr1_data, self.bp_start, self.bp_stop, tr1_sr, zerophase=True)
         tr2_data = osf.bandpass(tr2_data, self.bp_start, self.bp_stop, tr2_sr, zerophase=True)
 
+        self.logmsg(logging.DEBUG, f"Downsampling  timeseries of size {len(tr1_data)} to {len(tr1_data)/(tr1_sr / self.analysis_sample_rate)} ...")
         # down sample to analysis SR
         tr1_data = ss.resample(tr1_data, round(len(tr1_data) / (tr1_sr / self.analysis_sample_rate)))
+        self.logmsg(logging.DEBUG, f"Downsampling  timeseries of size {len(tr2_data)} to {len(tr2_data)/(tr2_sr / self.analysis_sample_rate)} ...")
         tr2_data = ss.resample(tr2_data, round(len(tr2_data) / (tr2_sr / self.analysis_sample_rate)))
 
         segment_size_samples = self.segment_size_secs * self.analysis_sample_rate
@@ -1629,7 +1676,12 @@ class APSurvey(object):
 
         # loop through traces segment by segment
         cur_sample = 0
+
+        self.logmsg(logging.DEBUG, f"Looping through timeseries starting at {start_t} by segment from sample 0 to {trace_size} by {segment_size_samples}")
+
         while cur_sample + segment_size_samples < trace_size:
+
+            self.logmsg(logging.DEBUG, "Comparing segment starting at: {}...".format(start_t))
 
             tr1_seg = tr1_data[cur_sample:cur_sample + segment_size_samples]
             tr2_seg = tr2_data[cur_sample:cur_sample + segment_size_samples]
