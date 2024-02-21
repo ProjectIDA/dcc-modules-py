@@ -49,12 +49,12 @@ def getJSONFromAPI(apiType):
     response = requests.get(url=hostURL() + 'api/' + apiType + '/?format=json')
     return response
     
-def getJSONFromFile(apiType):
+def getJSONFromFile(dir, apiType):
     validTypes = ["networks", "stations", "channelepochs", "stages", "instypes", "units"]
     if apiType not in validTypes:
         return False
     
-    with open(apiType + ".json", 'rt') as jsonFile:
+    with open(dir + "/" + apiType + ".json", 'rt') as jsonFile:
         data = jsonFile.read()
     
     jsonObj = json.loads(data)
