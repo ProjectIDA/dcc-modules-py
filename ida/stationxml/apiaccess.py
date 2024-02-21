@@ -49,12 +49,12 @@ def getJSONFromAPI(apiType):
     return response
     
 def getJSONFromFile(apiType):
-    validTypes = ["channelepochs"]
+    validTypes = ["networks", "stations", "channelepochs", "stages", "instypes", "units"]
     if apiType not in validTypes:
         return False
     
-    with open("channelepochs.json", 'rt') as chanFile:
-        data = chanFile.read()
+    with open(apiType + ".json", 'rt') as jsonFile:
+        data = jsonFile.read()
     
     jsonObj = json.loads(data)
     
