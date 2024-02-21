@@ -92,7 +92,7 @@ class WfdiscSegment(object):
     KEY_STA = 'sta'
     KEY_CHAN = 'chan'
     KEY_TIME = 'time'
-    KEY_WFID = 'wfid'
+    KEY_WFID = 'wfid' 
     KEY_CHANID = 'chanid'
     KEY_JDATE = 'jdate'
     KEY_ENDTIME = 'endtime'
@@ -111,7 +111,8 @@ class WfdiscSegment(object):
     KEY_LDDATE = 'lddate'
 
     KEYS_DATATYPES = {
-        's3': {'size': 3}
+        's3': {'size': 3},
+        'i4': {'size': 4}
     }
 
     def __init__(self, wfdisc_fn: str, segrec: str, *args, **kwargs):
@@ -189,10 +190,14 @@ class WfdiscSegment(object):
                 self.seginfo[self.KEY_COMMID] = int(flds[18])
             except ValueError as e:
                 raise WfdiscSegmentCommidFormatError("Error converting COMMID to integer: {}".format(flds[18]))
-            try:
-                self.seginfo[self.KEY_LDDATE] = float(flds[19])
-            except ValueError as e:
-                raise WfdiscSegmentLddateFormatError("Error converting LDDATE to float: {}".format(flds[19]))
+
+            if flds[19] == '-':
+                self.seginfo[self.KEY_LDDATE] = flds[19]
+            else:
+                try:
+                    self.seginfo[self.KEY_LDDATE] = float(flds[19])
+                except ValueError as e:
+                    raise WfdiscSegmentLddateFormatError("Error converting LDDATE to float: {}".format(flds[19]))
 
         else:
             raise WfdiscSegmentRecordInvalidSize(len(flds))
@@ -230,6 +235,8 @@ class WfdiscSegment(object):
             # convert data based on datatype
             if self.seginfo[self.KEY_DATATYPE] == 's3':
                 wfdata = WfdiscSegment.convert_s3(rawdata)
+            elif self.seginfo[self.KEY_DATATYPE] == 'i4':
+                wfdata = WfdiscSegment.convert_i4(rawdata)
             else:
                 return False, '{}: Unsupported wfdisc datatype: {}'.format(currentframe().f_code.co_name,
                                                                            self.seginfo[self.KEY_DATATYPE])
@@ -255,6 +262,32 @@ class WfdiscSegment(object):
             val = (rawdata[ndx] << 16) + (rawdata[ndx + 1] << 8) + (rawdata[ndx + 2])
             if val > pow(2, 23):
                 val -= pow(2, 24)
+            wfdata.append(val)
+
+        return np.array(wfdata, np.int32)
+
+
+    @classmethod
+    def convert_i4(self, rawdata: bytes) -> np.ndarray:
+        """Function to convert Wfdisc WF data in 'i4' format.
+
+        Args:
+            rawdata: Sequence of raw bytes to convert. Assumed to be in BIG_ENDIAN byte order
+
+        Returns:
+            Converted bytes in numpy array of int32
+
+        """
+        wfdata = []
+
+        for ndx in range(0, len(rawdata), 4):
+            if sys.byteorder == 'big':
+                val = (rawdata[ndx] << 24) + (rawdata[ndx + 1] << 16) + (rawdata[ndx + 2] << 8 )  + (rawdata[ndx + 3])
+            elif sys.byteorder == 'little':
+                val = (rawdata[ndx + 3] << 24) + (rawdata[ndx + 2] << 16) + (rawdata[ndx + 1] << 8 )  + (rawdata[ndx])
+
+            if val > pow(2, 31):
+                val -= pow(2, 32)
             wfdata.append(val)
 
         return np.array(wfdata, np.int32)

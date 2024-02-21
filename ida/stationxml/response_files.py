@@ -39,11 +39,31 @@ def response_file_type(filename: str) -> str:
 
     header = 'NO HEADER INFO FOUND'
     ftype = None
+
+    filename = check_file_exists(filename)
     with open(filename, 'rt') as rfl:
         header = rfl.readline()
         ftype = header.split('#')[0].strip()
 
     return ftype
+
+# check if a file exists, if not replace its filepath with the value of IDA_DATASCOPEDB_DIR
+# and check if that file exists, exit if not
+def check_file_exists(filename: str) -> str:
+    if os.path.exists(filename):
+        return filename
+    else:
+        dbDir = os.environ.get('IDA_DATASCOPEDB_DIR')
+        if dbDir is None:
+            print(f"Environment variable IDA_DATASCOPEDB_DIR does not exist")
+            raise SystemExit
+        altfilename = filename.replace("/ida/dcc/db", dbDir)
+        if os.path.exists(altfilename):
+            return altfilename
+        else:
+            print(f"{altfilename} does not exist")
+            raise SystemExit
+
 
 class CoefficientsFile(object):
     """
@@ -61,7 +81,7 @@ class CoefficientsFile(object):
         Coefficients initializer
         """
 
-        self._filename = filename
+        self._filename = check_file_exists(filename)
         self.type = None
         self.group_delay = 0.0
         self._coeffs = []
@@ -81,6 +101,7 @@ class CoefficientsFile(object):
         Read response file
         """
 
+        self._filename = check_file_exists(self._filename)
         with open(self._filename, 'rt') as pzfl:
             lines = pzfl.readlines()
             self._parse_ida_coeff(lines)
@@ -247,7 +268,7 @@ class PolesZerosFile(object):
         PolesZeros initializer
         """
 
-        self._filename = filename
+        self._filename = check_file_exists(filename)
         self.type = None
         self._poles = []
         self._zeros = []
@@ -267,6 +288,7 @@ class PolesZerosFile(object):
         Read response file
         """
 
+        self._filename = check_file_exists(self._filename)
         with open(self._filename, 'rt') as pzfl:
             pz_lines = pzfl.readlines()
             self._parse_ida_paz(pz_lines)

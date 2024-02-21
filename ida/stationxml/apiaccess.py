@@ -36,7 +36,8 @@ def main():
 
 def hostURL():
     #return 'http://bargahack:8000/'
-    return 'https://idastatus-dev.ucsd.edu:8000/'
+    #return 'https://idastatus-dev.ucsd.edu:8000/'
+    return 'https://idastatus.projectida.net/'
 
 def getJSONFromAPI(apiType):
     import requests
