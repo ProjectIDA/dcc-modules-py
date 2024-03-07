@@ -50,9 +50,9 @@ def getJSONFromAPI(apiType):
     return response
     
 def getJSONFromFile(dir, apiType):
-    validTypes = ["networks", "stations", "channelepochs", "stages", "instypes", "units"]
-    if apiType not in validTypes:
-        return False
+    #validTypes = ["networks", "stations", "channelepochs", "stages", "instypes", "units"]
+    #if apiType not in validTypes:
+    #    return False
     
     with open(dir + "/" + apiType + ".json", 'rt') as jsonFile:
         data = jsonFile.read()
