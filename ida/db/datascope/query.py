@@ -45,7 +45,7 @@ def find_sensor_file(df, station, loca, comp, date_8601_str):
     elif comp == 'e':
         comp_list.append('vh2')
 
-    condition = (df.stageid == 1) & (df.sta == station.upper()) & (df.loca == loca) & \
+    condition = (df.stageid == 1) & (df.sta == station.upper()) & (df.loca == int(loca)) & \
                 (df.chn.isin(comp_list)) & (df.begt <= dt) & (df.endt >= dt)
     file_df = df[condition].dfile
 
@@ -68,7 +68,7 @@ def get_stages(df, station, loc, chn, date_8601_str):
             dt = datetime.datetime.strptime(date_8601_str, '%Y-%m-%d')
 
 
-    condition = (df.sta == station.upper()) & (df.loca == loc) & \
+    condition = (df.sta == station.upper()) & (df.loca == int(loc)) & \
                 (df.chn == chn.lower()) & (df.begt <= dt) & (df.endt >= dt)
 
     stage_list = df[condition].sort_values('stageid', ascending=True)
