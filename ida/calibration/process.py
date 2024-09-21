@@ -26,7 +26,7 @@ from numpy import complex128, pi, ceil, sin, cos, angle, abs, linspace, multiply
     logical_and, less_equal, polyfit, polyval, \
     divide, subtract, concatenate
 from numpy.fft import rfft, irfft
-from scipy.signal import tukey
+from scipy.signal.windows import tukey
 import scipy.signal as ss
 
 from scipy.optimize import least_squares

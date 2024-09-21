@@ -37,7 +37,7 @@ from obspy import read, UTCDateTime, Stream, Trace
 from obspy.signal.invsim import evalresp
 import obspy.signal.filter as osf
 from obspy import read_inventory
-from scipy.signal import tukey
+from scipy.signal.windows import tukey
 from numpy import array, ones, pi, arctan2, float64, multiply, divide, log10
 from numpy import std, sqrt, dot, insert, inf, corrcoef
 from numpy.fft import rfft, irfft
