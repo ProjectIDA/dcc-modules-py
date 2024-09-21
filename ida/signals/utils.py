@@ -22,7 +22,7 @@
 import logging
 
 from obspy.core import Trace, Stream  #, UTCDateTime
-from obspy.signal.cross_correlation import xcorr, correlate, xcorr_max
+from obspy.signal.cross_correlation import correlate, xcorr_max
 from scipy.signal import freqs
 from scipy.signal.ltisys import zpk2tf
 from numpy import array, ndarray, isclose, abs, mod, divide, multiply, pi, exp, cos, sin, \
