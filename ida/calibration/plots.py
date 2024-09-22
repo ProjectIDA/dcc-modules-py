@@ -19,7 +19,7 @@
 # If you use this software in a product, an explicit acknowledgment in the product documentation of the contribution
 # by Project IDA, Institute of Geophysics and Planetary Physics, UCSD would be appreciated but is not required.
 #######################################################################################################################
-
+import sys
 from numpy import angle, pi, abs, asarray  #, less, greater_equal, polyfit, polyval
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
@@ -314,6 +314,8 @@ def cross_tf_plot(sta, loc, chn, sensor, ondate, cal_type,
     freq_limit = nyq * plot_band_limit
 
     freq_plt = asarray([f for f in freqs if f <= freq_limit])
+    if (freq_plt[0] < sys.float_info.epsilon): freq_plt[0] = sys.float_info.epsilon
+
     amp_plt = tf_amp[:len(freq_plt)].copy()
     pha_plt = tf_pha[:len(freq_plt)].copy()
     coh_plt = tf_coh[:len(freq_plt)].copy()
